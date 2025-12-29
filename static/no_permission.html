@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>无权限访问</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .icon-container {
+            font-size: 80px;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            color: #444;
+            font-size: 1.3rem;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+
+        .available-pages {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .page-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 20px;
+            background: linear-gradient(135deg, #4361ee, #3f37c9);
+            color: white;
+            border-radius: 12px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(67, 97, 238, 0.3);
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .page-link:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(67, 97, 238, 0.5);
+        }
+
+        .page-link i {
+            font-size: 1.5rem;
+        }
+
+        .no-pages {
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .contact-admin {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 8px;
+            color: #856404;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .available-pages {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="icon-container">
+            <i class="fas fa-lock"></i>
+        </div>
+
+        <h1>无权限访问</h1>
+        <p class="subtitle">抱歉,您没有权限访问此页面</p>
+
+        <h3 class="section-title">您可以访问以下页面:</h3>
+
+        <div class="available-pages" id="availablePages">
+            <div class="no-pages">正在加载...</div>
+        </div>
+    </div>
+
+    <script>
+        // 获取用户权限并显示可访问页面
+        fetch('/api/user_permissions')
+            .then(response => response.json())
+            .then(permissions => {
+                const pages = [
+                    { name: 'index', label: '入库录入', icon: 'fa-warehouse', url: '/' },
+                    { name: 'sorting', label: '分拣录入', icon: 'fa-boxes', url: '/sorting' },
+                    { name: 'history', label: '历史查询', icon: 'fa-history', url: '/history' },
+                    { name: 'statistics', label: '统计数据', icon: 'fa-chart-bar', url: '/statistics' },
+                    { name: 'logs', label: '操作日志', icon: 'fa-file-alt', url: '/logs' }
+                ];
+
+                const container = document.getElementById('availablePages');
+                const accessiblePages = pages.filter(p =>
+                    permissions[p.name]?.can_view
+                );
+
+                container.innerHTML = '';
+
+                if (accessiblePages.length === 0) {
+                    container.innerHTML = `
+                        <div class="no-pages">
+                            您暂无任何页面访问权限
+                            <div class="contact-admin">
+                                <i class="fas fa-info-circle"></i>
+                                请联系管理员分配权限
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    accessiblePages.forEach(page => {
+                        const link = document.createElement('a');
+                        link.href = page.url;
+                        link.className = 'page-link';
+                        link.innerHTML = `
+                            <i class="fas ${page.icon}"></i>
+                            <span>${page.label}</span>
+                        `;
+                        container.appendChild(link);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('获取权限失败:', error);
+                document.getElementById('availablePages').innerHTML = `
+                    <div class="no-pages">加载失败,请刷新页面重试</div>
+                `;
+            });
+    </script>
+</body>
+
+</html>

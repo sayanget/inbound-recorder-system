@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="operation_log_title">操作日志查询</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --danger-color: #f72585;
+            --warning-color: #f8961e;
+            --info-color: #4895ef;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --border-color: #dee2e6;
+            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+        
+        /* User info display */
+        .user-info {
+            position: absolute;
+            top: 15px;
+            right: 120px;
+            z-index: 1000;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .logout-btn {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .logout-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        /* Language selector dropdown */
+        .language-selector {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+        }
+        
+        .lang-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .lang-selected {
+            padding: 5px 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .lang-selected:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .lang-dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 120px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            z-index: 1001;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .lang-dropdown-content.show {
+            display: block;
+        }
+        
+        .lang-option {
+            padding: 10px 15px;
+            color: #333;
+            text-decoration: none;
+            display: block;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .lang-option:hover {
+            background-color: #f1f1f1;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fb;
+            color: #333;
+            line-height: 1.5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+        }
+        
+        h1, h2, h3 {
+            margin-bottom: 15px;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            text-align: center;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: var(--transition);
+            box-shadow: var(--card-shadow);
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        
+        .btn-info {
+            background-color: var(--info-color);
+        }
+        
+        .btn-warning {
+            background-color: var(--warning-color);
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: var(--card-shadow);
+        }
+        
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-col {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+            font-size: 14px;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: var(--transition);
+            box-shadow: var(--card-shadow);
+        }
+        
+        .btn-search {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-reset {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .btn-export {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        th, td {
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .page-btn {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            background-color: white;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+        
+        .page-btn:hover {
+            background-color: #e9ecef;
+        }
+        
+        .page-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        .page-info {
+            margin: 0 10px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 16px;
+            color: #666;
+        }
+        
+        .log-entry {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-left: 4px solid var(--primary-color);
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        
+        .log-timestamp {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .log-level {
+            margin-left: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        
+        .log-level-info {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .log-level-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .log-level-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .log-message {
+            margin-top: 5px;
+            font-size: 14px;
+        }
+        
+        .export-section {
+            margin-top: 20px;
+        }
+        
+        .export-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+        
+        .export-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            header {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .nav-buttons {
+                gap: 8px;
+                flex-direction: column;
+            }
+            
+            .btn {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+            
+            .form-row {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .form-col {
+                min-width: 100%;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .pagination {
+                flex-direction: column;
+            }
+            
+            .card {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-clipboard-list"></i> <span data-lang="operation_log_title">操作日志查询</span></h1>
+            <div class="user-info">
+                <span id="usernameDisplay">用户: 未登录</span>
+                <button id="logoutBtn" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> <span data-lang="logout">登出</span>
+                </button>
+            </div>
+            <div class="language-selector">
+                <div class="lang-dropdown">
+                    <div class="lang-selected" id="langSelected">
+                        <span id="currentLangText">中文</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="lang-dropdown-content" id="langDropdown">
+                        <a href="#" class="lang-option" data-lang="zh">中文</a>
+                        <a href="#" class="lang-option" data-lang="en">English</a>
+                        <a href="#" class="lang-option" data-lang="es">Español</a>
+                    </div>
+                </div>
+            </div>
+            <div class="nav-buttons">
+                <a href="/" class="btn btn-secondary">
+                    <i class="fas fa-home"></i> <span data-lang="home">首页</span>
+                </a>
+                <a href="/sorting" class="btn btn-info">
+                    <i class="fas fa-boxes"></i> <span data-lang="sorting_entry">分拣录入</span>
+                </a>
+                <a href="/statistics" class="btn btn-warning">
+                    <i class="fas fa-chart-bar"></i> <span data-lang="statistics_data">统计数据</span>
+                </a>
+                <a href="/history" class="btn">
+                    <i class="fas fa-history"></i> <span data-lang="history_query">历史查询</span>
+                </a>
+            </div>
+        </header>
+        
+        <div class="card">
+            <h2><i class="fas fa-filter"></i> <span data-lang="search_filter">搜索筛选</span></h2>
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="dateFrom" data-lang="date_from">开始日期:</label>
+                        <input type="date" id="dateFrom" name="dateFrom">
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="dateTo" data-lang="date_to">结束日期:</label>
+                        <input type="date" id="dateTo" name="dateTo">
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="logLevel" data-lang="log_level">日志级别:</label>
+                        <select id="logLevel" name="logLevel">
+                            <option value="" data-lang="all">全部</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button id="searchBtn" class="action-btn btn-search">
+                    <i class="fas fa-search"></i> <span data-lang="search">搜索</span>
+                </button>
+                <button id="resetBtn" class="action-btn btn-reset">
+                    <i class="fas fa-redo"></i> <span data-lang="reset">重置</span>
+                </button>
+                <button id="exportLogsBtn" class="action-btn btn-export">
+                    <i class="fas fa-file-export"></i> <span data-lang="export_logs">导出日志</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2><i class="fas fa-list"></i> <span data-lang="log_list">日志列表</span></h2>
+            <div id="logsList"></div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <script>
+        // Language translations
+        const translations = {
+            zh: {
+                operation_log_title: "操作日志查询",
+                home: "首页",
+                sorting_entry: "分拣录入",
+                statistics_data: "统计数据",
+                history_query: "历史查询",
+                search_filter: "搜索筛选",
+                date_from: "开始日期",
+                date_to: "结束日期",
+                log_level: "日志级别",
+                all: "全部",
+                search: "搜索",
+                reset: "重置",
+                export_logs: "导出日志",
+                log_list: "日志列表",
+                logout: "登出"
+            },
+            en: {
+                operation_log_title: "Operation Log Query",
+                home: "Home",
+                sorting_entry: "Sorting Entry",
+                statistics_data: "Statistics Data",
+                history_query: "History Query",
+                search_filter: "Search Filter",
+                date_from: "Date From",
+                date_to: "Date To",
+                log_level: "Log Level",
+                all: "All",
+                search: "Search",
+                reset: "Reset",
+                export_logs: "Export Logs",
+                log_list: "Log List",
+                logout: "Logout"
+            },
+            es: {
+                operation_log_title: "Consulta de Registro de Operaciones",
+                home: "Inicio",
+                sorting_entry: "Entrada de Clasificación",
+                statistics_data: "Datos Estadísticos",
+                history_query: "Consulta de Historial",
+                search_filter: "Filtro de Búsqueda",
+                date_from: "Fecha Desde",
+                date_to: "Fecha Hasta",
+                log_level: "Nivel de Registro",
+                all: "Todo",
+                search: "Buscar",
+                reset: "Restablecer",
+                export_logs: "Exportar Registros",
+                log_list: "Lista de Registros",
+                logout: "Cerrar sesión"
+            }
+        };
+        
+        // Current language
+        let currentLang = 'zh';
+        
+        // Set language
+        function setLanguage(lang) {
+            currentLang = lang;
+            
+            // Update selected language text
+            const langTexts = {
+                'zh': '中文',
+                'en': 'English',
+                'es': 'Español'
+            };
+            document.getElementById('currentLangText').textContent = langTexts[lang] || '中文';
+            
+            // Update all elements with data-lang attribute
+            document.querySelectorAll('[data-lang]').forEach(element => {
+                const key = element.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    element.textContent = translations[lang][key];
+                }
+            });
+            
+            // Update page title
+            document.title = translations[lang].operation_log_title || 'Operation Log Query';
+            
+            // Update select options
+            document.querySelectorAll('option[data-lang]').forEach(option => {
+                const key = option.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    option.textContent = translations[lang][key];
+                }
+            });
+            
+            // Store language preference in localStorage
+            localStorage.setItem('preferredLanguage', lang);
+        }
+        
+        // Toggle language dropdown
+        function toggleLanguageDropdown() {
+            document.getElementById('langDropdown').classList.toggle('show');
+        }
+        
+        // Close dropdown when clicking outside
+        window.onclick = function(event) {
+            if (!event.target.matches('.lang-selected') && !event.target.closest('.lang-dropdown')) {
+                const dropdowns = document.getElementsByClassName('lang-dropdown-content');
+                for (let i = 0; i < dropdowns.length; i++) {
+                    dropdowns[i].classList.remove('show');
+                }
+            }
+        }
+        
+        // Check login status and update UI
+        function checkLoginStatus() {
+            fetch('/api/check_login')
+            .then(response => response.json())
+            .then(data => {
+                if (data.logged_in) {
+                    document.getElementById('usernameDisplay').textContent = '用户: ' + data.user.username;
+                    // Update language for logout button if needed
+                    if (translations[currentLang] && translations[currentLang].logout) {
+                        document.querySelector('#logoutBtn span[data-lang="logout"]').textContent = translations[currentLang].logout;
+                    }
+                } else {
+                    document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+                    // Redirect to login if not logged in
+                    window.location.href = '/login';
+                }
+            })
+            .catch(error => {
+                console.error('Error checking login status:', error);
+                document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+                // Redirect to login if error occurs
+                window.location.href = '/login';
+            });
+        }
+
+        // Logout function
+        function logout() {
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/login';
+                } else {
+                    console.error('Logout failed:', data.error);
+                    window.location.href = '/login';
+                }
+            })
+            .catch(error => {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            });
+        }
+
+        // Initialize language
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check for saved language preference
+            const savedLang = localStorage.getItem('preferredLanguage');
+            if (savedLang && ['zh', 'en', 'es'].includes(savedLang)) {
+                setLanguage(savedLang);
+            }
+            
+            // Bind language dropdown toggle
+            document.getElementById('langSelected').addEventListener('click', toggleLanguageDropdown);
+            
+            // Bind language options
+            document.querySelectorAll('.lang-option').forEach(option => {
+                option.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const lang = this.getAttribute('data-lang');
+                    setLanguage(lang);
+                    document.getElementById('langDropdown').classList.remove('show');
+                });
+            });
+            
+            // Bind logout button
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+
+            // Check login status
+            checkLoginStatus();
+
+            // Load logs
+            loadLogs();
+
+            // Bind search button
+            document.getElementById('searchBtn').addEventListener('click', loadLogs);
+
+            // Bind reset button
+            document.getElementById('resetBtn').addEventListener('click', resetFilters);
+
+            // Bind export logs button
+            document.getElementById('exportLogsBtn').addEventListener('click', exportLogs);
+        });
+
+        // Load logs function
+        function loadLogs(page = 1) {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const logLevel = document.getElementById('logLevel').value;
+
+            let params = new URLSearchParams();
+            params.append('page', page);
+            if (dateFrom) params.append('date_from', dateFrom);
+            if (dateTo) params.append('date_to', dateTo);
+            if (logLevel) params.append('level', logLevel);
+
+            fetch(`/api/logs?${params.toString()}`)
+            .then(response => response.json())
+            .then(data => {
+                displayLogs(data.logs);
+                renderPagination(data.pagination);
+            })
+            .catch(error => {
+                console.error('Error loading logs:', error);
+                document.getElementById('logsList').innerHTML = '<div class="message error">加载日志失败</div>';
+            });
+        }
+
+        // Display logs
+        function displayLogs(logs) {
+            const logsList = document.getElementById('logsList');
+            if (logs && logs.length > 0) {
+                const logsHTML = logs.map(log => {
+                    let levelClass = '';
+                    let levelText = log.level || 'INFO';
+                    switch(log.level) {
+                        case 'WARNING':
+                            levelClass = 'log-level-warning';
+                            levelText = '警告';
+                            break;
+                        case 'ERROR':
+                            levelClass = 'log-level-error';
+                            levelText = '错误';
+                            break;
+                        default:
+                            levelClass = 'log-level-info';
+                            levelText = '信息';
+                    }
+                    
+                    if (currentLang === 'en') {
+                        levelText = log.level || 'INFO';
+                    } else if (currentLang === 'es') {
+                        switch(log.level) {
+                            case 'WARNING': levelText = 'Advertencia'; break;
+                            case 'ERROR': levelText = 'Error'; break;
+                            default: levelText = 'Información';
+                        }
+                    }
+                    
+                    return `
+                        <div class="log-entry">
+                            <div class="log-timestamp">${log.timestamp || 'N/A'}</div>
+                            <div class="log-level ${levelClass}">${levelText}</div>
+                            <div class="log-message">${log.message || 'N/A'}</div>
+                        </div>
+                    `;
+                }).join('');
+                
+                logsList.innerHTML = logsHTML;
+            } else {
+                logsList.innerHTML = '<div class="message">暂无日志记录</div>';
+            }
+        }
+
+        // Render pagination
+        function renderPagination(pagination) {
+            const paginationDiv = document.getElementById('pagination');
+            if (!pagination) return;
+
+            let paginationHTML = '';
+
+            if (pagination.has_prev) {
+                paginationHTML += `<button class="page-btn" onclick="loadLogs(${pagination.prev_num})"><i class="fas fa-chevron-left"></i></button>`;
+            }
+
+            for (let i = Math.max(1, pagination.page - 2); i <= Math.min(pagination.pages, pagination.page + 2); i++) {
+                paginationHTML += `<button class="page-btn ${i === pagination.page ? 'active' : ''}" onclick="loadLogs(${i})">${i}</button>`;
+            }
+
+            if (pagination.has_next) {
+                paginationHTML += `<button class="page-btn" onclick="loadLogs(${pagination.next_num})"><i class="fas fa-chevron-right"></i></button>`;
+            }
+
+            paginationHTML += `<div class="page-info">第 ${pagination.page} 页，共 ${pagination.pages} 页</div>`;
+
+            paginationDiv.innerHTML = paginationHTML;
+        }
+
+        // Reset filters
+        function resetFilters() {
+            document.getElementById('dateFrom').value = '';
+            document.getElementById('dateTo').value = '';
+            document.getElementById('logLevel').value = '';
+            loadLogs();
+        }
+
+        // Export logs
+        function exportLogs() {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const logLevel = document.getElementById('logLevel').value;
+
+            let params = new URLSearchParams();
+            if (dateFrom) params.append('date_from', dateFrom);
+            if (dateTo) params.append('date_to', dateTo);
+            if (logLevel) params.append('level', logLevel);
+
+            // Create download link
+            const link = document.createElement('a');
+            link.href = `/api/export_logs?${params.toString()}`;
+            link.download = `operation_logs_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Make loadLogs globally available for pagination
+        window.loadLogs = loadLogs;
+    </script>
+</body>
+</html>

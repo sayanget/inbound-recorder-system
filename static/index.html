@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="inbound_recorder">Inbound Recorder</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <!-- 添加Chart.js核心库 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 添加Chart.js数据标签插件 -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/offline.css">
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --danger-color: #f72585;
+            --warning-color: #f8961e;
+            --info-color: #4895ef;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --border-color: #dee2e6;
+            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
+        /* Language selector dropdown */
+        .user-info {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #usernameDisplay {
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        #logoutBtn {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .language-selector {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+        }
+
+        .lang-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .lang-selected {
+            padding: 5px 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .lang-selected:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .lang-dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 120px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            z-index: 1001;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .lang-dropdown-content.show {
+            display: block;
+        }
+
+        .lang-option {
+            padding: 10px 15px;
+            color: #333;
+            text-decoration: none;
+            display: block;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        .lang-option:hover {
+            background-color: #f1f1f1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fb;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            text-align: center;
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 16px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: var(--transition);
+            box-shadow: var(--card-shadow);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-success {
+            background-color: #28a745;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+        }
+
+        .btn-warning {
+            background-color: var(--warning-color);
+        }
+
+        .btn-info {
+            background-color: var(--info-color);
+        }
+
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #555;
+            font-size: 14px;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.2);
+        }
+
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .stat-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: var(--card-shadow);
+        }
+
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 5px 0;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+            margin: 15px 0;
+        }
+
+        .records-section h3 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .action-btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: var(--transition);
+        }
+
+        .edit-btn {
+            background-color: var(--info-color);
+            color: white;
+        }
+
+        .delete-btn {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .compact-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .compact-btn {
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #aaa;
+        }
+
+        .close-btn:hover {
+            color: #000;
+        }
+
+        .edit-form-group {
+            margin-bottom: 15px;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            header {
+                padding: 12px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .nav-buttons {
+                gap: 5px;
+            }
+
+            .btn {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+            .card {
+                padding: 15px;
+            }
+
+            .stats-summary {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .stat-number {
+                font-size: 1.3rem;
+            }
+
+            th,
+            td {
+                padding: 8px;
+                font-size: 13px;
+            }
+
+            .chart-container {
+                height: 200px;
+            }
+
+            .compact-actions {
+                flex-direction: column;
+            }
+
+            .modal-content {
+                width: 95%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-buttons {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+
+            .chart-container {
+                height: 180px;
+            }
+
+            .stat-item {
+                padding: 10px;
+            }
+
+            .stat-number {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 网络状态指示器 -->
+    <div class="network-status online" id="networkStatus">
+        <i class="fas fa-wifi"></i>
+        <span id="networkStatusText">在线</span>
+    </div>
+
+    <!-- 离线提示横幅 -->
+    <div class="offline-banner" id="offlineBanner">
+        <i class="fas fa-exclamation-triangle"></i>
+        网络已断开,数据将保存到本地,网络恢复后自动同步
+    </div>
+
+    <!-- 同步按钮 -->
+    <button class="sync-button" id="syncButton" style="display: none;">
+        <i class="fas fa-sync-alt"></i>
+        <span>同步数据</span>
+        <span class="pending-count" id="pendingCount">0</span>
+    </button>
+
+    <!-- 同步进度弹窗 -->
+    <div class="sync-progress" id="syncProgress">
+        <div class="sync-progress-header">
+            <i class="fas fa-sync-alt"></i>
+            <h3>正在同步数据...</h3>
+        </div>
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <p class="progress-text" id="progressText">准备同步...</p>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-truck-loading"></i> <span data-lang="inbound_recorder">Inbound Recorder</span></h1>
+            <div class="user-info">
+                <span id="usernameDisplay">用户: 未登录</span>
+                <button id="logoutBtn" class="btn btn-danger btn-sm">
+                    <i class="fas fa-sign-out-alt"></i> <span data-lang="logout">登出</span>
+                </button>
+            </div>
+            <div class="language-selector">
+                <div class="lang-dropdown">
+                    <div class="lang-selected" id="langSelected">
+                        <span id="currentLangText">中文</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="lang-dropdown-content" id="langDropdown">
+                        <a href="#" class="lang-option" data-lang="zh">中文</a>
+                        <a href="#" class="lang-option" data-lang="en">English</a>
+                        <a href="#" class="lang-option" data-lang="es">Español</a>
+                    </div>
+                </div>
+            </div>
+            <div class="nav-buttons">
+                <a href="/sorting" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-boxes"></i> <span data-lang="sorting_entry">分拣录入</span>
+                </a>
+                <a href="/statistics" class="btn btn-info btn-sm">
+                    <i class="fas fa-chart-bar"></i> <span data-lang="statistics_data">统计数据</span>
+                </a>
+                <a href="/history" class="btn btn-warning btn-sm">
+                    <i class="fas fa-history"></i> <span data-lang="history_query">历史查询</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- 统计摘要 -->
+        <div class="card">
+            <h2><i class="fas fa-chart-pie"></i> <span data-lang="data_overview">数据概览</span></h2>
+            <div class="stats-summary">
+                <div class="stat-item">
+                    <div class="stat-label" data-lang="total_vehicles">总车次</div>
+                    <div class="stat-number" id="totalVehicles">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label" data-lang="total_cargo">总货物量</div>
+                    <div class="stat-number" id="totalPieces">0</div>
+                </div>
+            </div>
+
+            <!-- 图表容器 -->
+            <div class="chart-container">
+                <canvas id="vehicleChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 车型统计 -->
+        <div class="card">
+            <h2><i class="fas fa-car"></i> <span data-lang="vehicle_type_statistics">车型统计</span></h2>
+            <div class="chart-container">
+                <canvas id="vehicleTypeChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 录入表单 -->
+        <div class="card">
+            <h2><i class="fas fa-plus-circle"></i> <span data-lang="add_record">新增记录</span></h2>
+            <form id="recordForm">
+                <div class="form-group">
+                    <label for="dock_no" data-lang="dock_number">码头号:</label>
+                    <input type="number" id="dock_no" name="dock_no" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="vehicle_type" data-lang="vehicle_type">车辆类型:</label>
+                    <select id="vehicle_type" name="vehicle_type" required>
+                        <option value="" data-lang="please_select">请选择</option>
+                        <option value="26英尺">26英尺</option>
+                        <option value="Car">Car</option>
+                        <option value="Van">Van</option>
+                        <option value="53英尺">53英尺</option>
+                        <option value="其他" data-lang="other">其他</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="vehicle_no" data-lang="license_plate">车牌号:</label>
+                    <input type="text" id="vehicle_no" name="vehicle_no">
+                </div>
+
+                <div class="form-group" style="display: none;">
+                    <label for="unit" data-lang="unit">单位:</label>
+                    <input type="text" id="unit" name="unit">
+                </div>
+
+                <div class="form-group">
+                    <label for="load_amount" data-lang="load_amount">装载量:</label>
+                    <input type="number" id="load_amount" name="load_amount">
+                </div>
+
+                <div class="form-group" style="display: none;">
+                    <label for="pieces" data-lang="pieces">件数:</label>
+                    <input type="number" id="pieces" name="pieces">
+                </div>
+
+                <div class="form-group">
+                    <label for="time_slot" data-lang="time_slot">时间段:</label>
+                    <input type="text" id="time_slot" name="time_slot">
+                </div>
+
+                <div class="form-group">
+                    <label for="remark" data-lang="remarks">备注:</label>
+                    <textarea id="remark" name="remark" rows="2"></textarea>
+                </div>
+
+                <div class="compact-actions">
+                    <button type="submit" class="btn compact-btn">
+                        <i class="fas fa-save"></i> <span data-lang="submit_record">提交记录</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="message"></div>
+
+        <!-- 记录列表 -->
+        <div class="card records-section">
+            <h2><i class="fas fa-list"></i> <span data-lang="recent_records">最近记录</span></h2>
+            <div class="compact-actions">
+                <button id="loadRecords" class="btn btn-info btn-sm">
+                    <i class="fas fa-sync-alt"></i> <span data-lang="refresh">刷新</span>
+                </button>
+                <button id="exportRecords" class="btn btn-success btn-sm">
+                    <i class="fas fa-file-export"></i> <span data-lang="export_records">导出记录</span>
+                </button>
+            </div>
+            <div class="table-container">
+                <div id="recordsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑模态框 -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> <span data-lang="edit_record">编辑记录</span></h3>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editRecordForm">
+                    <input type="hidden" id="editId" name="id">
+                    <div class="edit-form-group">
+                        <label for="editDockNo" data-lang="dock_number">码头号:</label>
+                        <input type="number" id="editDockNo" name="dock_no" required>
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="editVehicleType" data-lang="vehicle_type">车辆类型:</label>
+                        <select id="editVehicleType" name="vehicle_type" required>
+                            <option value="" data-lang="please_select">请选择</option>
+                            <option value="26英尺">26英尺</option>
+                            <option value="Car">Car</option>
+                            <option value="Van">Van</option>
+                            <option value="53英尺">53英尺</option>
+                            <option value="其他" data-lang="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="editVehicleNo" data-lang="license_plate">车牌号:</label>
+                        <input type="text" id="editVehicleNo" name="vehicle_no">
+                    </div>
+                    <div class="edit-form-group" style="display: none;">
+                        <label for="editUnit" data-lang="unit">单位:</label>
+                        <input type="text" id="editUnit" name="unit">
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="editLoadAmount" data-lang="load_amount">装载量:</label>
+                        <input type="number" id="editLoadAmount" name="load_amount">
+                    </div>
+                    <div class="edit-form-group" style="display: none;">
+                        <label for="editPieces" data-lang="pieces">件数:</label>
+                        <input type="number" id="editPieces" name="pieces">
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="editTimeSlot" data-lang="time_slot">时间段:</label>
+                        <input type="text" id="editTimeSlot" name="time_slot">
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="editRemark" data-lang="remarks">备注:</label>
+                        <textarea id="editRemark" name="remark" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger btn-sm" id="cancelEdit">
+                    <i class="fas fa-times"></i> <span data-lang="cancel">取消</span>
+                </button>
+                <button class="btn btn-success btn-sm" id="saveEdit">
+                    <i class="fas fa-check"></i> <span data-lang="update_record">更新记录</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Language translations
+        const translations = {
+            zh: {
+                inbound_recorder: "Inbound Recorder",
+                sorting_entry: "分拣录入",
+                statistics_data: "统计数据",
+                history_query: "历史查询",
+                data_overview: "数据概览",
+                vehicle_type_statistics: "车型统计",
+                total_vehicles: "总车次",
+                total_cargo: "总货物量",
+                add_record: "新增记录",
+                dock_number: "码头号",
+                vehicle_type: "车辆类型",
+                license_plate: "车牌号",
+                unit: "单位",
+                load_amount: "装载量",
+                pieces: "件数",
+                time_slot: "时间段",
+                remarks: "备注",
+                please_select: "请选择",
+                other: "其他",
+                submit_record: "提交记录",
+                recent_records: "最近记录",
+                refresh: "刷新",
+                export_records: "导出记录",
+                edit_record: "编辑记录",
+                cancel: "取消",
+                update_record: "更新记录",
+                record_submit_success: "记录提交成功！",
+                submit_failed: "提交失败：",
+                submit_error: "提交出错，请检查网络连接。",
+                load_record_error: "加载记录出错：",
+                record_update_success: "记录更新成功！",
+                update_failed: "更新失败：",
+                update_error: "更新出错，请检查网络连接。",
+                confirm_delete: "确定要删除这条记录吗？",
+                delete_success: "记录删除成功！",
+                delete_error: "删除出错，请检查网络连接。",
+                logout: "登出"
+            },
+            en: {
+                inbound_recorder: "Inbound Recorder",
+                sorting_entry: "Sorting Entry",
+                statistics_data: "Statistics Data",
+                history_query: "History Query",
+                data_overview: "Data Overview",
+                vehicle_type_statistics: "Vehicle Type Statistics",
+                total_vehicles: "Total Vehicles",
+                total_cargo: "Total Cargo",
+                add_record: "Add Record",
+                dock_number: "Dock Number",
+                vehicle_type: "Vehicle Type",
+                license_plate: "License Plate",
+                unit: "Unit",
+                load_amount: "Load Amount",
+                pieces: "Pieces",
+                time_slot: "Time Slot",
+                remarks: "Remarks",
+                please_select: "Please Select",
+                other: "Other",
+                submit_record: "Submit Record",
+                recent_records: "Recent Records",
+                refresh: "Refresh",
+                export_records: "Export Records",
+                edit_record: "Edit Record",
+                cancel: "Cancel",
+                update_record: "Update Record",
+                record_submit_success: "Record submitted successfully!",
+                submit_failed: "Submission failed:",
+                submit_error: "Submission error, please check your network connection.",
+                load_record_error: "Error loading record:",
+                record_update_success: "Record updated successfully!",
+                update_failed: "Update failed:",
+                update_error: "Update error, please check your network connection.",
+                confirm_delete: "Are you sure you want to delete this record?",
+                delete_success: "Record deleted successfully!",
+                delete_error: "Deletion error, please check your network connection.",
+                logout: "Logout"
+            },
+            es: {
+                inbound_recorder: "Registrador de Entrada",
+                sorting_entry: "Entrada de Clasificación",
+                statistics_data: "Datos Estadísticos",
+                history_query: "Consulta de Historial",
+                data_overview: "Resumen de Datos",
+                vehicle_type_statistics: "Estadísticas de Tipo de Vehículo",
+                total_vehicles: "Vehículos Totales",
+                total_cargo: "Carga Total",
+                add_record: "Agregar Registro",
+                dock_number: "Número de Muelle",
+                vehicle_type: "Tipo de Vehículo",
+                license_plate: "Matrícula",
+                unit: "Unidad",
+                load_amount: "Cantidad de Carga",
+                pieces: "Piezas",
+                time_slot: "Franja Horaria",
+                remarks: "Observaciones",
+                please_select: "Por favor seleccione",
+                other: "Otro",
+                submit_record: "Enviar Registro",
+                recent_records: "Registros Recientes",
+                refresh: "Actualizar",
+                export_records: "Exportar Registros",
+                edit_record: "Editar Registro",
+                cancel: "Cancelar",
+                update_record: "Actualizar Registro",
+                record_submit_success: "¡Registro enviado con éxito!",
+                submit_failed: "Error en el envío:",
+                submit_error: "Error de envío, por favor verifique su conexión de red.",
+                load_record_error: "Error al cargar el registro:",
+                record_update_success: "¡Registro actualizado con éxito!",
+                update_failed: "Error en la actualización:",
+                update_error: "Error de actualización, por favor verifique su conexión de red.",
+                confirm_delete: "¿Está seguro de que desea eliminar este registro?",
+                delete_success: "¡Registro eliminado con éxito!",
+                delete_error: "Error al eliminar, por favor verifique su conexión de red.",
+                logout: "Cerrar sesión"
+            }
+        };
+
+        // Current language
+        let currentLang = 'zh';
+
+        // Set language
+        function setLanguage(lang) {
+            currentLang = lang;
+
+            // Update selected language text
+            const langTexts = {
+                'zh': '中文',
+                'en': 'English',
+                'es': 'Español'
+            };
+            document.getElementById('currentLangText').textContent = langTexts[lang] || '中文';
+
+            // Update all elements with data-lang attribute
+            document.querySelectorAll('[data-lang]').forEach(element => {
+                const key = element.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    element.textContent = translations[lang][key];
+                }
+            });
+
+            // Update page title
+            document.title = translations[lang].inbound_recorder || 'Inbound Recorder';
+
+            // Update select options
+            document.querySelectorAll('option[data-lang]').forEach(option => {
+                const key = option.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    option.textContent = translations[lang][key];
+                }
+            });
+
+            // Store language preference in localStorage
+            localStorage.setItem('preferredLanguage', lang);
+        }
+
+        // Toggle language dropdown
+        function toggleLanguageDropdown() {
+            document.getElementById('langDropdown').classList.toggle('show');
+        }
+
+        // Close dropdown when clicking outside
+        window.onclick = function (event) {
+            if (!event.target.matches('.lang-selected') && !event.target.closest('.lang-dropdown')) {
+                const dropdowns = document.getElementsByClassName('lang-dropdown-content');
+                for (let i = 0; i < dropdowns.length; i++) {
+                    dropdowns[i].classList.remove('show');
+                }
+            }
+        }
+
+        // Check login status and update UI
+        function checkLoginStatus() {
+            fetch('/api/check_login')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.logged_in) {
+                        document.getElementById('usernameDisplay').textContent = '用户: ' + data.user.username;
+                        // Update language for logout button if needed
+                        if (translations[currentLang] && translations[currentLang].logout) {
+                            document.querySelector('#logoutBtn span[data-lang="logout"]').textContent = translations[currentLang].logout;
+                        }
+                    } else {
+                        document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+                        // Redirect to login if not logged in
+                        window.location.href = '/login';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking login status:', error);
+                    document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+                    // Redirect to login if error occurs
+                    window.location.href = '/login';
+                });
+        }
+
+        // Logout function
+        function logout() {
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = '/login';
+                    } else {
+                        console.error('Logout failed:', data.error);
+                        window.location.href = '/login';
+                    }
+                })
+                .catch(error => {
+                    console.error('Logout error:', error);
+                    window.location.href = '/login';
+                });
+        }
+
+        // Initialize language
+        document.addEventListener('DOMContentLoaded', function () {
+            // Check for saved language preference
+            const savedLang = localStorage.getItem('preferredLanguage');
+            if (savedLang && ['zh', 'en', 'es'].includes(savedLang)) {
+                setLanguage(savedLang);
+            }
+
+            // Bind language dropdown toggle
+            document.getElementById('langSelected').addEventListener('click', toggleLanguageDropdown);
+
+            // Bind language options
+            document.querySelectorAll('.lang-option').forEach(option => {
+                option.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const lang = this.getAttribute('data-lang');
+                    setLanguage(lang);
+                    document.getElementById('langDropdown').classList.remove('show');
+                });
+            });
+
+            // Bind logout button
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+
+            // Check login status
+            checkLoginStatus();
+
+            // Load stats and records
+            loadStats();
+            loadRecords();
+
+            // Bind modal events
+            document.querySelector('#editModal .close-btn').addEventListener('click', closeEditModal);
+
+            // Bind export records button
+            document.getElementById('exportRecords').addEventListener('click', exportRecords);
+
+            // Bind save edit button
+            document.getElementById('saveEdit').addEventListener('click', saveEdit);
+
+            // Bind cancel edit button
+            document.getElementById('cancelEdit').addEventListener('click', closeEditModal);
+
+            // 监听编辑模态框中的车辆类型变更,自动调整装载量和件数
+            document.getElementById('editVehicleType').addEventListener('change', function (e) {
+                const vehicleType = e.target.value;
+                const loadAmountInput = document.getElementById('editLoadAmount');
+
+                // 根据车辆类型自动设置装载量
+                // 注意:件数字段在前端是隐藏的,由后端自动计算
+                switch (vehicleType) {
+                    case '26英尺':
+                        loadAmountInput.value = 12;
+                        break;
+                    case '53英尺':
+                        loadAmountInput.value = 24;
+                        break;
+                    case 'Car':
+                        loadAmountInput.value = 1;
+                        break;
+                    case 'Van':
+                        loadAmountInput.value = 9;
+                        break;
+                    default:
+                        // 其他类型不自动填充
+                        break;
+                }
+            });
+        });
+
+        // Load statistics data
+        function loadStats() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('totalVehicles').textContent = data.total_vehicles || 0;
+                    document.getElementById('totalPieces').textContent = data.total_pieces || 0;
+
+                    // Render vehicle type chart
+                    renderVehicleTypeChart(data.vehicle_stats);
+                })
+                .catch(error => {
+                    console.error('Error loading stats:', error);
+                });
+        }
+
+        // Render vehicle type statistics chart
+        function renderVehicleTypeChart(vehicleStats) {
+            console.log('Rendering vehicle type chart with data:', vehicleStats);
+
+            const ctx = document.getElementById('vehicleTypeChart').getContext('2d');
+
+            // Destroy existing chart if it exists
+            if (window.vehicleTypeChart) {
+                // Check if it's a Chart instance before calling destroy
+                if (typeof window.vehicleTypeChart.destroy === 'function') {
+                    window.vehicleTypeChart.destroy();
+                } else {
+                    // If it's not a chart instance, delete the property
+                    delete window.vehicleTypeChart;
+                }
+            }
+
+            // Check if there is data
+            if (!vehicleStats || vehicleStats.length === 0) {
+                document.getElementById('vehicleTypeChart').innerHTML = `<p style="text-align: center; color: #666;">暂无车型统计数据</p>`;
+                return;
+            }
+
+            // Prepare data for chart (only vehicle counts)
+            const labels = vehicleStats.map(item => item.vehicle_type || '未知');
+            const counts = vehicleStats.map(item => item.count || 0);
+
+            console.log('Chart data - Labels:', labels, 'Counts:', counts);
+
+            // Calculate max values for setting y-axis range
+            const maxCount = Math.max(...counts);
+
+            // Calculate appropriate y-axis max value and step size
+            const countYAxisMax = Math.ceil(maxCount / 10) * 10;
+            const countStepSize = Math.ceil(countYAxisMax / 5 / 10) * 10;
+
+            // Detect if it's a mobile device
+            const isMobile = window.innerWidth < 768;
+
+            try {
+                window.vehicleTypeChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: '车次',
+                                data: counts,
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: isMobile ? 'top' : 'top',
+                                labels: {
+                                    font: {
+                                        size: isMobile ? 10 : 12
+                                    }
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '各车型统计',
+                                font: {
+                                    size: isMobile ? 14 : 16
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                position: 'left',
+                                min: 0,
+                                max: countYAxisMax > 0 ? countYAxisMax : undefined,
+                                ticks: {
+                                    stepSize: countStepSize > 0 ? countStepSize : undefined,
+                                    font: {
+                                        size: isMobile ? 10 : 12
+                                    }
+                                },
+                                title: {
+                                    display: true,
+                                    text: '车次',
+                                    font: {
+                                        size: isMobile ? 12 : 14
+                                    }
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    font: {
+                                        size: isMobile ? 10 : 12
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                console.log('Vehicle type chart rendered successfully');
+            } catch (error) {
+                console.error('Error rendering vehicle type chart:', error);
+                // 在canvas上显示错误信息
+                try {
+                    const canvas = document.getElementById('vehicleTypeChart');
+                    if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.fillStyle = '#f72585';
+                        ctx.font = '16px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('图表渲染出错: ' + error.message, canvas.width / 2, canvas.height / 2);
+                    }
+                } catch (canvasError) {
+                    console.error('Error displaying error on canvas:', canvasError);
+                }
+            }
+        }
+
+        // Load recent records
+        function loadRecords() {
+            fetch('/api/list')
+                .then(response => response.json())
+                .then(records => {
+                    updateRecordsTable(records);
+                })
+                .catch(error => {
+                    console.error('Error loading records:', error);
+                });
+        }
+
+        // Update records table
+        function updateRecordsTable(records) {
+            const recordsList = document.getElementById('recordsList');
+
+            if (!records || records.length === 0) {
+                recordsList.innerHTML = `<p style="text-align: center; color: #666;">暂无记录</p>`;
+                return;
+            }
+
+            let tableHtml = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>码头</th>
+                            <th>车型</th>
+                            <th>车牌</th>
+                            <th>装载</th>
+                            <th>时间</th>
+                            <th>货物件数</th>
+                            <th>创建</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            records.forEach(record => {
+                tableHtml += `
+                    <tr>
+                        <td>${record.id}</td>
+                        <td>${record.dock_no || ''}</td>
+                        <td>${record.vehicle_type || ''}</td>
+                        <td>${record.vehicle_no || ''}</td>
+                        <td>${record.load_amount || ''}</td>
+                        <td>${record.time_slot || ''}</td>
+                        <td>${record.pieces || 0}</td>
+                        <td>${record.created_at || ''}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="action-btn edit-btn" onclick="editRecord(${record.id})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="action-btn delete-btn" onclick="deleteRecord(${record.id})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `
+                    </tbody>
+                </table>
+            `;
+
+            recordsList.innerHTML = tableHtml;
+        }
+
+        // Submit new record
+        document.getElementById('recordForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            // Collect form data
+            const formData = new FormData(this);
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                // Skip unit and pieces fields
+                if (['unit', 'pieces'].includes(key)) {
+                    continue;
+                }
+                // Handle numeric fields
+                if (['dock_no', 'load_amount'].includes(key) && value !== '') {
+                    data[key] = parseInt(value);
+                } else {
+                    data[key] = value;
+                }
+            }
+
+            // Send data to server (with offline support)
+            if (navigator.onLine) {
+                // 在线:尝试直接提交
+                fetch('/api/record', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            showMessage(translations[currentLang].record_submit_success || '记录提交成功！', 'success');
+                            document.getElementById('recordForm').reset();
+                            // Reload stats and records
+                            loadStats();
+                            loadRecords();
+                        } else {
+                            showMessage(translations[currentLang].submit_failed || '提交失败：' + (result.error || '未知错误'), 'error');
+                        }
+                    })
+                    .catch(async (error) => {
+                        console.error('Error:', error);
+                        // 网络错误:保存到离线存储
+                        try {
+                            await offlineManager.saveOffline('inbound', data);
+                            showMessage('网络错误,数据已保存到本地,将在网络恢复时自动同步', 'warning');
+                            document.getElementById('recordForm').reset();
+                            await updatePendingCount();
+                        } catch (offlineError) {
+                            console.error('离线保存失败:', offlineError);
+                            showMessage('提交失败且无法保存到本地: ' + offlineError.message, 'error');
+                        }
+                    });
+            } else {
+                // 离线:直接保存到本地
+                try {
+                    await offlineManager.saveOffline('inbound', data);
+                    showMessage('当前离线,数据已保存到本地,将在网络恢复时自动同步', 'info');
+                    document.getElementById('recordForm').reset();
+                    await updatePendingCount();
+                } catch (error) {
+                    console.error('离线保存失败:', error);
+                    showMessage('保存到本地失败: ' + error.message, 'error');
+                }
+            }
+        });
+
+        // Refresh records button
+        document.getElementById('loadRecords').addEventListener('click', function () {
+            loadRecords();
+            loadStats();
+        });
+
+        // Show message
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = 'message ' + type;
+
+            // Clear message after 3 seconds
+            setTimeout(() => {
+                messageDiv.textContent = '';
+                messageDiv.className = '';
+            }, 3000);
+        }
+
+        // Edit record
+        function editRecord(recordId) {
+            fetch(`/api/record/${recordId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showMessage(translations[currentLang].load_record_error || '加载记录出错：' + data.error, 'error');
+                        return;
+                    }
+
+                    // Fill form with record data
+                    document.getElementById('editId').value = data.id;
+                    document.getElementById('editDockNo').value = data.dock_no || '';
+                    document.getElementById('editVehicleType').value = data.vehicle_type || '';
+                    document.getElementById('editVehicleNo').value = data.vehicle_no || '';
+                    // Skip unit field (hidden)
+                    document.getElementById('editLoadAmount').value = data.load_amount || '';
+                    // Skip pieces field (hidden)
+                    document.getElementById('editTimeSlot').value = data.time_slot || '';
+                    document.getElementById('editRemark').value = data.remark || '';
+
+                    // Show modal
+                    document.getElementById('editModal').style.display = 'flex';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showMessage(translations[currentLang].load_record_error || '加载记录出错，请检查网络连接。', 'error');
+                });
+        }
+
+        // Close edit modal
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        // Export records to Excel
+        function exportRecords() {
+            // Create a temporary link to trigger the download
+            const link = document.createElement('a');
+            link.href = '/api/export_recent_records';
+            link.download = 'recent_records.xlsx';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Save edit
+        function saveEdit() {
+            console.log('Save edit function called');
+            const recordId = document.getElementById('editId').value;
+            console.log('Record ID:', recordId);
+            const formData = new FormData(document.getElementById('editRecordForm'));
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                if (key !== 'id') {
+                    // Skip unit and pieces fields
+                    if (['unit', 'pieces'].includes(key)) {
+                        continue;
+                    }
+                    // Handle numeric fields
+                    if (['dock_no', 'load_amount'].includes(key) && value !== '') {
+                        data[key] = parseInt(value);
+                    } else {
+                        data[key] = value;
+                    }
+                }
+            }
+
+            console.log('Data to send:', data);
+
+            fetch(`/api/record/${recordId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.json();
+                })
+                .then(result => {
+                    console.log('Response result:', result);
+                    if (result.success) {
+                        showMessage(translations[currentLang].record_update_success || '记录更新成功！', 'success');
+                        closeEditModal();
+                        // Reload records and stats
+                        loadRecords();
+                        loadStats();
+                    } else {
+                        showMessage(translations[currentLang].update_failed || '更新失败：' + (result.error || '未知错误'), 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showMessage(translations[currentLang].update_error || '更新出错，请检查网络连接。', 'error');
+                });
+        }
+
+        // Delete record
+        function deleteRecord(recordId) {
+            if (confirm(translations[currentLang].confirm_delete || '确定要删除这条记录吗？')) {
+                fetch(`/api/record/${recordId}`, {
+                    method: 'DELETE'
+                })
+                    .then(response => {
+                        // 检查HTTP状态码
+                        if (response.status === 404) {
+                            return { success: false, error: '记录未找到' };
+                        } else if (!response.ok) {
+                            return { success: false, error: `HTTP错误: ${response.status}` };
+                        }
+                        return response.json();
+                    })
+                    .then(result => {
+                        if (result.success) {
+                            showMessage(translations[currentLang].delete_success || '记录删除成功！', 'success');
+                            // Reload records and stats
+                            loadRecords();
+                            loadStats();
+                        } else {
+                            // 显示具体的错误信息
+                            const errorMessage = result.error || '删除出错，请检查网络连接。';
+                            showMessage(translations[currentLang].delete_error || errorMessage, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showMessage(translations[currentLang].delete_error || '删除出错，请检查网络连接。', 'error');
+                    });
+            }
+        }
+    </script>
+
+    <!-- 离线管理器 -->
+    <script src="/static/js/offlineManager.js"></script>
+
+    <script>
+        // 网络状态管理
+        let isOnline = navigator.onLine;
+
+        // 更新网络状态UI
+        function updateNetworkStatus(online) {
+            const networkStatus = document.getElementById('networkStatus');
+            const networkStatusText = document.getElementById('networkStatusText');
+            const offlineBanner = document.getElementById('offlineBanner');
+
+            if (online) {
+                networkStatus.classList.remove('offline');
+                networkStatus.classList.add('online');
+                networkStatusText.textContent = '在线';
+                offlineBanner.classList.remove('show');
+            } else {
+                networkStatus.classList.remove('online');
+                networkStatus.classList.add('offline');
+                networkStatusText.textContent = '离线';
+                offlineBanner.classList.add('show');
+            }
+
+            isOnline = online;
+        }
+
+        // 更新待同步数量
+        async function updatePendingCount() {
+            try {
+                const count = await offlineManager.getPendingCount();
+                const pendingCountEl = document.getElementById('pendingCount');
+                const syncButton = document.getElementById('syncButton');
+
+                if (count > 0) {
+                    pendingCountEl.textContent = count;
+                    syncButton.style.display = 'flex';
+                } else {
+                    syncButton.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('更新待同步数量失败:', error);
+            }
+        }
+
+        // 手动同步
+        async function manualSync() {
+            const syncButton = document.getElementById('syncButton');
+            const syncProgress = document.getElementById('syncProgress');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+
+            if (!navigator.onLine) {
+                alert('当前网络不可用,请稍后再试');
+                return;
+            }
+
+            syncButton.disabled = true;
+            syncButton.classList.add('syncing');
+            syncProgress.classList.add('show');
+
+            try {
+                const result = await offlineManager.syncToServer((progress) => {
+                    const percent = Math.round((progress.current / progress.total) * 100);
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = `正在同步第 ${progress.current}/${progress.total} 条记录...`;
+                });
+
+                syncProgress.classList.remove('show');
+
+                if (result.success) {
+                    if (result.synced > 0) {
+                        alert(`同步成功! 已同步 ${result.synced} 条记录${result.failed > 0 ? `, ${result.failed} 条失败` : ''}`);
+                    } else {
+                        alert('没有待同步的数据');
+                    }
+                    await updatePendingCount();
+                } else {
+                    alert('同步失败: ' + (result.error || result.message));
+                }
+            } catch (error) {
+                console.error('同步出错:', error);
+                alert('同步出错: ' + error.message);
+                syncProgress.classList.remove('show');
+            } finally {
+                syncButton.disabled = false;
+                syncButton.classList.remove('syncing');
+            }
+        }
+
+        // 监听网络状态变化
+        window.addEventListener('online', async () => {
+            console.log('网络已恢复');
+            updateNetworkStatus(true);
+
+            // 检查是否有待同步数据
+            const count = await offlineManager.getPendingCount();
+            if (count > 0) {
+                // 显示提示
+                if (confirm(`网络已恢复,检测到 ${count} 条待同步数据,是否立即同步?`)) {
+                    await manualSync();
+                } else {
+                    await updatePendingCount();
+                }
+            }
+        });
+
+        window.addEventListener('offline', () => {
+            console.log('网络已断开');
+            updateNetworkStatus(false);
+        });
+
+        // 同步按钮点击事件
+        document.getElementById('syncButton').addEventListener('click', manualSync);
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateNetworkStatus(navigator.onLine);
+            await updatePendingCount();
+        });
+    </script>
+</body>
+
+</html>

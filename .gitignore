@@ -1,0 +1,118 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+backup_*/
+project_backup_*/
+project_essential_backup_*.zip
+InboundRecorder_Package.zip
+inbound_recorder_deployment_package.zip
+
+# Test files
+test_*.py
+check_*.py
+debug_*.py
+analyze_*.py
+verify_*.py
+validate_*.py
+simulate_*.py
+fix_*.py
+cleanup_*.py
+reprocess_*.py
+add_test_*.py
+insert_*.py
+update_*.py
+create_*.py
+view_*.py
+
+# Test data and responses
+*.json
+!package.json
+!package-lock.json
+
+# Excel files (reports)
+*.xlsx
+recent_records_*.xlsx
+daily_report_*.xlsx
+
+# Backup files
+*_backup*.py
+*_before_*.py
+*_final_*.py
+single_app_*.py
+!single_app.py
+
+# Build artifacts
+*.spec
+dist_package/
+deployment_package/
+improved_deployment_package/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Email configuration (contains sensitive data)
+email_config.py
+
+# Exclude files
+exclude.txt
+exclude_backup.txt
+essential_files.txt
+
+# HTML test files
+test_*.html
+debug_*.html
+page_content.html
+
+# Icons (keep only the main one)
+in0.ico
+
+# Batch files for local use
+一键启动*.bat
+使用外部数据库运行.bat
+测试邮件发送.bat

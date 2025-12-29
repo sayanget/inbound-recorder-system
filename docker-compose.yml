@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  inbound-app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/inbound.db
+      - HOST=0.0.0.0
+      - PORT=8080
+      - SECRET_KEY=your_production_secret_key_here

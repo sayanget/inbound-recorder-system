@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="history_query_title">历史记录查询</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --danger-color: #f72585;
+            --warning-color: #f8961e;
+            --info-color: #4895ef;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --border-color: #dee2e6;
+            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+        
+        /* User info display */
+        .user-info {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        #usernameDisplay {
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        #logoutBtn {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        /* Language selector dropdown */
+        .language-selector {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+        }
+        
+        .lang-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .lang-selected {
+            padding: 5px 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .lang-selected:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .lang-dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 120px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            z-index: 1001;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .lang-dropdown-content.show {
+            display: block;
+        }
+        
+        .lang-option {
+            padding: 10px 15px;
+            color: #333;
+            text-decoration: none;
+            display: block;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .lang-option:hover {
+            background-color: #f1f1f1;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fb;
+            color: #333;
+            line-height: 1.5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+        }
+        
+        h1, h2, h3 {
+            margin-bottom: 15px;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            text-align: center;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: var(--transition);
+            box-shadow: var(--card-shadow);
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        
+        .btn-info {
+            background-color: var(--info-color);
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: var(--card-shadow);
+        }
+        
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-col {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+            font-size: 16px;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 16px;
+            transition: var(--transition);
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .action-btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+        
+        .btn-search {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-reset {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+        
+        .stat-card {
+            background-color: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 15px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f2f2f2;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .message {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .action-cell {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        .edit-btn, .delete-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+        
+        .edit-btn {
+            background-color: var(--info-color);
+            color: white;
+        }
+        
+        .delete-btn {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            header {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .nav-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+            
+            .card {
+                padding: 20px;
+            }
+            
+            .form-row {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .form-col {
+                min-width: 100%;
+            }
+            
+            .stats-summary {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .stat-value {
+                font-size: 2em;
+            }
+            
+            th, td {
+                padding: 10px;
+                font-size: 14px;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .action-btn {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .card {
+                padding: 15px;
+            }
+            
+            .stat-value {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-history"></i> <span data-lang="history_query">历史记录查询</span></h1>
+            <div class="user-info">
+                <span id="usernameDisplay">用户: 未登录</span>
+                <button id="logoutBtn" class="btn">
+                    <span data-lang="logout">登出</span>
+                </button>
+            </div>
+            <div class="language-selector">
+                <div class="lang-dropdown">
+                    <div class="lang-selected" id="langSelected">
+                        <span id="currentLangText">中文</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="lang-dropdown-content" id="langDropdown">
+                        <a href="#" class="lang-option" data-lang="zh">中文</a>
+                        <a href="#" class="lang-option" data-lang="en">English</a>
+                        <a href="#" class="lang-option" data-lang="es">Español</a>
+                    </div>
+                </div>
+            </div>
+            <div class="nav-buttons">
+                <a href="/" class="btn btn-primary">
+                    <i class="fas fa-home"></i> <span data-lang="home">首页</span>
+                </a>
+                <a href="/sorting" class="btn btn-secondary">
+                    <i class="fas fa-boxes"></i> <span data-lang="sorting_entry">分拣录入</span>
+                </a>
+                <a href="/statistics" class="btn btn-info">
+                    <i class="fas fa-chart-bar"></i> <span data-lang="statistics_data">统计数据</span>
+                </a>
+            </div>
+        </header>
+        
+        <!-- Query form -->
+        <div class="card">
+            <h2><i class="fas fa-search"></i> <span data-lang="query_conditions">查询条件</span></h2>
+            <form id="queryForm">
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="date" data-lang="select_date">选择日期:</label>
+                            <input type="date" id="date" name="date" required>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button type="submit" class="action-btn btn-search">
+                        <i class="fas fa-search"></i> <span data-lang="query_records">查询记录</span>
+                    </button>
+                    <button type="button" id="todayBtn" class="action-btn btn-secondary">
+                        <i class="fas fa-calendar-day"></i> <span data-lang="today">今天</span>
+                    </button>
+                    <button type="reset" class="action-btn btn-reset">
+                        <i class="fas fa-undo"></i> <span data-lang="reset">重置</span>
+                    </button>
+                </div>            </form>
+        </div>
+        
+        <!-- Stats summary -->
+        <div class="card">
+            <h2><i class="fas fa-chart-pie"></i> <span data-lang="data_overview">数据概览</span></h2>
+            <div class="stats-summary">
+                <div class="stat-card">
+                    <h3 data-lang="total_vehicles">总车次</h3>
+                    <div class="stat-value" id="totalVehicles">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3 data-lang="total_cargo">总货物量</h3>
+                    <div class="stat-value" id="totalPieces">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3 data-lang="record_count">记录条数</h3>
+                    <div class="stat-value" id="recordCount">0</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="message"></div>
+        
+        <!-- Records list -->
+        <div class="card records-section">
+            <h2><i class="fas fa-list"></i> <span data-lang="query_results">查询结果</span></h2>
+            <div class="action-buttons">
+                <button id="exportExcel" class="action-btn btn-export" style="display: none;">
+                    <i class="fas fa-file-export"></i> <span data-lang="export_csv">导出CSV</span>
+                </button>
+            </div>
+            <div class="table-container">
+                <div id="recordsList"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Language translations
+        const translations = {
+            zh: {
+                history_query_title: "历史记录查询",
+                history_query: "历史记录查询",
+                home: "首页",
+                sorting_entry: "分拣录入",
+                statistics_data: "统计数据",
+                query_conditions: "查询条件",
+                select_date: "选择日期:",
+                query_records: "查询记录",
+                reset: "重置",
+                today: "今天",
+                data_overview: "数据概览",
+                total_vehicles: "总车次",
+                total_cargo: "总货物量",
+                record_count: "记录条数",
+                query_results: "查询结果",
+                no_records: "该日期暂无记录",
+                id: "ID",
+                dock: "码头",
+                vehicle_type: "车型",
+                license_plate: "车牌",
+                load_amount: "装载",
+                pieces: "件数",
+                time_slot: "时间",
+                shift: "班次",
+                remarks: "备注",
+                created_at: "创建时间",
+                actions: "操作",
+                edit: "编辑",
+                delete: "删除",
+                load_stats_error: "加载统计数据出错，请检查网络连接。",
+                load_records_error: "加载记录出错，请检查网络连接。",
+                query_error: "查询出错，请检查网络连接。",
+                future_date_error: "不能查询未来日期的数据，请选择今天或之前的日期。",
+                confirm_delete: "确定要删除这条记录吗？",
+                delete_success: "记录删除成功！",
+                delete_error: "删除出错，请检查网络连接。",
+                export_csv: "导出CSV",
+                logout: "登出"
+            },
+            en: {
+                history_query_title: "History Query",
+                history_query: "History Query",
+                home: "Home",
+                sorting_entry: "Sorting Entry",
+                statistics_data: "Statistics Data",
+                query_conditions: "Query Conditions",
+                select_date: "Select Date:",
+                query_records: "Query Records",
+                reset: "Reset",
+                today: "Today",
+                data_overview: "Data Overview",
+                total_vehicles: "Total Vehicles",
+                total_cargo: "Total Cargo",
+                record_count: "Record Count",
+                query_results: "Query Results",
+                no_records: "No records for this date",
+                id: "ID",
+                dock: "Dock",
+                vehicle_type: "Vehicle Type",
+                license_plate: "License Plate",
+                load_amount: "Load Amount",
+                pieces: "Pieces",
+                time_slot: "Time Slot",
+                shift: "Shift",
+                remarks: "Remarks",
+                created_at: "Created At",
+                actions: "Actions",
+                edit: "Edit",
+                delete: "Delete",
+                load_stats_error: "Error loading statistics, please check your network connection.",
+                load_records_error: "Error loading records, please check your network connection.",
+                query_error: "Query error, please check your network connection.",
+                future_date_error: "Cannot query future dates, please select today or a previous date.",
+                confirm_delete: "Are you sure you want to delete this record?",
+                delete_success: "Record deleted successfully!",
+                delete_error: "Error deleting record, please check your network connection.",
+                export_csv: "Export CSV",
+                logout: "Logout"
+            },
+            es: {
+                history_query_title: "Consulta de Historial",
+                history_query: "Consulta de Historial",
+                home: "Inicio",
+                sorting_entry: "Entrada de Clasificación",
+                statistics_data: "Datos Estadísticos",
+                query_conditions: "Condiciones de Consulta",
+                select_date: "Seleccionar Fecha:",
+                query_records: "Consultar Registros",
+                reset: "Restablecer",
+                today: "Hoy",
+                data_overview: "Resumen de Datos",
+                total_vehicles: "Vehículos Totales",
+                total_cargo: "Carga Total",
+                record_count: "Conteo de Registros",
+                query_results: "Resultados de Consulta",
+                no_records: "No hay registros para esta fecha",
+                id: "ID",
+                dock: "Muelle",
+                vehicle_type: "Tipo de Vehículo",
+                license_plate: "Matrícula",
+                load_amount: "Cantidad de Carga",
+                pieces: "Piezas",
+                time_slot: "Franja Horaria",
+                shift: "Turno",
+                remarks: "Observaciones",
+                created_at: "Creado En",
+                actions: "Acciones",
+                edit: "Editar",
+                delete: "Eliminar",
+                load_stats_error: "Error al cargar estadísticas, por favor verifique su conexión de red.",
+                load_records_error: "Error al cargar registros, por favor verifique su conexión de red.",
+                query_error: "Error de consulta, por favor verifique su conexión de red.",
+                future_date_error: "No se pueden consultar fechas futuras, seleccione hoy o una fecha anterior.",
+                confirm_delete: "¿Está seguro de que desea eliminar este registro?",
+                delete_success: "¡Registro eliminado con éxito!",
+                delete_error: "Error al eliminar el registro, por favor verifique su conexión de red.",
+                export_csv: "Exportar CSV",
+                logout: "Cerrar sesión"
+            }
+        };
+        
+        // Current language
+        let currentLang = 'zh';
+        
+        // Set language
+        function setLanguage(lang) {
+            currentLang = lang;
+            
+            // Update selected language text
+            const langTexts = {
+                'zh': '中文',
+                'en': 'English',
+                'es': 'Español'
+            };
+            document.getElementById('currentLangText').textContent = langTexts[lang] || '中文';
+            
+            // Update all elements with data-lang attribute
+            document.querySelectorAll('[data-lang]').forEach(element => {
+                const key = element.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    element.textContent = translations[lang][key];
+                }
+            });
+            
+            // Update page title
+            document.title = translations[lang].history_query_title || '历史记录查询';
+            
+            // Store language preference in localStorage
+            localStorage.setItem('preferredLanguage', lang);
+        }
+        
+        // Toggle language dropdown
+        function toggleLanguageDropdown() {
+            document.getElementById('langDropdown').classList.toggle('show');
+        }
+        
+        // Close dropdown when clicking outside
+        window.onclick = function(event) {
+            if (!event.target.matches('.lang-selected') && !event.target.closest('.lang-dropdown')) {
+                const dropdowns = document.getElementsByClassName('lang-dropdown-content');
+                for (let i = 0; i < dropdowns.length; i++) {
+                    dropdowns[i].classList.remove('show');
+                }
+            }
+        }
+        
+        // Check login status and update UI
+        function checkLoginStatus() {
+            fetch('/api/check_login')
+            .then(response => response.json())
+            .then(data => {
+                if (data.logged_in) {
+                    document.getElementById('usernameDisplay').textContent = '用户: ' + data.user.username;
+                    // Update language for logout button if needed
+                    if (translations[currentLang] && translations[currentLang].logout) {
+                        document.querySelector('#logoutBtn span[data-lang="logout"]').textContent = translations[currentLang].logout;
+                    }
+                } else {
+                    document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+                    // Redirect to login if not logged in
+                    window.location.href = '/login';
+                }
+            })
+            .catch(error => {
+                console.error('Error checking login status:', error);
+                document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+                // Redirect to login if error occurs
+                window.location.href = '/login';
+            });
+        }
+
+        // Logout function
+        function logout() {
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/login';
+                } else {
+                    console.error('Logout failed:', data.error);
+                    window.location.href = '/login';
+                }
+            })
+            .catch(error => {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            });
+        }
+
+        // Initialize language
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check for saved language preference
+            const savedLang = localStorage.getItem('preferredLanguage');
+            if (savedLang && ['zh', 'en', 'es'].includes(savedLang)) {
+                setLanguage(savedLang);
+            }
+            
+            // Bind language dropdown toggle
+            document.getElementById('langSelected').addEventListener('click', toggleLanguageDropdown);
+            
+            // Bind language options
+            document.querySelectorAll('.lang-option').forEach(option => {
+                option.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const lang = this.getAttribute('data-lang');
+                    setLanguage(lang);
+                    document.getElementById('langDropdown').classList.remove('show');
+                });
+            });
+            
+            // Bind logout button
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+
+            // Check login status
+            checkLoginStatus();
+
+            // Set default date to today (using local date to avoid timezone issues)
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day}`;
+            document.getElementById('date').value = formattedDate;            
+            // Bind form submit event
+            document.getElementById('queryForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const date = document.getElementById('date').value;
+                if (date) {
+                    loadHistoryData(date);
+                }
+            });
+            
+            // Bind today button event
+            document.getElementById('todayBtn').addEventListener('click', function() {
+                // Get current date in local timezone
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const todayFormatted = `${year}-${month}-${day}`;
+                
+                document.getElementById('date').value = todayFormatted;
+                loadHistoryData(todayFormatted);
+            });        });
+        
+        // Load history data
+        function loadHistoryData(date) {
+            // Get statistics data
+            fetch(`/api/history?date=${encodeURIComponent(date)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    if (data.error.includes("不能查询未来日期")) {
+                        showMessage(translations[currentLang].future_date_error || "不能查询未来日期的数据，请选择今天或之前的日期。", 'error');
+                    } else {
+                        showMessage(translations[currentLang].load_stats_error || "加载统计数据出错，请检查网络连接。", 'error');
+                    }
+                    // Hide export button when there's an error
+                    document.getElementById('exportExcel').style.display = 'none';
+                    return;
+                }
+                
+                // Update statistics summary
+                document.getElementById('totalVehicles').textContent = data.stats.total_vehicles || 0;
+                document.getElementById('totalPieces').textContent = data.stats.total_pieces || 0;
+                document.getElementById('recordCount').textContent = data.stats.record_count || 0;
+                
+                // Update records table
+                updateRecordsTable(data.records);
+                
+                // Show export button and set up export functionality
+                const exportBtn = document.getElementById('exportExcel');
+                exportBtn.style.display = 'inline-block';
+                exportBtn.onclick = function() {
+                    exportToCSV(date);
+                };
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage(translations[currentLang].load_records_error || "加载记录出错，请检查网络连接。", 'error');
+                // Hide export button when there's an error
+                document.getElementById('exportExcel').style.display = 'none';
+            });
+        }
+        
+        // Update records table
+        function updateRecordsTable(records) {
+            const recordsList = document.getElementById('recordsList');
+            
+            if (!records || records.length === 0) {
+                recordsList.innerHTML = `<p style="text-align: center; color: #666;">${translations[currentLang].no_records || "该日期暂无记录"}</p>`;
+                return;
+            }
+            
+            let tableHtml = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${translations[currentLang].id || 'ID'}</th>
+                            <th>${translations[currentLang].dock || '码头'}</th>
+                            <th>${translations[currentLang].vehicle_type || '车型'}</th>
+                            <th>${translations[currentLang].license_plate || '车牌'}</th>
+                            <th>${translations[currentLang].load_amount || '装载'}</th>
+                            <th>${translations[currentLang].pieces || '件数'}</th>
+                            <th>${translations[currentLang].time_slot || '时间'}</th>
+                            <th>${translations[currentLang].shift || '班次'}</th>
+                            <th>${translations[currentLang].remarks || '备注'}</th>
+                            <th>${translations[currentLang].created_at || '创建时间'}</th>
+                            <th>${translations[currentLang].actions || '操作'}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            records.forEach(record => {
+                tableHtml += `
+                    <tr>
+                        <td>${record.id}</td>
+                        <td>${record.dock_no || ''}</td>
+                        <td>${record.vehicle_type || ''}</td>
+                        <td>${record.vehicle_no || ''}</td>
+                        <td>${record.load_amount || ''}</td>
+                        <td>${record.pieces || ''}</td>
+                        <td>${record.time_slot || ''}</td>
+                        <td>${record.shift_type || ''}</td>
+                        <td>${record.remark || ''}</td>
+                        <td>${record.created_at || ''}</td>
+                        <td class="action-cell">
+                            <button class="edit-btn" onclick="editRecord(${record.id})">
+                                <i class="fas fa-edit"></i> ${translations[currentLang].edit || '编辑'}
+                            </button>
+                            <button class="delete-btn" onclick="deleteRecord(${record.id})">
+                                <i class="fas fa-trash"></i> ${translations[currentLang].delete || '删除'}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `
+                    </tbody>
+                </table>
+            `;
+            
+            recordsList.innerHTML = tableHtml;
+        }
+        
+        // Show message
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = 'message ' + type;
+            
+            // Clear message after 3 seconds
+            setTimeout(() => {
+                messageDiv.textContent = '';
+                messageDiv.className = '';
+            }, 3000);
+        }
+        
+        // Edit record
+        function editRecord(recordId) {
+            fetch(`/api/record/${recordId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showMessage(translations[currentLang].load_record_error || '加载记录出错：' + data.error, 'error');
+                    return;
+                }
+                
+                // Here you would typically open a modal or redirect to an edit page
+                // For simplicity, we'll just show an alert with the record data
+                alert(`编辑记录 ID: ${data.id}\n码头号: ${data.dock_no}\n车辆类型: ${data.vehicle_type}\n车牌号: ${data.vehicle_no}`);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage(translations[currentLang].load_record_error || '加载记录出错，请检查网络连接。', 'error');
+            });
+        }
+        
+        // Delete record
+        function deleteRecord(recordId) {
+            if (confirm(translations[currentLang].confirm_delete || "确定要删除这条记录吗？")) {
+                fetch(`/api/record/${recordId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    // 检查HTTP状态码
+                    if (response.status === 404) {
+                        return { success: false, error: '记录未找到' };
+                    } else if (!response.ok) {
+                        return { success: false, error: `HTTP错误: ${response.status}` };
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    if (result.success) {
+                        showMessage(translations[currentLang].delete_success || "记录删除成功！", 'success');
+                        // Reload data
+                        const date = document.getElementById('date').value;
+                        if (date) {
+                            loadHistoryData(date);
+                        }
+                    } else {
+                        // 显示具体的错误信息
+                        const errorMessage = result.error || "删除出错，请检查网络连接。";
+                        showMessage(translations[currentLang].delete_error || errorMessage, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showMessage(translations[currentLang].delete_error || "删除出错，请检查网络连接。", 'error');
+                });
+            }
+        }
+        
+        // Export to CSV
+        function exportToCSV(date) {
+            // Get the table element
+            const table = document.querySelector('#recordsList table');
+            if (!table) {
+                alert('没有可导出的数据');
+                return;
+            }
+            
+            // Get table headers
+            const headers = [];
+            const headerRow = table.querySelector('thead tr');
+            headerRow.querySelectorAll('th').forEach(th => {
+                headers.push(th.textContent.trim());
+            });
+            
+            // Get table rows
+            const rows = [];
+            table.querySelectorAll('tbody tr').forEach(tr => {
+                const row = [];
+                tr.querySelectorAll('td').forEach(td => {
+                    // Skip action cells
+                    if (!td.querySelector('.action-cell')) {
+                        row.push(td.textContent.trim());
+                    }
+                });
+                if (row.length > 0) {
+                    rows.push(row);
+                }
+            });
+            
+            // Create CSV content
+            let csvContent = '\uFEFF'; // BOM for UTF-8
+            csvContent += headers.join(',') + '\n';
+            rows.forEach(row => {
+                csvContent += row.map(cell => {
+                    // Escape quotes and wrap in quotes if needed
+                    if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))) {
+                        return '"' + cell.replace(/"/g, '""') + '"';
+                    }
+                    return cell;
+                }).join(',') + '\n';
+            });
+            
+            // Create blob and download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `history_records_${date}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        // Export to Excel
+        function exportToExcel(date) {
+            // Create a temporary link to trigger the download
+            const link = document.createElement('a');
+            link.href = `/api/export_excel?date=${encodeURIComponent(date)}`;
+            link.download = `inbound_stats_${date}.xlsx`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
