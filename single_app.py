@@ -1480,9 +1480,15 @@ def get_daily_trend():
             day_start = datetime.combine(target_date, datetime.min.time())
             day_end = datetime.combine(next_date, datetime.min.time())
             
-            # 查询当天的货物总量
+            # 查询当天的货物总量、车次总数和托盘总数
             query = """
-                SELECT SUM(pieces) as total_pieces
+                SELECT 
+                    SUM(pieces) as total_pieces,
+                    COUNT(*) as total_vehicles,
+                    SUM(CASE 
+                        WHEN vehicle_type IN ('26英尺', '53英尺') THEN load_amount 
+                        ELSE 0 
+                    END) as total_pallets
                 FROM inbound_records
                 WHERE created_at >= ? AND created_at < ?
             """
@@ -1492,10 +1498,14 @@ def get_daily_trend():
             ))
             row = cursor.fetchone()
             total_pieces = int(row[0]) if row[0] else 0
+            total_vehicles = int(row[1]) if row[1] else 0
+            total_pallets = int(row[2]) if row[2] else 0
             
             result.append({
                 'date': target_date.strftime('%Y-%m-%d'),
-                'total_pieces': total_pieces
+                'total_pieces': total_pieces,
+                'total_vehicles': total_vehicles,
+                'total_pallets': total_pallets
             })
         
         conn.close()

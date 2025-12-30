@@ -511,7 +511,7 @@
         <!-- Week Comparison Chart -->
         <div class="stats-section">
             <h3 data-lang="week_comparison_chart">周环比对比</h3>
-            <div class="chart-container" style="height: 300px;">
+            <div class="chart-container" style="height: 400px;">
                 <canvas id="weekComparisonChart"></canvas>
             </div>
         </div>
@@ -2020,29 +2020,68 @@
                 return `${date.getMonth() + 1}/${date.getDate()}`;
             });
             const pieces = data.map(item => item.total_pieces);
+            const vehicles = data.map(item => item.total_vehicles);
+            const pallets = data.map(item => item.total_pallets);
 
             window.dailyTrendChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: dates,
-                    datasets: [{
-                        label: translations[currentLang].total_cargo || '货物总量',
-                        data: pieces,
-                        borderColor: '#4361ee',
-                        backgroundColor: 'rgba(67, 97, 238, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#4361ee',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2,
-                        pointHoverRadius: 6
-                    }]
+                    datasets: [
+                        {
+                            label: translations[currentLang].total_cargo || '货物总量',
+                            data: pieces,
+                            borderColor: '#4361ee',
+                            backgroundColor: 'rgba(67, 97, 238, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#4361ee',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointHoverRadius: 6,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: translations[currentLang].total_vehicles || '车次总数',
+                            data: vehicles,
+                            borderColor: '#f72585',
+                            backgroundColor: 'rgba(247, 37, 133, 0.1)',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#f72585',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointHoverRadius: 6,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            label: translations[currentLang].total_pallets || '托盘总数',
+                            data: pallets,
+                            borderColor: '#4cc9f0',
+                            backgroundColor: 'rgba(76, 201, 240, 0.1)',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#4cc9f0',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointHoverRadius: 6,
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
                         legend: {
                             display: true,
@@ -2051,18 +2090,58 @@
                         tooltip: {
                             callbacks: {
                                 label: function (context) {
-                                    return context.dataset.label + ': ' + context.parsed.y.toLocaleString() + ' 件';
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toLocaleString();
+                                        // 根据数据集添加单位
+                                        if (context.datasetIndex === 0) {
+                                            label += ' 件';
+                                        } else if (context.datasetIndex === 1) {
+                                            label += ' 车次';
+                                        } else if (context.datasetIndex === 2) {
+                                            label += ' 托盘';
+                                        }
+                                    }
+                                    return label;
                                 }
                             }
                         }
                     },
                     scales: {
                         y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
                             beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: translations[currentLang].total_cargo || '货物总量 (件)'
+                            },
                             ticks: {
                                 callback: function (value) {
                                     return value.toLocaleString();
                                 }
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: (translations[currentLang].total_vehicles || '车次') + ' / ' + (translations[currentLang].total_pallets || '托盘')
+                            },
+                            ticks: {
+                                callback: function (value) {
+                                    return value.toLocaleString();
+                                }
+                            },
+                            grid: {
+                                drawOnChartArea: false
                             }
                         }
                     }
@@ -2156,6 +2235,10 @@
                     scales: {
                         y: {
                             beginAtZero: true,
+                            suggestedMax: function (context) {
+                                const maxValue = Math.max(...context.chart.data.datasets[0].data);
+                                return maxValue * 1.2; // 增加20%的空间给数据标签
+                            },
                             ticks: {
                                 callback: function (value) {
                                     return value.toLocaleString();
