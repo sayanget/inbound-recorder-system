@@ -1050,7 +1050,7 @@ def get_history():
         
         # 计算统计信息
         total_vehicles = len(inbound_rows)
-        total_pieces = sum(record.get("pieces", 0) for record in inbound_rows)
+        total_pieces = sum((record.get("pieces") or 0) for record in inbound_rows)
         record_count = len(inbound_rows) + len(sorting_rows)
         
         # 各车型统计
@@ -1060,7 +1060,7 @@ def get_history():
             if vehicle_type not in vehicle_stats:
                 vehicle_stats[vehicle_type] = {"count": 0, "pieces": 0}
             vehicle_stats[vehicle_type]["count"] += 1
-            vehicle_stats[vehicle_type]["pieces"] += record.get("pieces", 0)
+            vehicle_stats[vehicle_type]["pieces"] += (record.get("pieces") or 0)
         
         # 转换为列表格式
         vehicle_stats_list = [
@@ -1451,6 +1451,154 @@ def get_statistics():
         "vehicles_20_to_21_by_type": vehicles_20_to_21_by_type,
         "vehicles_after_24": vehicles_after_24
     })
+
+@app.route('/api/daily_trend')
+def get_daily_trend():
+    """获取每日货物趋势数据"""
+    try:
+        # 获取天数参数，默认7天，最多90天
+        days = int(request.args.get('days', 7))
+        if days > 90:
+            days = 90
+        if days < 1:
+            days = 7
+        
+        conn = sqlite3.connect(DB_PATH)
+        
+        # 获取当前日期
+        today = datetime.now().date()
+        
+        # 准备结果数组
+        result = []
+        
+        # 循环获取每一天的数据
+        for i in range(days - 1, -1, -1):  # 从最早的日期到今天
+            target_date = today - timedelta(days=i)
+            next_date = target_date + timedelta(days=1)
+            
+            # 构建日期范围查询条件
+            day_start = datetime.combine(target_date, datetime.min.time())
+            day_end = datetime.combine(next_date, datetime.min.time())
+            
+            # 查询当天的货物总量
+            query = """
+                SELECT SUM(pieces) as total_pieces
+                FROM inbound_records
+                WHERE created_at >= ? AND created_at < ?
+            """
+            cursor = conn.execute(query, (
+                day_start.strftime('%Y-%m-%d %H:%M:%S'),
+                day_end.strftime('%Y-%m-%d %H:%M:%S')
+            ))
+            row = cursor.fetchone()
+            total_pieces = int(row[0]) if row[0] else 0
+            
+            result.append({
+                'date': target_date.strftime('%Y-%m-%d'),
+                'total_pieces': total_pieces
+            })
+        
+        conn.close()
+        return jsonify(result)
+    
+    except Exception as e:
+        if 'conn' in locals():
+            conn.close()
+        return jsonify({'error': f'获取每日趋势数据出错: {str(e)}'}), 500
+
+@app.route('/api/week_comparison')
+def get_week_comparison():
+    """获取周环比对比数据"""
+    try:
+        # 获取结束日期参数，默认为今天
+        end_date_str = request.args.get('end_date')
+        if end_date_str:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        else:
+            end_date = datetime.now().date()
+        
+        conn = sqlite3.connect(DB_PATH)
+        
+        # 计算本周和上周的日期范围
+        # 本周：最近7天（包括今天）
+        current_week_start = end_date - timedelta(days=6)
+        current_week_end = end_date + timedelta(days=1)
+        
+        # 上周：再往前7天
+        previous_week_start = current_week_start - timedelta(days=7)
+        previous_week_end = current_week_start
+        
+        # 查询本周数据
+        current_week_query = """
+            SELECT 
+                COUNT(*) as vehicle_count,
+                SUM(pieces) as total_pieces
+            FROM inbound_records
+            WHERE created_at >= ? AND created_at < ?
+        """
+        cursor = conn.execute(current_week_query, (
+            datetime.combine(current_week_start, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S'),
+            datetime.combine(current_week_end, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S')
+        ))
+        current_week_row = cursor.fetchone()
+        current_week_vehicles = current_week_row[0] if current_week_row[0] else 0
+        current_week_pieces = int(current_week_row[1]) if current_week_row[1] else 0
+        
+        # 查询上周数据
+        previous_week_query = """
+            SELECT 
+                COUNT(*) as vehicle_count,
+                SUM(pieces) as total_pieces
+            FROM inbound_records
+            WHERE created_at >= ? AND created_at < ?
+        """
+        cursor = conn.execute(previous_week_query, (
+            datetime.combine(previous_week_start, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S'),
+            datetime.combine(previous_week_end, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S')
+        ))
+        previous_week_row = cursor.fetchone()
+        previous_week_vehicles = previous_week_row[0] if previous_week_row[0] else 0
+        previous_week_pieces = int(previous_week_row[1]) if previous_week_row[1] else 0
+        
+        # 计算环比变化
+        if previous_week_pieces > 0:
+            pieces_change_percent = ((current_week_pieces - previous_week_pieces) / previous_week_pieces) * 100
+        else:
+            pieces_change_percent = 0 if current_week_pieces == 0 else 100
+        
+        if previous_week_vehicles > 0:
+            vehicles_change_percent = ((current_week_vehicles - previous_week_vehicles) / previous_week_vehicles) * 100
+        else:
+            vehicles_change_percent = 0 if current_week_vehicles == 0 else 100
+        
+        conn.close()
+        
+        return jsonify({
+            'current_week': {
+                'start_date': current_week_start.strftime('%Y-%m-%d'),
+                'end_date': end_date.strftime('%Y-%m-%d'),
+                'vehicle_count': current_week_vehicles,
+                'total_pieces': current_week_pieces
+            },
+            'previous_week': {
+                'start_date': previous_week_start.strftime('%Y-%m-%d'),
+                'end_date': (previous_week_end - timedelta(days=1)).strftime('%Y-%m-%d'),
+                'vehicle_count': previous_week_vehicles,
+                'total_pieces': previous_week_pieces
+            },
+            'change': {
+                'pieces_change': current_week_pieces - previous_week_pieces,
+                'pieces_change_percent': round(pieces_change_percent, 2),
+                'vehicles_change': current_week_vehicles - previous_week_vehicles,
+                'vehicles_change_percent': round(vehicles_change_percent, 2)
+            }
+        })
+    
+    except Exception as e:
+        if 'conn' in locals():
+            conn.close()
+        return jsonify({'error': f'获取周环比数据出错: {str(e)}'}), 500
+
 
 @app.route('/api/export_csv')
 def export_csv():

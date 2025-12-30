@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -23,7 +24,7 @@
             --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
         }
-        
+
         /* User info display */
         .user-info {
             position: absolute;
@@ -39,7 +40,7 @@
             align-items: center;
             gap: 10px;
         }
-        
+
         .user-info button {
             background-color: rgba(255, 255, 255, 0.2);
             color: white;
@@ -50,22 +51,22 @@
             font-size: 12px;
             transition: all 0.3s ease;
         }
-        
+
         .user-info button:hover {
             background-color: rgba(255, 255, 255, 0.3);
         }
-        
+
         #usernameDisplay {
             color: white;
             font-weight: bold;
             font-size: 14px;
         }
-        
+
         #logoutBtn {
             padding: 5px 10px;
             font-size: 12px;
         }
-        
+
         /* Language selector dropdown */
         .language-selector {
             position: absolute;
@@ -73,12 +74,12 @@
             right: 15px;
             z-index: 1000;
         }
-        
+
         .lang-dropdown {
             position: relative;
             display: inline-block;
         }
-        
+
         .lang-selected {
             padding: 5px 10px;
             background-color: rgba(255, 255, 255, 0.2);
@@ -92,27 +93,27 @@
             align-items: center;
             gap: 5px;
         }
-        
+
         .lang-selected:hover {
             background-color: rgba(255, 255, 255, 0.3);
         }
-        
+
         .lang-dropdown-content {
             display: none;
             position: absolute;
             right: 0;
             background-color: white;
             min-width: 120px;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
             z-index: 1001;
             border-radius: 4px;
             overflow: hidden;
         }
-        
+
         .lang-dropdown-content.show {
             display: block;
         }
-        
+
         .lang-option {
             padding: 10px 15px;
             color: #333;
@@ -121,11 +122,11 @@
             font-size: 14px;
             transition: background-color 0.2s;
         }
-        
+
         .lang-option:hover {
             background-color: #f1f1f1;
         }
-        
+
         body {
             font-family: Arial, sans-serif;
             max-width: 1200px;
@@ -133,26 +134,31 @@
             padding: 20px;
             background-color: #f5f5f5;
         }
+
         .container {
             background-color: white;
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
+
         h2 {
             color: #333;
             text-align: center;
             margin-bottom: 30px;
         }
+
         .stats-section {
             margin-bottom: 40px;
         }
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
+
         .stat-card {
             background-color: #f8f9fa;
             border: 1px solid #dee2e6;
@@ -160,46 +166,57 @@
             padding: 20px;
             text-align: center;
         }
+
         .stat-card h3 {
             margin-top: 0;
             color: #495057;
         }
+
         .stat-value {
             font-size: 2em;
             font-weight: bold;
             color: #007bff;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
         }
-        th, td {
+
+        th,
+        td {
             border: 1px solid #ddd;
             padding: 12px;
             text-align: left;
         }
+
         th {
             background-color: #f2f2f2;
         }
+
         tr:nth-child(even) {
             background-color: #f9f9f9;
         }
+
         .message {
             padding: 10px;
             margin: 10px 0;
             border-radius: 4px;
         }
+
         .success {
             background-color: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
+
         .error {
             background-color: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+
         button {
             background-color: #007bff;
             color: white;
@@ -210,13 +227,16 @@
             font-size: 16px;
             margin: 5px;
         }
+
         button:hover {
             background-color: #0056b3;
         }
+
         .button-group {
             text-align: center;
             margin: 20px 0;
         }
+
         .chart-container {
             margin: 30px 0;
             padding: 20px;
@@ -226,31 +246,32 @@
             height: 400px;
             position: relative;
         }
+
         /* 为小屏幕优化图表高度 */
         @media (max-width: 768px) {
             .chart-container {
                 height: 300px;
                 padding: 10px;
             }
-            
+
             .container {
                 padding: 15px;
             }
-            
+
             .stats-grid {
                 grid-template-columns: 1fr;
                 gap: 10px;
             }
-            
+
             .stat-card {
                 padding: 15px;
             }
-            
+
             .stat-value {
                 font-size: 1.5em;
             }
         }
-        
+
         .nav-buttons {
             display: flex;
             justify-content: center;
@@ -258,28 +279,31 @@
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
+
         .nav-btn {
             padding: 10px 20px;
             text-decoration: none;
             border-radius: 4px;
             font-weight: bold;
         }
+
         .nav-btn.active {
             background-color: #007bff;
             color: white;
         }
+
         /* 为小屏幕优化导航按钮 */
         @media (max-width: 768px) {
             .nav-buttons {
                 gap: 5px;
             }
-            
+
             .nav-btn {
                 padding: 8px 12px;
                 font-size: 14px;
             }
         }
-        
+
         /* 优化日期选择区域 */
         .date-selection {
             display: flex;
@@ -288,24 +312,25 @@
             flex-wrap: wrap;
             margin-bottom: 20px;
         }
-        
+
         .date-selection input {
             padding: 8px;
             font-size: 16px;
             border: 1px solid #ced4da;
             border-radius: 4px;
         }
-        
+
         .date-selection button {
             padding: 8px 16px;
             font-size: 14px;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h2><span data-lang="inbound_statistics">入库统计数据</span></h2>
-        
+
         <div class="user-info">
             <span id="usernameDisplay">用户: 未登录</span>
             <button id="logoutBtn" class="nav-btn">
@@ -325,14 +350,14 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="nav-buttons">
             <a href="/" class="nav-btn" data-lang="inbound_entry">入库录入</a>
             <a href="/sorting" class="nav-btn" data-lang="sorting_entry">分拣录入</a>
             <a href="/statistics" class="nav-btn active" data-lang="statistics_data">统计数据</a>
             <a href="/history" class="nav-btn" data-lang="history_query">历史查询</a>
         </div>
-        
+
         <!-- Date selection -->
         <div class="stats-section">
             <h3 data-lang="select_date">选择日期</h3>
@@ -342,7 +367,7 @@
                 <button id="todayBtn" data-lang="today">今天</button>
             </div>
         </div>
-        
+
         <!-- Pickup forecast section -->
         <div class="stats-section">
             <h3 data-lang="pickup_forecast_title">揽收预估数据</h3>
@@ -359,8 +384,10 @@
                     <span data-lang="pickup_forecast">揽收预估:</span>
                     <span id="forecastValue">0</span>
                 </div>
-                <div class="progress-bar" style="width: 100%; height: 20px; background-color: #e0e0e0; border-radius: 10px; overflow: hidden;">
-                    <div id="progressBar" style="height: 100%; width: 0%; background-color: #4CAF50; transition: width 0.3s;"></div>
+                <div class="progress-bar"
+                    style="width: 100%; height: 20px; background-color: #e0e0e0; border-radius: 10px; overflow: hidden;">
+                    <div id="progressBar"
+                        style="height: 100%; width: 0%; background-color: #4CAF50; transition: width 0.3s;"></div>
                 </div>
                 <div style="text-align: center; margin-top: 5px;">
                     <span data-lang="completion_rate">完成率:</span>
@@ -368,7 +395,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Statistics summary -->
         <div class="stats-section">
             <h3 data-lang="statistics_summary">统计摘要</h3>
@@ -399,7 +426,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Vehicle statistics -->
         <div class="stats-section">
             <h3 data-lang="vehicle_statistics">各车型统计</h3>
@@ -416,7 +443,7 @@
                 </tbody>
             </table>
         </div>
-        
+
         <!-- 19:00-20:00 vehicle statistics by type -->
         <div class="stats-section">
             <h3 data-lang="vehicles_19_20_by_type">19:00-20:00各车型到车统计</h3>
@@ -432,7 +459,7 @@
                 </tbody>
             </table>
         </div>
-        
+
         <!-- 20:00-21:00 vehicle statistics by type -->
         <div class="stats-section">
             <h3 data-lang="vehicles_20_21_by_type">20:00-21:00各车型到车统计</h3>
@@ -448,7 +475,7 @@
                 </tbody>
             </table>
         </div>
-        
+
         <!-- Hourly comparison chart -->
         <div class="stats-section">
             <h3 data-lang="inbound_sorting_comparison">入库与分拣时段对比</h3>
@@ -456,7 +483,7 @@
                 <canvas id="hourlyComparisonChart"></canvas>
             </div>
         </div>
-        
+
         <!-- Difference analysis chart -->
         <div class="stats-section">
             <h3 data-lang="difference_analysis">入库与分拣差异分析</h3>
@@ -464,7 +491,7 @@
                 <canvas id="differenceAnalysisChart"></canvas>
             </div>
         </div>
-        
+
         <!-- Pallet hourly chart -->
         <div class="stats-section">
             <h3 data-lang="pallet_hourly_comparison">托盘时段统计</h3>
@@ -473,11 +500,27 @@
             </div>
         </div>
 
+        <!-- Daily Trend Chart -->
+        <div class="stats-section">
+            <h3 data-lang="daily_trend_chart">每日货物趋势</h3>
+            <div class="chart-container">
+                <canvas id="dailyTrendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Week Comparison Chart -->
+        <div class="stats-section">
+            <h3 data-lang="week_comparison_chart">周环比对比</h3>
+            <div class="chart-container" style="height: 300px;">
+                <canvas id="weekComparisonChart"></canvas>
+            </div>
+        </div>
+
         <div class="button-group">
             <button id="refreshData" data-lang="refresh_data">刷新数据</button>
             <button id="exportExcel" data-lang="export_excel">导出表格</button>
         </div>
-        
+
         <div id="message"></div>
     </div>
 
@@ -543,7 +586,12 @@
                 enter_valid_forecast: "请输入有效的预估数量",
                 forecast_saved: "预估数据保存成功",
                 save_failed: "保存失败",
-                logout: "登出"
+                logout: "登出",
+                daily_trend_chart: "每日货物趋势",
+                week_comparison_chart: "周环比对比",
+                current_week: "本周",
+                previous_week: "上周",
+                change_percent: "环比变化"
             },
             en: {
                 statistics_title: "Inbound Statistics",
@@ -604,7 +652,12 @@
                 enter_valid_forecast: "Please enter a valid forecast amount",
                 forecast_saved: "Forecast data saved successfully",
                 save_failed: "Save failed",
-                logout: "Logout"
+                logout: "Logout",
+                daily_trend_chart: "Daily Cargo Trend",
+                week_comparison_chart: "Week-over-Week Comparison",
+                current_week: "Current Week",
+                previous_week: "Previous Week",
+                change_percent: "Change %"
             },
             es: {
                 statistics_title: "Estadísticas de Entrada",
@@ -665,17 +718,22 @@
                 enter_valid_forecast: "Por favor ingrese una cantidad de previsión válida",
                 forecast_saved: "Datos de previsión guardados exitosamente",
                 save_failed: "Error al guardar",
-                logout: "Cerrar sesión"
+                logout: "Cerrar sesión",
+                daily_trend_chart: "Tendencia Diaria de Carga",
+                week_comparison_chart: "Comparación Semanal",
+                current_week: "Semana Actual",
+                previous_week: "Semana Anterior",
+                change_percent: "Cambio %"
             }
         };
-        
+
         // Current language
         let currentLang = 'zh';
-        
+
         // Set language
         function setLanguage(lang) {
             currentLang = lang;
-            
+
             // Update selected language text
             const langTexts = {
                 'zh': '中文',
@@ -683,7 +741,7 @@
                 'es': 'Español'
             };
             document.getElementById('currentLangText').textContent = langTexts[lang] || '中文';
-            
+
             // Update all elements with data-lang attribute
             document.querySelectorAll('[data-lang]').forEach(element => {
                 const key = element.getAttribute('data-lang');
@@ -691,26 +749,26 @@
                     element.textContent = translations[lang][key];
                 }
             });
-            
+
             // Update page title
             document.title = translations[lang].statistics_title || '入库统计';
-            
+
             // Store language preference in localStorage
             localStorage.setItem('preferredLanguage', lang);
-            
+
             // Re-render chart if it exists
             if (window.hourlyChart) {
                 loadHourlyComparisonData();
             }
         }
-        
+
         // Toggle language dropdown
         function toggleLanguageDropdown() {
             document.getElementById('langDropdown').classList.toggle('show');
         }
-        
+
         // Close dropdown when clicking outside
-        window.onclick = function(event) {
+        window.onclick = function (event) {
             if (!event.target.matches('.lang-selected') && !event.target.closest('.lang-dropdown')) {
                 const dropdowns = document.getElementsByClassName('lang-dropdown-content');
                 for (let i = 0; i < dropdowns.length; i++) {
@@ -718,33 +776,33 @@
                 }
             }
         }
-        
+
         // Current selected date
         let currentDate = null;
-        
+
         // Check login status and update UI
         function checkLoginStatus() {
             fetch('/api/check_login')
-            .then(response => response.json())
-            .then(data => {
-                if (data.logged_in) {
-                    document.getElementById('usernameDisplay').textContent = '用户: ' + data.user.username;
-                    // Update language for logout button if needed
-                    if (translations[currentLang] && translations[currentLang].logout) {
-                        document.querySelector('#logoutBtn span[data-lang="logout"]').textContent = translations[currentLang].logout;
+                .then(response => response.json())
+                .then(data => {
+                    if (data.logged_in) {
+                        document.getElementById('usernameDisplay').textContent = '用户: ' + data.user.username;
+                        // Update language for logout button if needed
+                        if (translations[currentLang] && translations[currentLang].logout) {
+                            document.querySelector('#logoutBtn span[data-lang="logout"]').textContent = translations[currentLang].logout;
+                        }
+                    } else {
+                        document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+                        // Redirect to login if not logged in
+                        window.location.href = '/login';
                     }
-                } else {
+                })
+                .catch(error => {
+                    console.error('Error checking login status:', error);
                     document.getElementById('usernameDisplay').textContent = '用户: 未登录';
-                    // Redirect to login if not logged in
+                    // Redirect to login if error occurs
                     window.location.href = '/login';
-                }
-            })
-            .catch(error => {
-                console.error('Error checking login status:', error);
-                document.getElementById('usernameDisplay').textContent = '用户: 未登录';
-                // Redirect to login if error occurs
-                window.location.href = '/login';
-            });
+                });
         }
 
         // Logout function
@@ -755,42 +813,42 @@
                     'Content-Type': 'application/json',
                 }
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = '/login';
+                    } else {
+                        console.error('Logout failed:', data.error);
+                        window.location.href = '/login';
+                    }
+                })
+                .catch(error => {
+                    console.error('Logout error:', error);
                     window.location.href = '/login';
-                } else {
-                    console.error('Logout failed:', data.error);
-                    window.location.href = '/login';
-                }
-            })
-            .catch(error => {
-                console.error('Logout error:', error);
-                window.location.href = '/login';
-            });
+                });
         }
 
         // Load statistics data when page is loaded
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // Check for saved language preference
             const savedLang = localStorage.getItem('preferredLanguage');
             if (savedLang && ['zh', 'en', 'es'].includes(savedLang)) {
                 setLanguage(savedLang);
             }
-            
+
             // Bind language dropdown toggle
             document.getElementById('langSelected').addEventListener('click', toggleLanguageDropdown);
-            
+
             // Bind language options
             document.querySelectorAll('.lang-option').forEach(option => {
-                option.addEventListener('click', function(e) {
+                option.addEventListener('click', function (e) {
                     e.preventDefault();
                     const lang = this.getAttribute('data-lang');
                     setLanguage(lang);
                     document.getElementById('langDropdown').classList.remove('show');
                 });
             });
-            
+
             // Bind logout button
             document.getElementById('logoutBtn').addEventListener('click', logout);
 
@@ -805,37 +863,37 @@
             const formattedDate = `${year}-${month}-${day}`;
             document.getElementById('selectedDate').value = formattedDate;
             currentDate = formattedDate;
-            
+
             // Load default data
             loadData();
-            
+
             // Bind date selection related events
-            document.getElementById('loadDataBtn').addEventListener('click', function() {
+            document.getElementById('loadDataBtn').addEventListener('click', function () {
                 const selectedDate = document.getElementById('selectedDate').value;
                 if (selectedDate) {
                     currentDate = selectedDate;
                     loadData();
                 }
             });
-            
-            document.getElementById('todayBtn').addEventListener('click', function() {
+
+            document.getElementById('todayBtn').addEventListener('click', function () {
                 // Get current date in local timezone
                 const now = new Date();
                 const year = now.getFullYear();
                 const month = String(now.getMonth() + 1).padStart(2, '0');
                 const day = String(now.getDate()).padStart(2, '0');
                 const todayFormatted = `${year}-${month}-${day}`;
-                
+
                 document.getElementById('selectedDate').value = todayFormatted;
                 currentDate = todayFormatted;
                 loadData();
             });
-            
+
             // Bind export Excel button event
             document.getElementById('exportExcel').addEventListener('click', exportToExcel);
-            
+
             // Bind pickup forecast save button event
-            setTimeout(function() {
+            setTimeout(function () {
                 const saveBtn = document.getElementById('saveForecastBtn');
                 if (saveBtn) {
                     console.log('Binding click event to saveForecastBtn');
@@ -844,41 +902,41 @@
                     console.error('saveForecastBtn not found');
                 }
             }, 100);
-            
+
             // Listen for window resize to re-render chart for new dimensions
-            window.addEventListener('resize', function() {
+            window.addEventListener('resize', function () {
                 if (window.hourlyChart) {
                     // Delay re-rendering to avoid frequent calls
                     clearTimeout(window.resizeTimer);
-                    window.resizeTimer = setTimeout(function() {
+                    window.resizeTimer = setTimeout(function () {
                         loadHourlyComparisonData();
                     }, 300);
                 }
             });
         });
-        
+
         // Refresh data button
-        document.getElementById('refreshData').addEventListener('click', function() {
+        document.getElementById('refreshData').addEventListener('click', function () {
             loadData();
         });
-        
+
         // Save pickup forecast data
         function savePickupForecast() {
             const forecastAmount = document.getElementById('pickupForecast').value;
             const selectedDate = currentDate || document.getElementById('selectedDate').value;
-            
+
             console.log('Saving forecast data:', { date: selectedDate, amount: forecastAmount });
-            
+
             if (!selectedDate) {
                 showMessage(translations[currentLang].select_date_first || '请先选择日期', 'error');
                 return;
             }
-            
+
             if (!forecastAmount || forecastAmount < 0) {
                 showMessage(translations[currentLang].enter_valid_forecast || '请输入有效的预估数量', 'error');
                 return;
             }
-            
+
             fetch('/api/pickup_forecast', {
                 method: 'POST',
                 headers: {
@@ -889,52 +947,52 @@
                     amount: parseInt(forecastAmount)
                 })
             })
-            .then(response => {
-                console.log('Forecast save response:', response);
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('Forecast save result:', data);
-                if (data.success) {
-                    showMessage(translations[currentLang].forecast_saved || '预估数据保存成功', 'success');
-                    // 重新加载数据以更新进度条
-                    setTimeout(function() {
-                        loadData();
-                    }, 500);
-                } else {
-                    showMessage(translations[currentLang].save_failed || '保存失败: ' + (data.error || '未知错误'), 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error saving forecast:', error);
-                showMessage(translations[currentLang].save_failed || '保存失败: ' + error.message, 'error');
-            });
+                .then(response => {
+                    console.log('Forecast save response:', response);
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Forecast save result:', data);
+                    if (data.success) {
+                        showMessage(translations[currentLang].forecast_saved || '预估数据保存成功', 'success');
+                        // 重新加载数据以更新进度条
+                        setTimeout(function () {
+                            loadData();
+                        }, 500);
+                    } else {
+                        showMessage(translations[currentLang].save_failed || '保存失败: ' + (data.error || '未知错误'), 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving forecast:', error);
+                    showMessage(translations[currentLang].save_failed || '保存失败: ' + error.message, 'error');
+                });
         }
-        
+
         // Update progress bar based on actual inbound and forecast
         function updateProgressBar(actualInbound, forecastAmount) {
             const actualElement = document.getElementById('actualInbound');
             const forecastElement = document.getElementById('forecastValue');
             const progressBar = document.getElementById('progressBar');
             const completionRateElement = document.getElementById('completionRate');
-            
+
             // Update displayed values
             actualElement.textContent = actualInbound.toLocaleString();
             forecastElement.textContent = forecastAmount.toLocaleString();
-            
+
             // Calculate completion rate
             let completionRate = 0;
             if (forecastAmount > 0) {
                 completionRate = Math.round((actualInbound / forecastAmount) * 100);
             }
-            
+
             // Update progress bar width (max 100%)
             const progressWidth = Math.min(completionRate, 100);
             progressBar.style.width = progressWidth + '%';
-            
+
             // Change color based on completion rate
             if (completionRate >= 100) {
                 progressBar.style.backgroundColor = '#4CAF50'; // Green
@@ -943,11 +1001,11 @@
             } else {
                 progressBar.style.backgroundColor = '#f44336'; // Red
             }
-            
+
             // Update completion rate text
             completionRateElement.textContent = completionRate + '%';
         }
-        
+
         // Load statistics data
         function loadData() {
             console.log('Loading data for date:', currentDate);
@@ -956,131 +1014,131 @@
             if (currentDate) {
                 url += '?date=' + encodeURIComponent(currentDate);
             }
-            
+
             // Variable to store stats data for use in other parts of the function
             let loadedStatsData = null;
-            
+
             fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                console.log('Loaded stats data:', data);
-                // Store data in a variable accessible to other functions
-                loadedStatsData = data;                
-                // Update summary statistics
-                document.getElementById('totalVehicles').textContent = data.total_vehicles || 0;
-                document.getElementById('totalPieces').textContent = data.total_pieces || 0;
-                document.getElementById('totalPallets').textContent = data.total_pallets || 0;
-                document.getElementById('vehicles19to20').textContent = data.vehicles_19_to_20 || 0;
-                document.getElementById('vehicles20to21').textContent = data.vehicles_20_to_21 || 0;
-                document.getElementById('vehiclesAfter24').textContent = data.vehicles_after_24 || 0;
-                
-                // Update vehicle statistics table
-                const vehicleStatsBody = document.querySelector('#vehicleStatsTable tbody');
-                vehicleStatsBody.innerHTML = '';
-                if (data.vehicle_stats) {
-                    data.vehicle_stats.forEach(stat => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Loaded stats data:', data);
+                    // Store data in a variable accessible to other functions
+                    loadedStatsData = data;
+                    // Update summary statistics
+                    document.getElementById('totalVehicles').textContent = data.total_vehicles || 0;
+                    document.getElementById('totalPieces').textContent = data.total_pieces || 0;
+                    document.getElementById('totalPallets').textContent = data.total_pallets || 0;
+                    document.getElementById('vehicles19to20').textContent = data.vehicles_19_to_20 || 0;
+                    document.getElementById('vehicles20to21').textContent = data.vehicles_20_to_21 || 0;
+                    document.getElementById('vehiclesAfter24').textContent = data.vehicles_after_24 || 0;
+
+                    // Update vehicle statistics table
+                    const vehicleStatsBody = document.querySelector('#vehicleStatsTable tbody');
+                    vehicleStatsBody.innerHTML = '';
+                    if (data.vehicle_stats) {
+                        data.vehicle_stats.forEach(stat => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
                             <td>${stat.vehicle_type}</td>
                             <td>${stat.count}</td>
                             <td>${stat.total_pieces}</td>
                         `;
-                        vehicleStatsBody.appendChild(row);
-                    });
-                }
-                
-                // Update 19:00-20:00 vehicle statistics by type table
-                const vehicleStats19to20Body = document.querySelector('#vehicleStats19to20Table tbody');
-                vehicleStats19to20Body.innerHTML = '';
-                if (data.vehicles_19_to_20_by_type) {
-                    Object.entries(data.vehicles_19_to_20_by_type).forEach(([vehicleType, count]) => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${vehicleType}</td>
-                            <td>${count}</td>
-                        `;
-                        vehicleStats19to20Body.appendChild(row);
-                    });
-                    
-                    // If no data, show prompt message
-                    if (Object.keys(data.vehicles_19_to_20_by_type).length === 0) {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `<td colspan="2" style="text-align: center; color: #666;">${translations[currentLang].no_data || '暂无数据'}</td>`;
-                        vehicleStats19to20Body.appendChild(row);
+                            vehicleStatsBody.appendChild(row);
+                        });
                     }
-                } else {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td colspan="2" style="text-align: center; color: #666;">${translations[currentLang].no_data || '暂无数据'}</td>`;
-                    vehicleStats19to20Body.appendChild(row);
-                }
-                
-                // Update 20:00-21:00 vehicle statistics by type table
-                const vehicleStats20to21Body = document.querySelector('#vehicleStats20to21Table tbody');
-                vehicleStats20to21Body.innerHTML = '';
-                if (data.vehicles_20_to_21_by_type) {
-                    Object.entries(data.vehicles_20_to_21_by_type).forEach(([vehicleType, count]) => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${vehicleType}</td>
-                            <td>${count}</td>
-                        `;
-                        vehicleStats20to21Body.appendChild(row);
-                    });
-                    
-                    // If no data, show prompt message
-                    if (Object.keys(data.vehicles_20_to_21_by_type).length === 0) {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `<td colspan="2" style="text-align: center; color: #666;">${translations[currentLang].no_data || '暂无数据'}</td>`;
-                        vehicleStats20to21Body.appendChild(row);
-                    }
-                } else {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td colspan="2" style="text-align: center; color: #666;">${translations[currentLang].no_data || '暂无数据'}</td>`;
-                    vehicleStats20to21Body.appendChild(row);
-                }
-                
-                // Return data for use in the next then block
-                return data;
-            })
-            .then(statsData => {            
-                // Get pickup forecast data and update progress bar
-                let forecastUrl = '/api/pickup_forecast';
-                if (currentDate) {
-                    forecastUrl += '?date=' + encodeURIComponent(currentDate);
-                }
 
-                console.log('Loading forecast data with URL:', forecastUrl);
-                return fetch(forecastUrl)
-                .then(response => response.json())
-                .then(forecastData => {
-                    console.log('Loaded forecast data:', forecastData);
-                    // Get actual inbound amount from stats data
-                    const actualInbound = (statsData && statsData.total_pieces) ? statsData.total_pieces : 0;
-                    const forecastAmount = (forecastData && forecastData.amount) ? forecastData.amount : 0;
-                    
-                    // Update progress bar
-                    updateProgressBar(actualInbound, forecastAmount);
-                    
-                    // Update forecast input field
-                    document.getElementById('pickupForecast').value = forecastAmount;
-                    
-                    // Get hourly comparison data
-                    loadHourlyComparisonData();
+                    // Update 19:00-20:00 vehicle statistics by type table
+                    const vehicleStats19to20Body = document.querySelector('#vehicleStats19to20Table tbody');
+                    vehicleStats19to20Body.innerHTML = '';
+                    if (data.vehicles_19_to_20_by_type) {
+                        Object.entries(data.vehicles_19_to_20_by_type).forEach(([vehicleType, count]) => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                            <td>${vehicleType}</td>
+                            <td>${count}</td>
+                        `;
+                            vehicleStats19to20Body.appendChild(row);
+                        });
+
+                        // If no data, show prompt message
+                        if (Object.keys(data.vehicles_19_to_20_by_type).length === 0) {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `<td colspan="2" style="text-align: center; color: #666;">${translations[currentLang].no_data || '暂无数据'}</td>`;
+                            vehicleStats19to20Body.appendChild(row);
+                        }
+                    } else {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `<td colspan="2" style="text-align: center; color: #666;">${translations[currentLang].no_data || '暂无数据'}</td>`;
+                        vehicleStats19to20Body.appendChild(row);
+                    }
+
+                    // Update 20:00-21:00 vehicle statistics by type table
+                    const vehicleStats20to21Body = document.querySelector('#vehicleStats20to21Table tbody');
+                    vehicleStats20to21Body.innerHTML = '';
+                    if (data.vehicles_20_to_21_by_type) {
+                        Object.entries(data.vehicles_20_to_21_by_type).forEach(([vehicleType, count]) => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                            <td>${vehicleType}</td>
+                            <td>${count}</td>
+                        `;
+                            vehicleStats20to21Body.appendChild(row);
+                        });
+
+                        // If no data, show prompt message
+                        if (Object.keys(data.vehicles_20_to_21_by_type).length === 0) {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `<td colspan="2" style="text-align: center; color: #666;">${translations[currentLang].no_data || '暂无数据'}</td>`;
+                            vehicleStats20to21Body.appendChild(row);
+                        }
+                    } else {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `<td colspan="2" style="text-align: center; color: #666;">${translations[currentLang].no_data || '暂无数据'}</td>`;
+                        vehicleStats20to21Body.appendChild(row);
+                    }
+
+                    // Return data for use in the next then block
+                    return data;
                 })
-                .catch(error => {
-                    console.error('Error loading forecast data:', error);
-                    // Even if forecast data loading fails, still update progress bar with 0 values
-                    const actualInbound = (statsData && statsData.total_pieces) ? statsData.total_pieces : 0;
-                    updateProgressBar(actualInbound, 0);
-                    
-                    // Get hourly comparison data
-                    loadHourlyComparisonData();
+                .then(statsData => {
+                    // Get pickup forecast data and update progress bar
+                    let forecastUrl = '/api/pickup_forecast';
+                    if (currentDate) {
+                        forecastUrl += '?date=' + encodeURIComponent(currentDate);
+                    }
+
+                    console.log('Loading forecast data with URL:', forecastUrl);
+                    return fetch(forecastUrl)
+                        .then(response => response.json())
+                        .then(forecastData => {
+                            console.log('Loaded forecast data:', forecastData);
+                            // Get actual inbound amount from stats data
+                            const actualInbound = (statsData && statsData.total_pieces) ? statsData.total_pieces : 0;
+                            const forecastAmount = (forecastData && forecastData.amount) ? forecastData.amount : 0;
+
+                            // Update progress bar
+                            updateProgressBar(actualInbound, forecastAmount);
+
+                            // Update forecast input field
+                            document.getElementById('pickupForecast').value = forecastAmount;
+
+                            // Get hourly comparison data
+                            loadHourlyComparisonData();
+                        })
+                        .catch(error => {
+                            console.error('Error loading forecast data:', error);
+                            // Even if forecast data loading fails, still update progress bar with 0 values
+                            const actualInbound = (statsData && statsData.total_pieces) ? statsData.total_pieces : 0;
+                            updateProgressBar(actualInbound, 0);
+
+                            // Get hourly comparison data
+                            loadHourlyComparisonData();
+                        });
+                })
+                .finally(() => {
+                    // Load pallet hourly data
+                    loadPalletHourlyData();
                 });
-            })
-            .finally(() => {
-                // Load pallet hourly data
-                loadPalletHourlyData();
-            });
         }
 
         // Load hourly comparison data
@@ -1092,7 +1150,7 @@
                 inboundUrl += '?date=' + encodeURIComponent(currentDate);
                 sortingUrl += '?date=' + encodeURIComponent(currentDate);
             }
-            
+
             Promise.all([
                 fetch(inboundUrl).then(response => {
                     if (!response.ok) {
@@ -1107,45 +1165,45 @@
                     return response.json();
                 })
             ])
-            .then(([inboundData, sortingData]) => {
-                // Process data and generate chart
-                const hourlyData = processHourlyDataByTimeSlot(inboundData, sortingData);
-                renderHourlyComparisonChart(hourlyData);
-                
-                // Process data for difference analysis chart
-                const differenceData = processDifferenceData(inboundData, sortingData);
-                renderDifferenceAnalysisChart(differenceData);
-            })
-            .catch(error => {
-                console.error('Error loading hourly data:', error);
-                showMessage(translations[currentLang].load_hourly_error || '加载时段对比数据出错: ' + error.message, 'error');
-            });
-            
+                .then(([inboundData, sortingData]) => {
+                    // Process data and generate chart
+                    const hourlyData = processHourlyDataByTimeSlot(inboundData, sortingData);
+                    renderHourlyComparisonChart(hourlyData);
+
+                    // Process data for difference analysis chart
+                    const differenceData = processDifferenceData(inboundData, sortingData);
+                    renderDifferenceAnalysisChart(differenceData);
+                })
+                .catch(error => {
+                    console.error('Error loading hourly data:', error);
+                    showMessage(translations[currentLang].load_hourly_error || '加载时段对比数据出错: ' + error.message, 'error');
+                });
+
             // Load pallet hourly data
             loadPalletHourlyData();
         }
-        
+
         // Load pallet hourly data
         function loadPalletHourlyData() {
             let palletUrl = '/api/pallet_hourly';
             if (currentDate) {
                 palletUrl += '?date=' + encodeURIComponent(currentDate);
             }
-            
+
             fetch(palletUrl)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Pallet data loading failed: ' + response.status);
-                }
-                return response.json();
-            })
-            .then(data => {
-                renderPalletHourlyChart(data);
-            })
-            .catch(error => {
-                console.error('Error loading pallet data:', error);
-                showMessage(translations[currentLang].load_pallet_error || '加载托盘时段数据出错: ' + error.message, 'error');
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Pallet data loading failed: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    renderPalletHourlyChart(data);
+                })
+                .catch(error => {
+                    console.error('Error loading pallet data:', error);
+                    showMessage(translations[currentLang].load_pallet_error || '加载托盘时段数据出错: ' + error.message, 'error');
+                });
         }
 
         // Process data grouped by time slot
@@ -1153,7 +1211,7 @@
             try {
                 // Create a map to store data for each time slot
                 const timeSlotMap = {};
-                
+
                 // Process inbound data
                 if (Array.isArray(inboundData)) {
                     inboundData.forEach(record => {
@@ -1173,7 +1231,7 @@
                         }
                     });
                 }
-                
+
                 // Process sorting data
                 if (Array.isArray(sortingData)) {
                     sortingData.forEach(record => {
@@ -1190,21 +1248,21 @@
                         }
                     });
                 }
-                
+
                 // Convert to array and sort
                 const result = Object.values(timeSlotMap).sort((a, b) => {
                     // Numeric sorting to ensure time slots are in correct order
                     const aSlot = a.timeSlot === (translations[currentLang].unknown || '未知') ? -1 : parseInt(a.timeSlot);
                     const bSlot = b.timeSlot === (translations[currentLang].unknown || '未知') ? -1 : parseInt(b.timeSlot);
-                    
+
                     // Handle NaN cases
                     if (isNaN(aSlot) && isNaN(bSlot)) return 0;
                     if (isNaN(aSlot)) return 1;
                     if (isNaN(bSlot)) return -1;
-                    
+
                     return aSlot - bSlot;
                 });
-                
+
                 console.log('Processed hourly data:', result);
                 return result;
             } catch (error) {
@@ -1213,13 +1271,13 @@
                 return [];
             }
         }
-        
+
         // Process data for difference analysis
         function processDifferenceData(inboundData, sortingData) {
             try {
                 // Create a map to store data for each time slot
                 const timeSlotMap = {};
-                
+
                 // Process inbound data
                 if (Array.isArray(inboundData)) {
                     inboundData.forEach(record => {
@@ -1239,7 +1297,7 @@
                         }
                     });
                 }
-                
+
                 // Process sorting data
                 if (Array.isArray(sortingData)) {
                     sortingData.forEach(record => {
@@ -1259,7 +1317,7 @@
                         }
                     });
                 }
-                
+
                 // Calculate differences and convert to array
                 const result = Object.values(timeSlotMap).map(item => {
                     return {
@@ -1272,15 +1330,15 @@
                     // Numeric sorting to ensure time slots are in correct order
                     const aSlot = a.timeSlot === (translations[currentLang].unknown || '未知') ? -1 : parseInt(a.timeSlot);
                     const bSlot = b.timeSlot === (translations[currentLang].unknown || '未知') ? -1 : parseInt(b.timeSlot);
-                    
+
                     // Handle NaN cases
                     if (isNaN(aSlot) && isNaN(bSlot)) return 0;
                     if (isNaN(aSlot)) return 1;
                     if (isNaN(bSlot)) return -1;
-                    
+
                     return aSlot - bSlot;
                 });
-                
+
                 console.log('Processed difference data:', result);
                 return result;
             } catch (error) {
@@ -1289,36 +1347,36 @@
                 return [];
             }
         }
-        
+
         // Render hourly comparison chart
         function renderHourlyComparisonChart(data) {
             try {
                 const ctx = document.getElementById('hourlyComparisonChart').getContext('2d');
-                
+
                 // Destroy existing chart instance
                 if (window.hourlyChart) {
                     window.hourlyChart.destroy();
                 }
-                
+
                 // Check if there is data
                 if (!data || data.length === 0) {
                     // If no data, show prompt message
                     document.getElementById('hourlyComparisonChart').innerHTML = `<p style="text-align: center; color: #666; padding: 20px;">${translations[currentLang].no_data || '暂无时段对比数据'}</p>`;
                     return;
                 }
-                
+
                 // Calculate max value for setting y-axis range
                 const maxInbound = Math.max(...data.map(item => item.inboundPieces));
                 const maxSorting = Math.max(...data.map(item => item.sortingPieces));
                 const maxValue = Math.max(maxInbound, maxSorting);
-                
+
                 // Calculate appropriate y-axis max value and step size
                 const yAxisMax = Math.ceil(maxValue / 1000) * 1000;
                 const stepSize = Math.ceil(yAxisMax / 5 / 1000) * 1000;
-                
+
                 // Detect if it's a mobile device
                 const isMobile = window.innerWidth < 768;
-                
+
                 window.hourlyChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
@@ -1335,7 +1393,7 @@
                                     anchor: 'end',
                                     align: isMobile ? 'top' : 'top',
                                     offset: isMobile ? -10 : -20,
-                                    formatter: function(value) {
+                                    formatter: function (value) {
                                         // On mobile devices, don't show labels if value is small to avoid overlap
                                         if (isMobile && value < maxValue * 0.1) {
                                             return '';
@@ -1360,7 +1418,7 @@
                                     anchor: 'end',
                                     align: isMobile ? 'top' : 'top',
                                     offset: isMobile ? -20 : -35,
-                                    formatter: function(value) {
+                                    formatter: function (value) {
                                         // On mobile devices, don't show labels if value is small to avoid overlap
                                         if (isMobile && value < maxValue * 0.1) {
                                             return '';
@@ -1405,7 +1463,7 @@
                                     weight: 'bold',
                                     size: isMobile ? 10 : 12
                                 },
-                                formatter: function(value) {
+                                formatter: function (value) {
                                     // Don't show label if value is 0
                                     return value > 0 ? value.toLocaleString() : '';
                                 }
@@ -1420,7 +1478,7 @@
                                 ticks: {
                                     // Improve y-axis scale display
                                     stepSize: stepSize > 0 ? stepSize : undefined,
-                                    callback: function(value) {
+                                    callback: function (value) {
                                         // Format y-axis labels, add thousand separators
                                         if (value >= 1000000) {
                                             return (value / 1000000).toFixed(1) + 'M';
@@ -1490,37 +1548,37 @@
                 showMessage(translations[currentLang].render_error || '渲染时段对比图表出错: ' + error.message, 'error');
             }
         }
-        
+
         // Render difference analysis chart
         function renderDifferenceAnalysisChart(data) {
             try {
                 const ctx = document.getElementById('differenceAnalysisChart').getContext('2d');
-                
+
                 // Destroy existing chart instance
                 if (window.differenceChart) {
                     window.differenceChart.destroy();
                 }
-                
+
                 // Check if there is data
                 if (!data || data.length === 0) {
                     // If no data, show prompt message
                     document.getElementById('differenceAnalysisChart').innerHTML = `<p style="text-align: center; color: #666; padding: 20px;">${translations[currentLang].no_data || '暂无差异分析数据'}</p>`;
                     return;
                 }
-                
+
                 // Calculate max values for setting y-axis range
                 const maxInbound = Math.max(...data.map(item => item.inboundPieces));
                 const maxSorting = Math.max(...data.map(item => item.sortingPieces));
                 const maxDifference = Math.max(...data.map(item => Math.abs(item.difference)));
                 const maxValue = Math.max(maxInbound, maxSorting, maxDifference);
-                
+
                 // Calculate appropriate y-axis max value and step size
                 const yAxisMax = Math.ceil(maxValue / 100) * 100;
                 const stepSize = Math.ceil(yAxisMax / 5 / 100) * 100;
-                
+
                 // Detect if it's a mobile device
                 const isMobile = window.innerWidth < 768;
-                
+
                 window.differenceChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
@@ -1545,7 +1603,7 @@
                                     anchor: 'end',
                                     align: isMobile ? 'top' : 'top',
                                     offset: isMobile ? -10 : -20,
-                                    formatter: function(value) {
+                                    formatter: function (value) {
                                         // On mobile devices, don't show labels if value is small to avoid overlap
                                         if (isMobile && Math.abs(value) < maxValue * 0.1) {
                                             return '';
@@ -1590,7 +1648,7 @@
                                     weight: 'bold',
                                     size: isMobile ? 10 : 12
                                 },
-                                formatter: function(value) {
+                                formatter: function (value) {
                                     // Don't show label if value is 0
                                     return value !== 0 ? value.toLocaleString() : '';
                                 }
@@ -1605,7 +1663,7 @@
                                 ticks: {
                                     // Improve y-axis scale display
                                     stepSize: stepSize,
-                                    callback: function(value) {
+                                    callback: function (value) {
                                         // Format y-axis labels, add thousand separators
                                         if (value >= 1000000) {
                                             return (value / 1000000).toFixed(1) + 'M';
@@ -1673,7 +1731,7 @@
             } catch (error) {
                 console.error('Error rendering difference chart:', error);
                 showMessage(translations[currentLang].render_difference_error || '渲染差异分析图表出错: ' + error.message, 'error');
-                
+
                 // Show error message on canvas
                 try {
                     const canvas = document.getElementById('differenceAnalysisChart');
@@ -1690,12 +1748,12 @@
                 }
             }
         }
-        
+
         // Render pallet hourly chart
         function renderPalletHourlyChart(data) {
             try {
                 const ctx = document.getElementById('palletHourlyChart').getContext('2d');
-                
+
                 // Destroy existing chart instance
                 if (window.palletHourlyChart && typeof window.palletHourlyChart.destroy === 'function') {
                     window.palletHourlyChart.destroy();
@@ -1703,16 +1761,16 @@
                     // If it's not a chart instance, delete the property
                     delete window.palletHourlyChart;
                 }
-                
+
                 // Check if there is data
                 if (!data || data.length === 0) {
                     // If no data, show prompt message on canvas
                     const canvas = document.getElementById('palletHourlyChart');
                     const ctx = canvas.getContext('2d');
-                    
+
                     // Clear canvas
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    
+
                     // Draw text on canvas
                     ctx.fillStyle = '#666';
                     ctx.font = '16px Arial';
@@ -1720,20 +1778,20 @@
                     ctx.fillText(translations[currentLang].no_data || '暂无时段对比数据', canvas.width / 2, canvas.height / 2);
                     return;
                 }
-                
+
                 // Calculate max values for setting y-axis range
                 const maxLoadAmount = Math.max(...data.map(item => item.total_load_amount));
                 const maxCount = Math.max(...data.map(item => item.count));
-                
+
                 // Calculate appropriate y-axis max value and step size
                 const loadAmountYAxisMax = Math.ceil(maxLoadAmount / 500) * 500;
                 const countYAxisMax = Math.ceil(maxCount / 10) * 10;
                 const loadAmountStepSize = Math.ceil(loadAmountYAxisMax / 5 / 500) * 500;
                 const countStepSize = Math.ceil(countYAxisMax / 5 / 10) * 10;
-                
+
                 // Detect if it's a mobile device
                 const isMobile = window.innerWidth < 768;
-                
+
                 window.palletHourlyChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
@@ -1750,7 +1808,7 @@
                                     anchor: 'end',
                                     align: isMobile ? 'top' : 'top',
                                     offset: isMobile ? -10 : -20,
-                                    formatter: function(value) {
+                                    formatter: function (value) {
                                         // On mobile devices, don't show labels if value is small to avoid overlap
                                         if (isMobile && value < maxLoadAmount * 0.1) {
                                             return '';
@@ -1795,7 +1853,7 @@
                                     weight: 'bold',
                                     size: isMobile ? 10 : 12
                                 },
-                                formatter: function(value) {
+                                formatter: function (value) {
                                     // Don't show label if value is 0
                                     return value > 0 ? value.toLocaleString() : '';
                                 }
@@ -1810,7 +1868,7 @@
                                 ticks: {
                                     // Improve y-axis scale display
                                     stepSize: loadAmountStepSize > 0 ? loadAmountStepSize : undefined,
-                                    callback: function(value) {
+                                    callback: function (value) {
                                         // Format y-axis labels, add thousand separators
                                         if (value >= 1000000) {
                                             return (value / 1000000).toFixed(1) + 'M';
@@ -1878,7 +1936,7 @@
             } catch (error) {
                 console.error('Error rendering pallet chart:', error);
                 showMessage(translations[currentLang].render_pallet_error || '渲染托盘时段图表出错: ' + error.message, 'error');
-                
+
                 // 在canvas上显示错误信息
                 try {
                     const canvas = document.getElementById('palletHourlyChart');
@@ -1901,7 +1959,7 @@
             try {
                 // Use currently selected date as export date
                 let dateStr = currentDate;
-                
+
                 // If no date selected, use today
                 if (!dateStr) {
                     const now = new Date();
@@ -1910,13 +1968,13 @@
                     const day = String(now.getDate()).padStart(2, '0');
                     dateStr = `${year}-${month}-${day}`;
                 }
-                
+
                 // Build export URL
                 let exportUrl = '/api/export_csv';
                 if (dateStr) {
                     exportUrl += `?date=${encodeURIComponent(dateStr)}`;
                 }
-                
+
                 // Create temporary link and trigger download
                 const link = document.createElement('a');
                 link.href = exportUrl;
@@ -1924,26 +1982,211 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 showMessage(translations[currentLang].export_success || '正在导出数据，请稍候...', 'success');
             } catch (error) {
                 console.error('Export error:', error);
                 showMessage(translations[currentLang].export_error || '导出表格文件出错: ' + error.message, 'error');
             }
         }
-        
+
+        // Load daily trend chart data
+        function loadDailyTrendData() {
+            fetch('/api/daily_trend?days=7')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error loading daily trend data:', data.error);
+                        return;
+                    }
+                    renderDailyTrendChart(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching daily trend data:', error);
+                });
+        }
+
+        // Render daily trend chart
+        function renderDailyTrendChart(data) {
+            const ctx = document.getElementById('dailyTrendChart').getContext('2d');
+
+            // Destroy existing chart if it exists
+            if (window.dailyTrendChart && typeof window.dailyTrendChart.destroy === 'function') {
+                window.dailyTrendChart.destroy();
+            }
+
+            const dates = data.map(item => {
+                const date = new Date(item.date);
+                return `${date.getMonth() + 1}/${date.getDate()}`;
+            });
+            const pieces = data.map(item => item.total_pieces);
+
+            window.dailyTrendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: translations[currentLang].total_cargo || '货物总量',
+                        data: pieces,
+                        borderColor: '#4361ee',
+                        backgroundColor: 'rgba(67, 97, 238, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#4361ee',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toLocaleString() + ' 件';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function (value) {
+                                    return value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load week comparison chart data
+        function loadWeekComparisonData() {
+            fetch('/api/week_comparison')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error loading week comparison data:', data.error);
+                        return;
+                    }
+                    renderWeekComparisonChart(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching week comparison data:', error);
+                });
+        }
+
+        // Render week comparison chart
+        function renderWeekComparisonChart(data) {
+            const ctx = document.getElementById('weekComparisonChart').getContext('2d');
+
+            // Destroy existing chart if it exists
+            if (window.weekComparisonChart && typeof window.weekComparisonChart.destroy === 'function') {
+                window.weekComparisonChart.destroy();
+            }
+
+            const currentWeekLabel = `${translations[currentLang].current_week || '本周'} (${data.current_week.start_date} ~ ${data.current_week.end_date})`;
+            const previousWeekLabel = `${translations[currentLang].previous_week || '上周'} (${data.previous_week.start_date} ~ ${data.previous_week.end_date})`;
+
+            const changePercent = data.change.pieces_change_percent;
+            const changeColor = changePercent >= 0 ? '#4cc9f0' : '#f72585';
+
+            window.weekComparisonChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [currentWeekLabel, previousWeekLabel],
+                    datasets: [{
+                        label: translations[currentLang].total_cargo || '货物总量',
+                        data: [data.current_week.total_pieces, data.previous_week.total_pieces],
+                        backgroundColor: ['#4361ee', '#6c757d'],
+                        borderColor: ['#3f37c9', '#5a6268'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toLocaleString() + ' 件';
+                                },
+                                afterLabel: function (context) {
+                                    if (context.dataIndex === 0) {
+                                        const sign = changePercent >= 0 ? '+' : '';
+                                        return `${translations[currentLang].change_percent || '环比变化'}: ${sign}${changePercent}%`;
+                                    }
+                                    return '';
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: function (value, context) {
+                                if (context.dataIndex === 0) {
+                                    const sign = changePercent >= 0 ? '+' : '';
+                                    return `${value.toLocaleString()}\n(${sign}${changePercent}%)`;
+                                }
+                                return value.toLocaleString();
+                            },
+                            color: function (context) {
+                                return context.dataIndex === 0 ? changeColor : '#333';
+                            },
+                            font: {
+                                weight: 'bold',
+                                size: 12
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function (value) {
+                                    return value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
         // Show message function
         function showMessage(text, type) {
             const messageDiv = document.getElementById('message');
             messageDiv.textContent = text;
             messageDiv.className = 'message ' + type;
-            
+
             // Clear message after 3 seconds
             setTimeout(() => {
                 messageDiv.textContent = '';
                 messageDiv.className = '';
             }, 3000);
         }
+
+        // Load new charts on page load
+        window.addEventListener('load', function () {
+            loadDailyTrendData();
+            loadWeekComparisonData();
+        });
     </script>
 </body>
+
 </html>
