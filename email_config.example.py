@@ -34,3 +34,18 @@ DELETE_TEMP_FILE = False
 
 # 邮件主题前缀
 EMAIL_SUBJECT_PREFIX = "入库系统每日数据汇总"
+
+# ==================== 数据库备份配置 ====================
+
+# 数据库备份发送时间 (24小时制, 格式: "HH:MM")
+BACKUP_TIME = "02:00"
+
+# 是否在发送后删除本地备份压缩文件
+DELETE_BACKUP_FILE = False
+
+# 数据库备份邮件主题前缀
+BACKUP_EMAIL_SUBJECT_PREFIX = "数据库备份"
+
+# 邮件附件最大大小限制 (MB)
+# 如果备份文件超过此大小，将发送不带附件的通知邮件
+MAX_ATTACHMENT_SIZE_MB = 25

@@ -18,6 +18,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import schedule
 import time
+import zipfile
 
 # 获取正确的数据库路径
 def get_db_path():
@@ -272,43 +273,118 @@ def create_excel_report(summary_data, stats):
     
     return filepath
 
-def send_email(subject, body, attachment_path=None):
+def compress_database():
     """
-    发送邮件
+    压缩数据库文件
+    返回压缩文件路径，如果失败返回None
     """
     try:
+        # 检查数据库文件是否存在
+        if not os.path.exists(DB_PATH):
+            print(f"警告: 数据库文件不存在: {DB_PATH}")
+            return None
+        
+        # 生成压缩文件名（带日期）
+        today = datetime.now(LA_TZ).strftime('%Y%m%d')
+        zip_filename = f"inbound_backup_{today}.zip"
+        zip_filepath = os.path.join(os.path.dirname(DB_PATH), zip_filename)
+        
+        # 如果压缩文件已存在，先删除
+        if os.path.exists(zip_filepath):
+            os.remove(zip_filepath)
+        
+        # 创建ZIP压缩文件
+        print(f"正在压缩数据库文件: {DB_PATH}")
+        with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(DB_PATH, os.path.basename(DB_PATH))
+        
+        # 显示压缩信息
+        original_size = os.path.getsize(DB_PATH) / (1024 * 1024)
+        compressed_size = os.path.getsize(zip_filepath) / (1024 * 1024)
+        compression_ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
+        
+        print(f"数据库压缩完成: {compressed_size:.2f} MB (压缩率: {compression_ratio:.1f}%)")
+        
+        return zip_filepath
+        
+    except Exception as e:
+        print(f"压缩数据库时出错: {str(e)}")
+        return None
+
+def send_email(subject, body, attachment_paths=None):
+    """
+    发送邮件（支持多个附件）
+    attachment_paths: 可以是单个文件路径（字符串）或文件路径列表
+    """
+    try:
+        print(f"\n[调试] 开始准备邮件...")
+        print(f"[调试] 主题: {subject}")
+        
         # 创建邮件对象
         msg = MIMEMultipart()
         msg['From'] = EMAIL_CONFIG['sender_email']
         msg['To'] = EMAIL_CONFIG['recipient_email']
         msg['Subject'] = subject
+        print(f"[调试] 发件人: {EMAIL_CONFIG['sender_email']}")
+        print(f"[调试] 收件人: {EMAIL_CONFIG['recipient_email']}")
         
         # 添加邮件正文
         msg.attach(MIMEText(body, 'html', 'utf-8'))
+        print(f"[调试] 已添加邮件正文")
         
-        # 添加附件
-        if attachment_path and os.path.exists(attachment_path):
-            with open(attachment_path, 'rb') as f:
-                part = MIMEBase('application', 'octet-stream')
-                part.set_payload(f.read())
-                encoders.encode_base64(part)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename={os.path.basename(attachment_path)}'
-                )
-                msg.attach(part)
+        # 处理附件（支持单个或多个）
+        if attachment_paths:
+            # 如果是字符串，转换为列表
+            if isinstance(attachment_paths, str):
+                attachment_paths = [attachment_paths]
+            
+            print(f"[调试] 准备添加 {len(attachment_paths)} 个附件")
+            # 添加所有附件
+            for attachment_path in attachment_paths:
+                if os.path.exists(attachment_path):
+                    file_size = os.path.getsize(attachment_path) / 1024
+                    print(f"[调试] 正在添加附件: {os.path.basename(attachment_path)} ({file_size:.2f} KB)")
+                    with open(attachment_path, 'rb') as f:
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(f.read())
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename={os.path.basename(attachment_path)}'
+                        )
+                        msg.attach(part)
+                    print(f"[调试] ✓ 已添加附件: {os.path.basename(attachment_path)}")
+                else:
+                    print(f"[调试] ✗ 附件不存在: {attachment_path}")
         
         # 连接SMTP服务器并发送邮件
-        with smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port']) as server:
-            server.starttls()  # 启用TLS加密
-            server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
-            server.send_message(msg)
+        print(f"\n[调试] 开始连接SMTP服务器...")
+        print(f"[调试] 服务器: {EMAIL_CONFIG['smtp_server']}")
+        print(f"[调试] 端口: {EMAIL_CONFIG['smtp_port']}")
         
-        print(f"邮件发送成功: {subject}")
+        with smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'], timeout=30) as server:
+            print(f"[调试] ✓ 已连接到SMTP服务器")
+            
+            print(f"[调试] 正在启动TLS加密...")
+            server.starttls()  # 启用TLS加密
+            print(f"[调试] ✓ TLS加密已启动")
+            
+            print(f"[调试] 正在登录邮箱...")
+            server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
+            print(f"[调试] ✓ 登录成功")
+            
+            print(f"[调试] 正在发送邮件...")
+            server.send_message(msg)
+            print(f"[调试] ✓ 邮件已发送")
+        
+        print(f"\n✅ 邮件发送成功: {subject}\n")
         return True
     
     except Exception as e:
-        print(f"邮件发送失败: {str(e)}")
+        print(f"\n❌ 邮件发送失败: {str(e)}")
+        import traceback
+        print("\n[调试] 详细错误信息:")
+        traceback.print_exc()
         return False
 
 def generate_email_body(summary_data, stats):
@@ -399,24 +475,43 @@ def send_daily_report():
         # 创建Excel报表
         excel_path = create_excel_report(summary_data, stats)
         
+        # 压缩数据库文件
+        print("\n正在准备数据库备份...")
+        db_backup_path = compress_database()
+        
+        # 准备附件列表
+        attachments = [excel_path]
+        if db_backup_path:
+            attachments.append(db_backup_path)
+            print("数据库备份将作为附件一同发送")
+        else:
+            print("数据库备份失败，仅发送Excel报表")
+        
         # 生成邮件正文
         date_str = summary_data['date'].strftime('%Y年%m月%d日')
         subject = f"{EMAIL_SUBJECT_PREFIX} - {date_str}"
         body = generate_email_body(summary_data, stats)
         
-        # 发送邮件
-        success = send_email(subject, body, excel_path)
+        # 发送邮件（包含Excel报表和数据库备份）
+        success = send_email(subject, body, attachments)
         
         if success:
             print(f"每日报告发送成功: {date_str}")
             
-            # 根据配置决定是否删除临时Excel文件
+            # 根据配置决定是否删除临时文件
             if DELETE_TEMP_FILE:
                 try:
                     os.remove(excel_path)
-                    print(f"已删除临时文件: {excel_path}")
+                    print(f"已删除临时Excel文件: {excel_path}")
+                    if db_backup_path:
+                        os.remove(db_backup_path)
+                        print(f"已删除临时备份文件: {db_backup_path}")
                 except Exception as e:
                     print(f"删除临时文件失败: {str(e)}")
+            else:
+                print(f"Excel报表已保留: {excel_path}")
+                if db_backup_path:
+                    print(f"数据库备份已保留: {db_backup_path}")
         else:
             print(f"每日报告发送失败: {date_str}")
         
