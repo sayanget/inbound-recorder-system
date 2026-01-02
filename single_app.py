@@ -906,7 +906,7 @@ def pallet_hourly_data():
     request_date_5am_local = request_date_5am_la.astimezone()
     next_date_5am_local = next_date_5am_la.astimezone()
     
-    # 查询入库记录中车辆类型为26英尺或53英尺的记录，按时间段分组（查询当天05:00之后到次日05:00之前的所有记录）
+    # 查询当天数据：入库记录中车辆类型为26英尺或53英尺的记录，按时间段分组
     cur=conn.execute("""
         SELECT time_slot, SUM(load_amount) as total_load_amount, COUNT(*) as count
         FROM inbound_records 
@@ -917,12 +917,42 @@ def pallet_hourly_data():
             request_date_5am_local.strftime('%Y-%m-%d %H:%M:%S'), 
             next_date_5am_local.strftime('%Y-%m-%d %H:%M:%S')
         ))
-    rows=[{
+    current_day_rows=[{
         "time_slot": r[0] if r[0] else '未指定',
         "total_load_amount": r[1] if r[1] else 0,
         "count": r[2] if r[2] else 0
     } for r in cur.fetchall()]
-    return jsonify(rows)
+    
+    # 查询历史平均值：所有历史数据按时段分组计算平均装载量
+    historical_cur = conn.execute("""
+        SELECT 
+            time_slot,
+            AVG(load_amount) as avg_load_amount,
+            COUNT(*) as total_count,
+            COUNT(DISTINCT DATE(created_at)) as days_count
+        FROM inbound_records
+        WHERE vehicle_type IN ('26英尺', '53英尺')
+            AND time_slot IS NOT NULL
+            AND time_slot != ''
+        GROUP BY time_slot
+        ORDER BY CAST(time_slot AS INTEGER)
+    """)
+    
+    historical_avg_rows = [{
+        "time_slot": r[0],
+        "avg_load_amount": round(r[1], 2) if r[1] else 0,
+        "total_count": r[2] if r[2] else 0,
+        "days_count": r[3] if r[3] else 0
+    } for r in historical_cur.fetchall()]
+    
+    conn.close()
+    
+    # 返回包含当天数据和历史平均值的结构
+    return jsonify({
+        'current_day': current_day_rows,
+        'historical_avg': historical_avg_rows
+    })
+
 
 # 新增API：获取按时间段分组的分拣数据
 @app.route('/api/sorting_hourly')

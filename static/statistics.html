@@ -591,7 +591,8 @@
                 week_comparison_chart: "周环比对比",
                 current_week: "本周",
                 previous_week: "上周",
-                change_percent: "环比变化"
+                change_percent: "环比变化",
+                historical_avg: "历史平均值"
             },
             en: {
                 statistics_title: "Inbound Statistics",
@@ -657,7 +658,8 @@
                 week_comparison_chart: "Week-over-Week Comparison",
                 current_week: "Current Week",
                 previous_week: "Previous Week",
-                change_percent: "Change %"
+                change_percent: "Change %",
+                historical_avg: "Historical Average"
             },
             es: {
                 statistics_title: "Estadísticas de Entrada",
@@ -1762,8 +1764,12 @@
                     delete window.palletHourlyChart;
                 }
 
+                // 处理新的数据结构
+                const currentDay = data.current_day || [];
+                const historicalAvg = data.historical_avg || [];
+
                 // Check if there is data
-                if (!data || data.length === 0) {
+                if (!currentDay || currentDay.length === 0) {
                     // If no data, show prompt message on canvas
                     const canvas = document.getElementById('palletHourlyChart');
                     const ctx = canvas.getContext('2d');
@@ -1779,15 +1785,43 @@
                     return;
                 }
 
+                // 获取所有时段标签（合并当天和历史数据的时段）
+                const allTimeSlots = new Set();
+                currentDay.forEach(item => allTimeSlots.add(item.time_slot));
+                historicalAvg.forEach(item => allTimeSlots.add(item.time_slot));
+                const timeSlots = Array.from(allTimeSlots).sort((a, b) => {
+                    // 数字排序
+                    const numA = parseInt(a);
+                    const numB = parseInt(b);
+                    return numA - numB;
+                });
+
+                // 创建时段到数据的映射
+                const currentDayMap = {};
+                currentDay.forEach(item => {
+                    currentDayMap[item.time_slot] = item.total_load_amount;
+                });
+
+                const historicalAvgMap = {};
+                historicalAvg.forEach(item => {
+                    historicalAvgMap[item.time_slot] = item.avg_load_amount;
+                });
+
+                // 为每个时段填充数据
+                // 使用null代替0，让Chart.js跳过无数据的点
+                const currentDayData = timeSlots.map(slot =>
+                    currentDayMap.hasOwnProperty(slot) ? currentDayMap[slot] : null
+                );
+                const historicalAvgData = timeSlots.map(slot =>
+                    historicalAvgMap.hasOwnProperty(slot) ? historicalAvgMap[slot] : null
+                );
+
                 // Calculate max values for setting y-axis range
-                const maxLoadAmount = Math.max(...data.map(item => item.total_load_amount));
-                const maxCount = Math.max(...data.map(item => item.count));
+                const maxLoadAmount = Math.max(...currentDayData, ...historicalAvgData);
 
                 // Calculate appropriate y-axis max value and step size
                 const loadAmountYAxisMax = Math.ceil(maxLoadAmount / 500) * 500;
-                const countYAxisMax = Math.ceil(maxCount / 10) * 10;
                 const loadAmountStepSize = Math.ceil(loadAmountYAxisMax / 5 / 500) * 500;
-                const countStepSize = Math.ceil(countYAxisMax / 5 / 10) * 10;
 
                 // Detect if it's a mobile device
                 const isMobile = window.innerWidth < 768;
@@ -1795,14 +1829,16 @@
                 window.palletHourlyChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: data.map(item => item.time_slot),
+                        labels: timeSlots,
                         datasets: [
                             {
-                                label: translations[currentLang].pallet_pieces || '装载量',
-                                data: data.map(item => item.total_load_amount),
+                                label: translations[currentLang].pallet_pieces || '当天装载量',
+                                type: 'bar',
+                                data: currentDayData,
                                 backgroundColor: 'rgba(75, 192, 192, 0.6)',
                                 borderColor: 'rgba(75, 192, 192, 1)',
                                 borderWidth: 1,
+                                order: 2,
                                 // Add data labels
                                 datalabels: {
                                     anchor: 'end',
@@ -1820,6 +1856,26 @@
                                         size: isMobile ? 10 : 12
                                     },
                                     color: '#333'
+                                }
+                            },
+                            {
+                                label: translations[currentLang].historical_avg || '历史平均值',
+                                type: 'line',
+                                data: historicalAvgData,
+                                borderColor: '#ff6384',
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                pointRadius: 4,
+                                pointBackgroundColor: '#ff6384',
+                                pointBorderColor: '#fff',
+                                pointBorderWidth: 2,
+                                pointHoverRadius: 6,
+                                order: 1,
+                                tension: 0.4,
+                                spanGaps: false,  // 不连接断点
+                                // 不显示折线的数据标签
+                                datalabels: {
+                                    display: false
                                 }
                             }
                         ]
@@ -1844,6 +1900,20 @@
                                 text: translations[currentLang].pallet_hourly_comparison || '26英尺和53英尺车辆装载量时段统计',
                                 font: {
                                     size: isMobile ? 14 : 16
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += Math.round(context.parsed.y).toLocaleString();
+                                        }
+                                        return label;
+                                    }
                                 }
                             },
                             // Add data labels plugin configuration
