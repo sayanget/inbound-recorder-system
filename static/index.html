@@ -1003,6 +1003,8 @@
                 const loadAmountInput = document.getElementById('editLoadAmount');
                 const piecesInput = document.getElementById('editPieces');
 
+                console.log('车型变更:', vehicleType);
+
                 // 根据车辆类型自动设置装载量并计算件数
                 let loadAmount = 0;
                 let pieces = 0;
@@ -1033,6 +1035,9 @@
                 if (loadAmount > 0) {
                     loadAmountInput.value = loadAmount;
                     piecesInput.value = pieces;
+                    console.log('已更新 - 装载量:', loadAmount, '件数:', pieces);
+                } else {
+                    console.log('未自动填充（其他车型）');
                 }
             });
 
@@ -1366,7 +1371,18 @@
                     document.getElementById('editVehicleNo').value = data.vehicle_no || '';
                     // Skip unit field (hidden)
                     document.getElementById('editLoadAmount').value = data.load_amount || '';
-                    // Skip pieces field (hidden)
+
+                    // 根据车型和装载量自动计算件数
+                    const vehicleType = data.vehicle_type || '';
+                    const loadAmount = parseInt(data.load_amount) || 0;
+                    let pieces = data.pieces || 0;
+
+                    // 如果是托盘车型，根据装载量计算件数
+                    if (['26英尺', '53英尺', 'Car', 'Van'].includes(vehicleType) && loadAmount > 0) {
+                        pieces = loadAmount * 100;
+                    }
+
+                    document.getElementById('editPieces').value = pieces;
                     document.getElementById('editTimeSlot').value = data.time_slot || '';
                     document.getElementById('editRemark').value = data.remark || '';
 
