@@ -1473,6 +1473,33 @@ def get_daily_trend():
             conn.close()
             return jsonify([])
         
+        # 美国联邦假期（2025-2026年）
+        US_FEDERAL_HOLIDAYS = {
+            # 2025
+            '2025-01-01': "New Year's Day",
+            '2025-01-20': "Martin Luther King Jr. Day",
+            '2025-02-17': "Presidents' Day",
+            '2025-05-26': "Memorial Day",
+            '2025-07-04': "Independence Day",
+            '2025-09-01': "Labor Day",
+            '2025-10-13': "Columbus Day",
+            '2025-11-11': "Veterans Day",
+            '2025-11-27': "Thanksgiving",
+            '2025-12-25': "Christmas Day",
+            # 2026
+            '2026-01-01': "New Year's Day",
+            '2026-01-19': "Martin Luther King Jr. Day",
+            '2026-02-16': "Presidents' Day",
+            '2026-05-25': "Memorial Day",
+            '2026-07-03': "Independence Day (Observed)",
+            '2026-07-04': "Independence Day",
+            '2026-09-07': "Labor Day",
+            '2026-10-12': "Columbus Day",
+            '2026-11-11': "Veterans Day",
+            '2026-11-26': "Thanksgiving",
+            '2026-12-25': "Christmas Day"
+        }
+        
         # 准备结果数组
         result = []
         
@@ -1506,8 +1533,20 @@ def get_daily_trend():
             total_vehicles = int(row[1]) if row[1] else 0
             total_pallets = int(row[2]) if row[2] else 0
             
+            # 获取星期几 (0=Monday, 6=Sunday)
+            weekday = target_date.weekday()
+            weekday_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            
+            # 检查是否是假期
+            is_holiday = date_str in US_FEDERAL_HOLIDAYS
+            holiday_name = US_FEDERAL_HOLIDAYS.get(date_str, '')
+            
             result.append({
                 'date': target_date.strftime('%Y-%m-%d'),
+                'weekday': weekday_names[weekday],
+                'weekday_num': weekday,  # 0-6
+                'is_holiday': is_holiday,
+                'holiday_name': holiday_name,
                 'total_pieces': total_pieces,
                 'total_vehicles': total_vehicles,
                 'total_pallets': total_pallets
@@ -1520,6 +1559,7 @@ def get_daily_trend():
         if 'conn' in locals():
             conn.close()
         return jsonify({'error': f'获取每日趋势数据出错: {str(e)}'}), 500
+
 
 
 @app.route('/api/week_comparison')

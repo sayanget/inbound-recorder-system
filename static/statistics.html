@@ -2015,10 +2015,33 @@
                 window.dailyTrendChart.destroy();
             }
 
-            const dates = data.map(item => {
+            // 星期几翻译
+            const weekdayTranslations = {
+                'zh': ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                'en': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                'es': ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+            };
+
+            // 生成X轴标签（包含日期、星期、假期）
+            const labels = data.map(item => {
                 const date = new Date(item.date);
-                return `${date.getMonth() + 1}/${date.getDate()}`;
+                const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+
+                // 星期几
+                const weekday = weekdayTranslations[currentLang][item.weekday_num];
+
+                // 假期标注
+                let holiday = '';
+                if (item.is_holiday) {
+                    holiday = currentLang === 'zh' ? ` 🎉${item.holiday_name}` :
+                        currentLang === 'en' ? ` 🎉${item.holiday_name}` :
+                            ` 🎉${item.holiday_name}`;
+                }
+
+                // 返回多行标签：[日期, 星期+假期]
+                return [dateStr, weekday + holiday];
             });
+
             const pieces = data.map(item => item.total_pieces);
             const vehicles = data.map(item => item.total_vehicles);
             const pallets = data.map(item => item.total_pallets);
@@ -2026,7 +2049,7 @@
             window.dailyTrendChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: dates,
+                    labels: labels,
                     datasets: [
                         {
                             label: translations[currentLang].total_cargo || '货物总量',
@@ -2089,6 +2112,16 @@
                         },
                         tooltip: {
                             callbacks: {
+                                title: function (context) {
+                                    // 显示完整日期和假期信息
+                                    const index = context[0].dataIndex;
+                                    const item = data[index];
+                                    const date = new Date(item.date);
+                                    const dateStr = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+                                    const weekday = weekdayTranslations[currentLang][item.weekday_num];
+                                    const holiday = item.is_holiday ? ` (${item.holiday_name})` : '';
+                                    return `${dateStr} ${weekday}${holiday}`;
+                                },
                                 label: function (context) {
                                     let label = context.dataset.label || '';
                                     if (label) {
@@ -2111,6 +2144,17 @@
                         }
                     },
                     scales: {
+                        x: {
+                            ticks: {
+                                // 自动调整标签显示
+                                autoSkip: true,
+                                maxRotation: 45,
+                                minRotation: 0,
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
                         y: {
                             type: 'linear',
                             display: true,
