@@ -1012,19 +1012,19 @@
                 switch (vehicleType) {
                     case '26英尺':
                         loadAmount = 12;
-                        pieces = loadAmount * 100;  // 12 * 100 = 1200
+                        pieces = loadAmount * 344;  // 托盘：12 * 344 = 4128
                         break;
                     case '53英尺':
                         loadAmount = 24;
-                        pieces = loadAmount * 100;  // 24 * 100 = 2400
+                        pieces = loadAmount * 344;  // 托盘：24 * 344 = 8256
                         break;
                     case 'Car':
                         loadAmount = 1;
-                        pieces = loadAmount * 100;  // 1 * 100 = 100
+                        pieces = loadAmount * 172;  // 篮筐：1 * 172 = 172
                         break;
                     case 'Van':
                         loadAmount = 9;
-                        pieces = loadAmount * 100;  // 9 * 100 = 900
+                        pieces = loadAmount * 172;  // 篮筐：9 * 172 = 1548
                         break;
                     default:
                         // 其他类型不自动填充
@@ -1048,8 +1048,12 @@
                 const piecesInput = document.getElementById('editPieces');
 
                 // 根据车型计算件数
-                if (['26英尺', '53英尺', 'Car', 'Van'].includes(vehicleType)) {
-                    piecesInput.value = loadAmount * 100;
+                if (['26英尺', '53英尺'].includes(vehicleType)) {
+                    // 托盘车型：装载量 × 344
+                    piecesInput.value = loadAmount * 344;
+                } else if (['Car', 'Van'].includes(vehicleType)) {
+                    // 篮筐车型：装载量 × 172
+                    piecesInput.value = loadAmount * 172;
                 }
             });
         });
@@ -1377,9 +1381,15 @@
                     const loadAmount = parseInt(data.load_amount) || 0;
                     let pieces = data.pieces || 0;
 
-                    // 如果是托盘车型，根据装载量计算件数
-                    if (['26英尺', '53英尺', 'Car', 'Van'].includes(vehicleType) && loadAmount > 0) {
-                        pieces = loadAmount * 100;
+                    // 如果是托盘或篮筐车型，根据装载量计算件数
+                    if (loadAmount > 0) {
+                        if (['26英尺', '53英尺'].includes(vehicleType)) {
+                            // 托盘车型：装载量 × 344
+                            pieces = loadAmount * 344;
+                        } else if (['Car', 'Van'].includes(vehicleType)) {
+                            // 篮筐车型：装载量 × 172
+                            pieces = loadAmount * 172;
+                        }
                     }
 
                     document.getElementById('editPieces').value = pieces;
@@ -1421,20 +1431,19 @@
             const data = {};
             for (let [key, value] of formData.entries()) {
                 if (key !== 'id') {
-                    // Skip unit and pieces fields
-                    if (['unit', 'pieces'].includes(key)) {
+                    // Skip unit field only (keep pieces field for submission)
+                    if (key === 'unit') {
                         continue;
                     }
                     // Handle numeric fields
-                    if (['dock_no', 'load_amount'].includes(key) && value !== '') {
+                    if (['dock_no', 'load_amount', 'pieces'].includes(key) && value !== '') {
                         data[key] = parseInt(value);
                     } else {
                         data[key] = value;
                     }
                 }
             }
-
-            console.log('Data to send:', data);
+            console.log('Data to be sent:', data);
 
             fetch(`/api/record/${recordId}`, {
                 method: 'PUT',
