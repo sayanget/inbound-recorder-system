@@ -1001,25 +1001,50 @@
             document.getElementById('editVehicleType').addEventListener('change', function (e) {
                 const vehicleType = e.target.value;
                 const loadAmountInput = document.getElementById('editLoadAmount');
+                const piecesInput = document.getElementById('editPieces');
 
-                // 根据车辆类型自动设置装载量
-                // 注意:件数字段在前端是隐藏的,由后端自动计算
+                // 根据车辆类型自动设置装载量并计算件数
+                let loadAmount = 0;
+                let pieces = 0;
+
                 switch (vehicleType) {
                     case '26英尺':
-                        loadAmountInput.value = 12;
+                        loadAmount = 12;
+                        pieces = loadAmount * 100;  // 12 * 100 = 1200
                         break;
                     case '53英尺':
-                        loadAmountInput.value = 24;
+                        loadAmount = 24;
+                        pieces = loadAmount * 100;  // 24 * 100 = 2400
                         break;
                     case 'Car':
-                        loadAmountInput.value = 1;
+                        loadAmount = 1;
+                        pieces = loadAmount * 100;  // 1 * 100 = 100
                         break;
                     case 'Van':
-                        loadAmountInput.value = 9;
+                        loadAmount = 9;
+                        pieces = loadAmount * 100;  // 9 * 100 = 900
                         break;
                     default:
                         // 其他类型不自动填充
                         break;
+                }
+
+                // 更新装载量和件数
+                if (loadAmount > 0) {
+                    loadAmountInput.value = loadAmount;
+                    piecesInput.value = pieces;
+                }
+            });
+
+            // 监听装载量变更，自动计算件数
+            document.getElementById('editLoadAmount').addEventListener('input', function (e) {
+                const vehicleType = document.getElementById('editVehicleType').value;
+                const loadAmount = parseInt(e.target.value) || 0;
+                const piecesInput = document.getElementById('editPieces');
+
+                // 根据车型计算件数
+                if (['26英尺', '53英尺', 'Car', 'Van'].includes(vehicleType)) {
+                    piecesInput.value = loadAmount * 100;
                 }
             });
         });
