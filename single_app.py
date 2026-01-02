@@ -1518,7 +1518,7 @@ def get_daily_trend():
 
 @app.route('/api/week_comparison')
 def get_week_comparison():
-    """获取周环比对比数据"""
+    """获取周环比对比数据（使用自然周：周一00:00到周日23:59）"""
     try:
         # 获取结束日期参数，默认为今天
         end_date_str = request.args.get('end_date')
@@ -1529,42 +1529,52 @@ def get_week_comparison():
         
         conn = sqlite3.connect(DB_PATH)
         
-        # 计算本周和上周的日期范围
-        # 本周：最近7天（包括今天）
-        current_week_start = end_date - timedelta(days=6)
-        current_week_end = end_date + timedelta(days=1)
+        # 辅助函数：获取自然周的起止日期
+        def get_natural_week_range(date):
+            """获取自然周的起止时间（周一到周日）"""
+            # weekday() 返回0-6，0是周一
+            weekday = date.weekday()
+            week_start = date - timedelta(days=weekday)
+            week_end = week_start + timedelta(days=6)
+            return week_start, week_end
         
-        # 上周：再往前7天
-        previous_week_start = current_week_start - timedelta(days=7)
-        previous_week_end = current_week_start
+        # 计算本周和上周的日期范围
+        # 本周：当前日期所在的自然周（周一到周日）
+        current_week_start, current_week_end = get_natural_week_range(end_date)
+        
+        # 上周：上一个自然周
+        previous_week_end_date = current_week_start - timedelta(days=1)
+        previous_week_start, previous_week_end = get_natural_week_range(previous_week_end_date)
         
         # 查询本周数据
+        # 周一00:00:00 到 周日23:59:59
         current_week_query = """
             SELECT 
                 COUNT(*) as vehicle_count,
                 SUM(pieces) as total_pieces
             FROM inbound_records
-            WHERE created_at >= ? AND created_at < ?
+            WHERE created_at >= ? AND created_at <= ?
         """
         cursor = conn.execute(current_week_query, (
             datetime.combine(current_week_start, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S'),
-            datetime.combine(current_week_end, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S')
+            datetime.combine(current_week_end, datetime.max.time()).strftime('%Y-%m-%d %H:%M:%S')
         ))
         current_week_row = cursor.fetchone()
         current_week_vehicles = current_week_row[0] if current_week_row[0] else 0
         current_week_pieces = int(current_week_row[1]) if current_week_row[1] else 0
         
         # 查询上周数据
+        # 上周一00:00:00 到 上周日23:59:59
         previous_week_query = """
             SELECT 
                 COUNT(*) as vehicle_count,
                 SUM(pieces) as total_pieces
             FROM inbound_records
-            WHERE created_at >= ? AND created_at < ?
+            WHERE created_at >= ? AND created_at <= ?
         """
         cursor = conn.execute(previous_week_query, (
             datetime.combine(previous_week_start, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S'),
-            datetime.combine(previous_week_end, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S')
+            datetime.combine(previous_week_end, datetime.max.time()).strftime('%Y-%m-%d %H:%M:%S')
         ))
         previous_week_row = cursor.fetchone()
         previous_week_vehicles = previous_week_row[0] if previous_week_row[0] else 0
@@ -1586,13 +1596,13 @@ def get_week_comparison():
         return jsonify({
             'current_week': {
                 'start_date': current_week_start.strftime('%Y-%m-%d'),
-                'end_date': end_date.strftime('%Y-%m-%d'),
+                'end_date': current_week_end.strftime('%Y-%m-%d'),
                 'vehicle_count': current_week_vehicles,
                 'total_pieces': current_week_pieces
             },
             'previous_week': {
                 'start_date': previous_week_start.strftime('%Y-%m-%d'),
-                'end_date': (previous_week_end - timedelta(days=1)).strftime('%Y-%m-%d'),
+                'end_date': previous_week_end.strftime('%Y-%m-%d'),
                 'vehicle_count': previous_week_vehicles,
                 'total_pieces': previous_week_pieces
             },
@@ -1608,6 +1618,7 @@ def get_week_comparison():
         if 'conn' in locals():
             conn.close()
         return jsonify({'error': f'获取周环比数据出错: {str(e)}'}), 500
+
 
 
 @app.route('/api/export_csv')
