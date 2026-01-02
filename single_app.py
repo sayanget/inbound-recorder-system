@@ -923,11 +923,11 @@ def pallet_hourly_data():
         "count": r[2] if r[2] else 0
     } for r in cur.fetchall()]
     
-    # 查询历史平均值：所有历史数据按时段分组计算平均装载量
+    # 查询历史总和：所有历史数据按时段分组计算装载量总和
     historical_cur = conn.execute("""
         SELECT 
             time_slot,
-            AVG(load_amount) as avg_load_amount,
+            SUM(load_amount) as total_load_amount,
             COUNT(*) as total_count,
             COUNT(DISTINCT DATE(created_at)) as days_count
         FROM inbound_records
@@ -938,20 +938,21 @@ def pallet_hourly_data():
         ORDER BY CAST(time_slot AS INTEGER)
     """)
     
-    historical_avg_rows = [{
+    historical_total_rows = [{
         "time_slot": r[0],
-        "avg_load_amount": round(r[1], 2) if r[1] else 0,
+        "total_load_amount": int(r[1]) if r[1] else 0,
         "total_count": r[2] if r[2] else 0,
         "days_count": r[3] if r[3] else 0
     } for r in historical_cur.fetchall()]
     
     conn.close()
     
-    # 返回包含当天数据和历史平均值的结构
+    # 返回包含当天数据和历史总和的结构
     return jsonify({
         'current_day': current_day_rows,
-        'historical_avg': historical_avg_rows
+        'historical_total': historical_total_rows
     })
+
 
 
 # 新增API：获取按时间段分组的分拣数据
