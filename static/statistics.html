@@ -592,7 +592,7 @@
                 current_week: "本周",
                 previous_week: "上周",
                 change_percent: "环比变化",
-                historical_total: "历史总和"
+                historical_avg: "历史日均值",
             },
             en: {
                 statistics_title: "Inbound Statistics",
@@ -659,7 +659,7 @@
                 current_week: "Current Week",
                 previous_week: "Previous Week",
                 change_percent: "Change %",
-                historical_total: "Historical Total"
+                historical_avg: "Historical Daily Avg",
             },
             es: {
                 statistics_title: "Estadísticas de Entrada",
@@ -1766,7 +1766,7 @@
 
                 // 处理新的数据结构
                 const currentDay = data.current_day || [];
-                const historicalTotal = data.historical_total || [];
+                const historicalAvg = data.historical_avg || [];
 
                 // Check if there is data
                 if (!currentDay || currentDay.length === 0) {
@@ -1788,7 +1788,7 @@
                 // 获取所有时段标签（合并当天和历史数据的时段）
                 const allTimeSlots = new Set();
                 currentDay.forEach(item => allTimeSlots.add(item.time_slot));
-                historicalTotal.forEach(item => allTimeSlots.add(item.time_slot));
+                historicalAvg.forEach(item => allTimeSlots.add(item.time_slot));
                 const timeSlots = Array.from(allTimeSlots).sort((a, b) => {
                     // 数字排序
                     const numA = parseInt(a);
@@ -1802,9 +1802,9 @@
                     currentDayMap[item.time_slot] = item.total_load_amount;
                 });
 
-                const historicalTotalMap = {};
-                historicalTotal.forEach(item => {
-                    historicalTotalMap[item.time_slot] = item.total_load_amount;
+                const historicalAvgMap = {};
+                historicalAvg.forEach(item => {
+                    historicalAvgMap[item.time_slot] = item.avg_load_amount;
                 });
 
                 // 为每个时段填充数据
@@ -1812,12 +1812,12 @@
                 const currentDayData = timeSlots.map(slot =>
                     currentDayMap.hasOwnProperty(slot) ? currentDayMap[slot] : null
                 );
-                const historicalTotalData = timeSlots.map(slot =>
-                    historicalTotalMap.hasOwnProperty(slot) ? historicalTotalMap[slot] : null
+                const historicalAvgData = timeSlots.map(slot =>
+                    historicalAvgMap.hasOwnProperty(slot) ? historicalAvgMap[slot] : null
                 );
 
                 // Calculate max values for setting y-axis range
-                const maxLoadAmount = Math.max(...currentDayData.filter(v => v !== null), ...historicalTotalData.filter(v => v !== null));
+                const maxLoadAmount = Math.max(...currentDayData.filter(v => v !== null), ...historicalAvgData.filter(v => v !== null));
 
                 // Calculate appropriate y-axis max value and step size
                 const loadAmountYAxisMax = Math.ceil(maxLoadAmount / 500) * 500;
@@ -1859,9 +1859,9 @@
                                 }
                             },
                             {
-                                label: translations[currentLang].historical_total || '历史总和',
+                                label: translations[currentLang].historical_avg || '历史日均值',
                                 type: 'line',
-                                data: historicalTotalData,
+                                data: historicalAvgData,
                                 borderColor: '#ff6384',
                                 backgroundColor: 'transparent',
                                 borderWidth: 2,
@@ -1932,12 +1932,9 @@
                         scales: {
                             y: {
                                 beginAtZero: true,
-                                // Set appropriate y-axis range and scale for load amount
-                                min: 0,
-                                max: loadAmountYAxisMax > 0 ? loadAmountYAxisMax : undefined,
+                                // 让Chart.js自动调整Y轴范围
+                                // 不设置固定的max和stepSize，根据数据自动缩放
                                 ticks: {
-                                    // Improve y-axis scale display
-                                    stepSize: loadAmountStepSize > 0 ? loadAmountStepSize : undefined,
                                     callback: function (value) {
                                         // Format y-axis labels, add thousand separators
                                         if (value >= 1000000) {
@@ -1950,8 +1947,8 @@
                                     font: {
                                         size: isMobile ? 10 : 12
                                     },
-                                    // Reduce y-axis label count on mobile devices to avoid crowding
-                                    maxTicksLimit: isMobile ? 5 : 10
+                                    // 减少Y轴标签数量以避免拥挤
+                                    maxTicksLimit: isMobile ? 6 : 8
                                 },
                                 title: {
                                     display: true,
