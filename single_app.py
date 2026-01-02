@@ -1454,26 +1454,31 @@ def get_statistics():
 
 @app.route('/api/daily_trend')
 def get_daily_trend():
-    """获取每日货物趋势数据"""
+    """获取每日货物趋势数据（显示所有有记录的日期）"""
     try:
-        # 获取天数参数，默认7天，最多90天
-        days = int(request.args.get('days', 7))
-        if days > 90:
-            days = 90
-        if days < 1:
-            days = 7
-        
         conn = sqlite3.connect(DB_PATH)
         
-        # 获取当前日期
-        today = datetime.now().date()
+        # 查询数据库中所有有记录的日期（按日期分组）
+        # 使用DATE函数提取日期部分
+        dates_query = """
+            SELECT DISTINCT DATE(created_at) as record_date
+            FROM inbound_records
+            ORDER BY record_date ASC
+        """
+        cursor = conn.execute(dates_query)
+        record_dates = [row[0] for row in cursor.fetchall()]
+        
+        # 如果没有记录，返回空数组
+        if not record_dates:
+            conn.close()
+            return jsonify([])
         
         # 准备结果数组
         result = []
         
-        # 循环获取每一天的数据
-        for i in range(days - 1, -1, -1):  # 从最早的日期到今天
-            target_date = today - timedelta(days=i)
+        # 为每个有记录的日期查询数据
+        for date_str in record_dates:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             next_date = target_date + timedelta(days=1)
             
             # 构建日期范围查询条件
@@ -1515,6 +1520,7 @@ def get_daily_trend():
         if 'conn' in locals():
             conn.close()
         return jsonify({'error': f'获取每日趋势数据出错: {str(e)}'}), 500
+
 
 @app.route('/api/week_comparison')
 def get_week_comparison():

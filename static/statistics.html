@@ -1992,7 +1992,7 @@
 
         // Load daily trend chart data
         function loadDailyTrendData() {
-            fetch('/api/daily_trend?days=7')
+            fetch('/api/daily_trend')
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
