@@ -19,20 +19,34 @@ echo.
 echo ============================================================
 echo.
 
-REM 修改daily_email_report.py临时启用立即发送
-python -c "exec(open('daily_email_report.py', encoding='utf-8').read().replace('schedule_daily_report()', 'send_daily_report()'))"
+REM 直接调用send_daily_report函数
+python -c "import sys; sys.path.insert(0, r'd:\project\inbound_python_source'); from daily_email_report import send_daily_report; send_daily_report()"
 
-echo.
-echo ============================================================
-echo 测试完成
-echo ============================================================
-echo.
-echo 请检查:
-echo 1. 控制台输出是否显示压缩成功
-echo 2. 是否收到邮件
-echo 3. 邮件是否包含两个附件:
-echo    - Excel报表 (daily_report_YYYYMMDD.xlsx)
-echo    - 数据库备份 (inbound_backup_YYYYMMDD.zip)
-echo.
+if errorlevel 1 (
+    echo.
+    echo ============================================================
+    echo 测试失败
+    echo ============================================================
+    echo.
+    echo 可能的原因:
+    echo 1. 邮箱配置不正确
+    echo 2. 网络连接问题
+    echo 3. 数据库文件不存在
+    echo.
+    echo 请查看上面的错误信息
+) else (
+    echo.
+    echo ============================================================
+    echo 测试完成
+    echo ============================================================
+    echo.
+    echo 请检查:
+    echo 1. 控制台输出是否显示压缩成功
+    echo 2. 是否收到邮件
+    echo 3. 邮件是否包含两个附件:
+    echo    - Excel报表 (daily_report_YYYYMMDD.xlsx)
+    echo    - 数据库备份 (inbound_backup_YYYYMMDD.zip)
+    echo.
+)
 
 pause
