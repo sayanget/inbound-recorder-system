@@ -558,11 +558,16 @@ def record():
     # 修正后的时长计算逻辑:
     # 当新车到达时,更新同一道口上一台车的时长
     # 新车的时长为NULL(因为还不知道下一台车什么时候来)
+    # 注意: Car和Van不占用道口,不计算时长
     dock_no = data.get("dock_no")
-    if dock_no:
+    vehicle_type = data.get("vehicle_type")
+    
+    # 只有非Car/Van车型才计算道口占用时长
+    if dock_no and vehicle_type not in ['Car', 'Van']:
+        # 查询同一道口的最后一条非Car/Van记录
         cursor = conn.execute("""
-            SELECT id, created_at FROM inbound_records 
-            WHERE dock_no = ? 
+            SELECT id, created_at, vehicle_type FROM inbound_records 
+            WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van')
             ORDER BY created_at DESC 
             LIMIT 1
         """, (dock_no,))
@@ -571,6 +576,7 @@ def record():
         if last_record:
             try:
                 last_id = last_record[0]
+                last_vehicle_type = last_record[2]
                 # 解析上一条记录的时间
                 last_time = datetime.strptime(last_record[1], '%Y-%m-%d %H:%M:%S')
                 # 计算上一台车的占用时长(分钟)
@@ -586,7 +592,7 @@ def record():
                     SET duration = ? 
                     WHERE id = ?
                 """, (last_duration, last_id))
-                print(f"[INFO] 更新记录ID {last_id} 的时长为 {last_duration} 分钟")
+                print(f"[INFO] 更新记录ID {last_id} ({last_vehicle_type}) 的时长为 {last_duration} 分钟")
             except Exception as e:
                 print(f"计算并更新上一条记录时长时出错: {e}")
     
