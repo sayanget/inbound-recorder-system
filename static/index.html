@@ -493,6 +493,80 @@
                 font-size: 1.2rem;
             }
         }
+
+        /* 实时同步相关样式 */
+        .sync-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: #28a745;
+            margin-left: 10px;
+            padding: 5px 10px;
+            background-color: rgba(40, 167, 69, 0.1);
+            border-radius: 4px;
+        }
+
+        .sync-status.syncing {
+            color: #ffc107;
+            background-color: rgba(255, 193, 7, 0.1);
+        }
+
+        .sync-status.offline {
+            color: #6c757d;
+            background-color: rgba(108, 117, 125, 0.1);
+        }
+
+        .sync-status i {
+            font-size: 8px;
+        }
+
+        .sync-status.syncing i {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* 新记录高亮动画 */
+        .new-record {
+            background-color: #fff3cd !important;
+            animation: highlight-fade 3s ease-out;
+        }
+
+        @keyframes highlight-fade {
+            0% {
+                background-color: #fff3cd;
+            }
+
+            100% {
+                background-color: transparent;
+            }
+        }
+
+        /* 同步按钮状态 */
+        .btn-sync-active {
+            background-color: #28a745;
+        }
+
+        .btn-sync-active:hover {
+            background-color: #218838;
+        }
+
+        .btn-sync-inactive {
+            background-color: #6c757d;
+        }
+
+        .btn-sync-inactive:hover {
+            background-color: #5a6268;
+        }
     </style>
 </head>
 
@@ -662,6 +736,12 @@
                 <button id="exportRecords" class="btn btn-success btn-sm">
                     <i class="fas fa-file-export"></i> <span data-lang="export_records">导出记录</span>
                 </button>
+                <button id="toggleSync" class="btn btn-sync-active btn-sm">
+                    <i class="fas fa-sync-alt"></i> <span id="syncButtonText">实时同步: 开启</span>
+                </button>
+                <span id="syncStatus" class="sync-status">
+                    <i class="fas fa-circle"></i> <span id="syncStatusText">已同步</span>
+                </span>
             </div>
             <div class="table-container">
                 <div id="recordsList"></div>
@@ -713,6 +793,12 @@
                     <div class="edit-form-group">
                         <label for="editTimeSlot" data-lang="time_slot">时间段:</label>
                         <input type="text" id="editTimeSlot" name="time_slot">
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="editDuration" data-lang="duration">时长(分钟):</label>
+                        <input type="text" id="editDuration" name="duration" readonly
+                            style="background-color: #f0f0f0; cursor: not-allowed;" placeholder="自动计算">
+                        <small style="color: #666; font-size: 12px;">时长由系统自动计算,为同一道口上一台车的间隔时间</small>
                     </div>
                     <div class="edit-form-group">
                         <label for="editRemark" data-lang="remarks">备注:</label>
@@ -1146,6 +1232,19 @@
                                 font: {
                                     size: isMobile ? 14 : 16
                                 }
+                            },
+                            // 启用数据标签插件
+                            datalabels: {
+                                anchor: 'end',
+                                align: 'top',
+                                color: '#333',
+                                font: {
+                                    weight: 'bold',
+                                    size: isMobile ? 11 : 13
+                                },
+                                formatter: function (value) {
+                                    return value; // 显示具体数值
+                                }
                             }
                         },
                         scales: {
@@ -1176,7 +1275,8 @@
                                 }
                             }
                         }
-                    }
+                    },
+                    plugins: [ChartDataLabels] // 注册数据标签插件
                 });
                 console.log('Vehicle type chart rendered successfully');
             } catch (error) {
@@ -1211,7 +1311,7 @@
         }
 
         // Update records table
-        function updateRecordsTable(records) {
+        function updateRecordsTable(records, lastId = 0) {
             const recordsList = document.getElementById('recordsList');
 
             if (!records || records.length === 0) {
@@ -1229,6 +1329,7 @@
                             <th>车牌</th>
                             <th>装载</th>
                             <th>时间</th>
+                            <th>时长(分钟)</th>
                             <th>货物件数</th>
                             <th>创建</th>
                             <th>操作</th>
@@ -1238,14 +1339,17 @@
             `;
 
             records.forEach(record => {
+                const isNew = lastId > 0 && record.id > lastId;
+                const rowClass = isNew ? ' class="new-record"' : '';
                 tableHtml += `
-                    <tr>
+                    <tr${rowClass}>
                         <td>${record.id}</td>
                         <td>${record.dock_no || ''}</td>
                         <td>${record.vehicle_type || ''}</td>
                         <td>${record.vehicle_no || ''}</td>
                         <td>${record.load_amount || ''}</td>
                         <td>${record.time_slot || ''}</td>
+                        <td>${record.duration || ''}</td>
                         <td>${record.pieces || 0}</td>
                         <td>${record.created_at || ''}</td>
                         <td>
@@ -1268,6 +1372,15 @@
             `;
 
             recordsList.innerHTML = tableHtml;
+
+            // 3秒后移除高亮
+            if (lastId > 0) {
+                setTimeout(() => {
+                    document.querySelectorAll('.new-record').forEach(row => {
+                        row.classList.remove('new-record');
+                    });
+                }, 3000);
+            }
         }
 
         // Submit new record
@@ -1394,6 +1507,7 @@
 
                     document.getElementById('editPieces').value = pieces;
                     document.getElementById('editTimeSlot').value = data.time_slot || '';
+                    document.getElementById('editDuration').value = data.duration || '';
                     document.getElementById('editRemark').value = data.remark || '';
 
                     // Show modal
@@ -1629,7 +1743,216 @@
         document.addEventListener('DOMContentLoaded', async () => {
             updateNetworkStatus(navigator.onLine);
             await updatePendingCount();
+
+            // 初始化实时同步
+            initRealtimeSync();
         });
+    </script>
+
+    <script>
+        // ==================== 实时数据同步功能 ====================
+
+        // 轮询配置
+        const POLL_INTERVAL = 10000; // 10秒
+        let pollTimer = null;
+        let lastRecordId = 0; // 记录最后一条记录的ID
+        let isSyncEnabled = true; // 同步开关状态
+        let isEditing = false; // 是否正在编辑
+
+        // 初始化实时同步
+        function initRealtimeSync() {
+            // 从localStorage加载用户偏好
+            const savedPref = loadSyncPreference();
+            isSyncEnabled = savedPref;
+            updateSyncButton();
+
+            // 启动轮询
+            if (isSyncEnabled) {
+                startPolling();
+            }
+
+            // 绑定同步开关按钮
+            document.getElementById('toggleSync').addEventListener('click', toggleRealtimeSync);
+
+            // 监听页面可见性变化
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+
+            // 绑定关闭编辑模态框的事件
+            const closeButtons = document.querySelectorAll('#editModal .close-btn, #cancelEdit');
+            closeButtons.forEach(btn => {
+                btn.addEventListener('click', closeEditModal);
+            });
+        }
+
+        // 智能轮询函数
+        function startPolling() {
+            if (!isSyncEnabled || isEditing || !navigator.onLine) {
+                console.log('轮询未启动:', { isSyncEnabled, isEditing, online: navigator.onLine });
+                return;
+            }
+
+            console.log('启动实时同步轮询...');
+
+            // 立即执行一次
+            pollForNewRecords();
+
+            // 设置定时器
+            pollTimer = setInterval(() => {
+                if (document.hidden) {
+                    console.log('页面不可见，跳过本次轮询');
+                    return; // 页面不可见时跳过
+                }
+                pollForNewRecords();
+            }, POLL_INTERVAL);
+        }
+
+        // 停止轮询
+        function stopPolling() {
+            if (pollTimer) {
+                console.log('停止实时同步轮询');
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }
+
+        // 轮询检查新记录
+        function pollForNewRecords() {
+            updateSyncStatus('syncing');
+
+            fetch('/api/list')
+                .then(response => response.json())
+                .then(records => {
+                    if (records && records.length > 0) {
+                        const latestId = records[0].id;
+
+                        if (lastRecordId === 0) {
+                            // 首次加载，不高亮
+                            lastRecordId = latestId;
+                            updateRecordsTable(records);
+                        } else if (latestId > lastRecordId) {
+                            // 有新记录，更新UI并高亮新记录
+                            console.log(`检测到新记录: ${latestId} (上次: ${lastRecordId})`);
+                            updateRecordsTable(records, lastRecordId);
+                            lastRecordId = latestId;
+
+                            // 同时更新统计数据
+                            loadStats();
+                        }
+                    }
+                    updateSyncStatus('synced');
+                })
+                .catch(error => {
+                    console.error('轮询错误:', error);
+                    updateSyncStatus('error');
+                });
+        }
+
+        // 切换实时同步
+        function toggleRealtimeSync() {
+            isSyncEnabled = !isSyncEnabled;
+            saveSyncPreference(isSyncEnabled);
+            updateSyncButton();
+
+            if (isSyncEnabled && !isEditing && navigator.onLine) {
+                startPolling();
+            } else {
+                stopPolling();
+            }
+        }
+
+        // 更新同步按钮状态
+        function updateSyncButton() {
+            const button = document.getElementById('toggleSync');
+            const buttonText = document.getElementById('syncButtonText');
+
+            if (isSyncEnabled) {
+                button.classList.remove('btn-sync-inactive');
+                button.classList.add('btn-sync-active');
+                buttonText.textContent = '实时同步: 开启';
+            } else {
+                button.classList.remove('btn-sync-active');
+                button.classList.add('btn-sync-inactive');
+                buttonText.textContent = '实时同步: 关闭';
+            }
+        }
+
+        // 更新同步状态显示
+        function updateSyncStatus(status) {
+            const statusEl = document.getElementById('syncStatus');
+            const statusText = document.getElementById('syncStatusText');
+
+            statusEl.classList.remove('syncing', 'offline');
+
+            switch (status) {
+                case 'syncing':
+                    statusEl.classList.add('syncing');
+                    statusText.textContent = '同步中...';
+                    break;
+                case 'synced':
+                    statusText.textContent = '已同步';
+                    break;
+                case 'offline':
+                    statusEl.classList.add('offline');
+                    statusText.textContent = '离线';
+                    break;
+                case 'error':
+                    statusEl.classList.add('offline');
+                    statusText.textContent = '同步失败';
+                    break;
+            }
+        }
+
+        // 页面可见性变化处理
+        function handleVisibilityChange() {
+            if (document.hidden) {
+                console.log('页面隐藏，暂停轮询');
+                stopPolling();
+            } else {
+                console.log('页面可见，恢复轮询');
+                if (isSyncEnabled && !isEditing && navigator.onLine) {
+                    startPolling();
+                }
+            }
+        }
+
+        // 保存同步偏好
+        function saveSyncPreference(enabled) {
+            try {
+                localStorage.setItem('realtimeSyncEnabled', enabled.toString());
+            } catch (e) {
+                console.error('保存同步偏好失败:', e);
+            }
+        }
+
+        // 加载同步偏好
+        function loadSyncPreference() {
+            try {
+                const saved = localStorage.getItem('realtimeSyncEnabled');
+                return saved === null ? true : saved === 'true';
+            } catch (e) {
+                console.error('加载同步偏好失败:', e);
+                return true; // 默认开启
+            }
+        }
+
+        // 修改原有的editRecord函数，添加编辑状态标记
+        const originalEditRecord = window.editRecord;
+        window.editRecord = function (recordId) {
+            isEditing = true;
+            stopPolling();
+            console.log('开始编辑，暂停轮询');
+            originalEditRecord(recordId);
+        };
+
+        // 关闭编辑模态框
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+            isEditing = false;
+            console.log('结束编辑，恢复轮询');
+            if (isSyncEnabled && navigator.onLine && !document.hidden) {
+                startPolling();
+            }
+        }
     </script>
 </body>
 

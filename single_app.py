@@ -544,20 +544,56 @@ def record():
     current_time = datetime.now()
     current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
     
-    # 自动判断班次类型：17点之前是早班，17点之后是晚班
+    # 自动判断班次类型:17点之前是早班,17点之后是晚班
     if current_time.hour < 17:
         shift_type = "早班"
     else:
         shift_type = "晚班"
     
-    # 自动填充时间段：如果用户没有提供time_slot，则使用系统当前时间的小时部分
+    # 自动填充时间段:如果用户没有提供time_slot,则使用系统当前时间的小时部分
     time_slot = data.get("time_slot")
     if not time_slot or time_slot == "" or time_slot is None:
         time_slot = str(current_time.hour)
     
+    # 修正后的时长计算逻辑:
+    # 当新车到达时,更新同一道口上一台车的时长
+    # 新车的时长为NULL(因为还不知道下一台车什么时候来)
+    dock_no = data.get("dock_no")
+    if dock_no:
+        cursor = conn.execute("""
+            SELECT id, created_at FROM inbound_records 
+            WHERE dock_no = ? 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """, (dock_no,))
+        last_record = cursor.fetchone()
+        
+        if last_record:
+            try:
+                last_id = last_record[0]
+                # 解析上一条记录的时间
+                last_time = datetime.strptime(last_record[1], '%Y-%m-%d %H:%M:%S')
+                # 计算上一台车的占用时长(分钟)
+                time_diff_seconds = (current_time - last_time).total_seconds()
+                last_duration = int(time_diff_seconds / 60)
+                # 确保时长不为负数
+                if last_duration < 0:
+                    last_duration = 0
+                
+                # 更新上一条记录的时长
+                conn.execute("""
+                    UPDATE inbound_records 
+                    SET duration = ? 
+                    WHERE id = ?
+                """, (last_duration, last_id))
+                print(f"[INFO] 更新记录ID {last_id} 的时长为 {last_duration} 分钟")
+            except Exception as e:
+                print(f"计算并更新上一条记录时长时出错: {e}")
+    
+    # 插入新记录,时长为NULL(车刚到,还不知道会占用多久)
     conn.execute("""INSERT INTO inbound_records
-        (dock_no, vehicle_type, vehicle_no, unit, load_amount, pieces, time_slot, shift_type, remark, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (dock_no, vehicle_type, vehicle_no, unit, load_amount, pieces, time_slot, shift_type, remark, created_at, duration)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)""",
         (data.get("dock_no"), data.get("vehicle_type"), data.get("vehicle_no"),
          data.get("unit"), data.get("load_amount"), data.get("pieces"),
          time_slot, shift_type, data.get("remark"), current_time_str))
@@ -608,11 +644,11 @@ def update_record(record_id):
         print(f"[DEBUG] 原始记录: {old_record}")
         
         cursor = conn.execute("""UPDATE inbound_records SET
-            dock_no=?, vehicle_type=?, vehicle_no=?, unit=?, load_amount=?, pieces=?, time_slot=?, shift_type=?, remark=?
+            dock_no=?, vehicle_type=?, vehicle_no=?, unit=?, load_amount=?, pieces=?, time_slot=?, shift_type=?, remark=?, duration=?
             WHERE id=?""",
             (data.get("dock_no"), data.get("vehicle_type"), data.get("vehicle_no"),
              data.get("unit"), data.get("load_amount"), data.get("pieces"),
-             data.get("time_slot"), shift_type, data.get("remark"), record_id))
+             data.get("time_slot"), shift_type, data.get("remark"), data.get("duration"), record_id))
         
         print(f"[DEBUG] 更新操作影响的行数: {cursor.rowcount}")
         
@@ -770,7 +806,7 @@ def list_data():
     cur=conn.execute("""
         SELECT ir.id, ir.dock_no, ir.vehicle_type, ir.vehicle_no, ir.unit, ir.load_amount,
                ir.pieces, ir.time_slot, ir.shift_type, ir.remark, ir.created_at, ir.created_by,
-               u.username as created_by_username
+               u.username as created_by_username, ir.duration
         FROM inbound_records ir
         LEFT JOIN users u ON ir.created_by = u.id
         WHERE 
@@ -791,7 +827,8 @@ def list_data():
         "time_slot":r[7], "shift_type":r[8], "remark":r[9],
         "created_at":r[10],  # 数据库中存储的是系统时间，直接返回
         "created_by":r[11],  # 创建者用户ID
-        "created_by_username":r[12] or "未知用户"  # 创建者用户名
+        "created_by_username":r[12] or "未知用户",  # 创建者用户名
+        "duration":r[13]  # 时长(分钟)
     } for r in raw_rows]
     
     print(f"[DEBUG] 处理后返回记录数: {len(rows)}")
@@ -1054,7 +1091,7 @@ def get_history():
         # 查询指定日期的入库记录（查询当天00:00之后到次日00:00之前的所有记录）
         inbound_query = """
             SELECT id, dock_no, vehicle_type, vehicle_no, unit, load_amount,
-                   pieces, time_slot, shift_type, remark, created_at
+                   pieces, time_slot, shift_type, remark, created_at, duration
             FROM inbound_records 
             WHERE 
                 created_at >= ? AND created_at < ?
@@ -1068,7 +1105,8 @@ def get_history():
             "id": r[0], "dock_no": r[1], "vehicle_type": r[2], "vehicle_no": r[3],
             "unit": r[4], "load_amount": r[5], "pieces": r[6],
             "time_slot": r[7], "shift_type": r[8], "remark": r[9],
-            "created_at": r[10]  # 数据库中存储的是系统时间，直接返回
+            "created_at": r[10],  # 数据库中存储的是系统时间，直接返回
+            "duration": r[11]  # 时长(分钟)
         } for r in inbound_cur.fetchall()]
         
         # 查询指定日期的分拣记录（按照分拣日期逻辑查询，查询当天00:00之后到次日00:00之前的所有记录）
@@ -1919,7 +1957,7 @@ def export_excel():
         # 查询指定日期的入库记录（查询当天00:00之后到次日00:00之前的所有记录）
         inbound_query = """
             SELECT id, dock_no, vehicle_type, vehicle_no, unit, load_amount,
-                   pieces, time_slot, shift_type, remark, created_at
+                   pieces, time_slot, shift_type, remark, created_at, duration
             FROM inbound_records 
             WHERE 
                 created_at >= ? AND created_at < ?
@@ -1933,7 +1971,8 @@ def export_excel():
             "id": r[0], "dock_no": r[1], "vehicle_type": r[2], "vehicle_no": r[3],
             "unit": r[4], "load_amount": r[5], "pieces": r[6],
             "time_slot": r[7], "shift_type": r[8], "remark": r[9],
-            "created_at": r[10]  # 数据库中存储的是系统时间，直接返回
+            "created_at": r[10],  # 数据库中存储的是系统时间，直接返回
+            "duration": r[11]  # 时长(分钟)
         } for r in inbound_cur.fetchall()]
         
         # 查询指定日期的分拣记录（按照自然日逻辑查询，查询当天00:00之后到次日00:00之前的所有记录）
@@ -1963,7 +2002,7 @@ def export_excel():
         ws1.title = "入库记录"
         
         # 添加表头
-        inbound_headers = ['ID', '码头号', '车辆类型', '车牌号', '单位', '装载量', '件数', '时间段', '班次类型', '备注', '创建时间']
+        inbound_headers = ['ID', '码头号', '车辆类型', '车牌号', '单位', '装载量', '件数', '时间段', '班次类型', '备注', '创建时间', '时长(分钟)']
         ws1.append(inbound_headers)
         
         # 设置表头样式
@@ -1981,7 +2020,8 @@ def export_excel():
             row_data = [
                 row_dict["id"], row_dict["dock_no"], row_dict["vehicle_type"], row_dict["vehicle_no"],
                 row_dict["unit"], row_dict["load_amount"], row_dict["pieces"],
-                row_dict["time_slot"], row_dict["shift_type"], row_dict["remark"], row_dict["created_at"]
+                row_dict["time_slot"], row_dict["shift_type"], row_dict["remark"], row_dict["created_at"],
+                row_dict.get("duration", "")  # 时长(分钟),如果没有则为空
             ]
             ws1.append(row_data)
         
