@@ -1,4 +1,13 @@
 @echo off
+if "%1" neq "hide" (
+    start "" /min cmd /c "%~f0 hide"
+    exit
+)
+
+REM ↓↓↓ 下面才是你原来的脚本内容 ↓↓↓
+echo 正在执行任务...
+
+@echo off
 chcp 65001 > nul
 echo ============================================================
 echo 测试每日报告（包含数据库备份）
@@ -48,5 +57,3 @@ if errorlevel 1 (
     echo    - 数据库备份 (inbound_backup_YYYYMMDD.zip)
     echo.
 )
-
-pause

@@ -2265,7 +2265,8 @@
             fetch('/api/week_comparison')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.error) {
+                    // Check if it's an error object (not an array)
+                    if (data && !Array.isArray(data) && data.error) {
                         console.error('Error loading week comparison data:', data.error);
                         return;
                     }
@@ -2273,6 +2274,20 @@
                 })
                 .catch(error => {
                     console.error('Error fetching week comparison data:', error);
+                    // Show error on chart area
+                    try {
+                        const canvas = document.getElementById('weekComparisonChart');
+                        if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.font = '16px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillStyle = '#dc3545'; // Bootstrap danger color
+                            ctx.fillText(translations[currentLang].error_loading_data || '加载数据出错', canvas.width / 2, canvas.height / 2);
+                        }
+                    } catch (e) {
+                        console.error('Error displaying error message on canvas:', e);
+                    }
                 });
         }
 
@@ -2285,75 +2300,112 @@
                 window.weekComparisonChart.destroy();
             }
 
-            const currentWeekLabel = `${translations[currentLang].current_week || '本周'} (${data.current_week.start_date} ~ ${data.current_week.end_date})`;
-            const previousWeekLabel = `${translations[currentLang].previous_week || '上周'} (${data.previous_week.start_date} ~ ${data.previous_week.end_date})`;
+            if (!data || data.length === 0) {
+                const canvas = document.getElementById('weekComparisonChart');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#6c757d'; // Bootstrap secondary color
+                ctx.fillText(translations[currentLang].no_data || '暂无数据', canvas.width / 2, canvas.height / 2);
+                return;
+            }
 
-            const changePercent = data.change.pieces_change_percent;
-            const changeColor = changePercent >= 0 ? '#4cc9f0' : '#f72585';
+            // Generate labels and data
+            const labels = data.map(week => {
+                // Formatting date range: "MM/DD - MM/DD"
+                const startDate = new Date(week.start_date);
+                const endDate = new Date(week.end_date);
+                const startStr = `${startDate.getMonth() + 1}/${startDate.getDate()}`;
+                const endStr = `${endDate.getMonth() + 1}/${endDate.getDate()}`;
+                return `${startStr}-${endStr}`;
+            });
+
+            const piecesData = data.map(week => week.total_pieces);
+            const vehiclesData = data.map(week => week.vehicle_count);
 
             window.weekComparisonChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: [currentWeekLabel, previousWeekLabel],
-                    datasets: [{
-                        label: translations[currentLang].total_cargo || '货物总量',
-                        data: [data.current_week.total_pieces, data.previous_week.total_pieces],
-                        backgroundColor: ['#4361ee', '#6c757d'],
-                        borderColor: ['#3f37c9', '#5a6268'],
-                        borderWidth: 1
-                    }]
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: translations[currentLang].total_cargo || '货物总量',
+                            data: piecesData,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: translations[currentLang].vehicle_count || '车次',
+                            type: 'line', // Mix line chart for vehicles
+                            data: vehiclesData,
+                            borderColor: '#FF6384',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            tension: 0.1,
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            display: false
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: translations[currentLang].week_comparison_chart || '周环比对比'
                         },
                         tooltip: {
                             callbacks: {
                                 label: function (context) {
-                                    return context.dataset.label + ': ' + context.parsed.y.toLocaleString() + ' 件';
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toLocaleString();
+                                    }
+                                    return label;
                                 },
                                 afterLabel: function (context) {
-                                    if (context.dataIndex === 0) {
-                                        const sign = changePercent >= 0 ? '+' : '';
-                                        return `${translations[currentLang].change_percent || '环比变化'}: ${sign}${changePercent}%`;
+                                    // Show change percentage in tooltip
+                                    const index = context.dataIndex;
+                                    const weekData = data[index];
+                                    if (context.datasetIndex === 0 && weekData.pieces_change_percent !== undefined) { // pieces
+                                        const sign = weekData.pieces_change_percent >= 0 ? '+' : '';
+                                        return `${translations[currentLang].change_percent || '环比变化'}: ${sign}${weekData.pieces_change_percent}%`;
+                                    } else if (context.datasetIndex === 1 && weekData.vehicles_change_percent !== undefined) { // vehicles
+                                        const sign = weekData.vehicles_change_percent >= 0 ? '+' : '';
+                                        return `${translations[currentLang].change_percent || '环比变化'}: ${sign}${weekData.vehicles_change_percent}%`;
                                     }
                                     return '';
                                 }
-                            }
-                        },
-                        datalabels: {
-                            anchor: 'end',
-                            align: 'top',
-                            formatter: function (value, context) {
-                                if (context.dataIndex === 0) {
-                                    const sign = changePercent >= 0 ? '+' : '';
-                                    return `${value.toLocaleString()}\n(${sign}${changePercent}%)`;
-                                }
-                                return value.toLocaleString();
-                            },
-                            color: function (context) {
-                                return context.dataIndex === 0 ? changeColor : '#333';
-                            },
-                            font: {
-                                weight: 'bold',
-                                size: 12
                             }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            suggestedMax: function (context) {
-                                const maxValue = Math.max(...context.chart.data.datasets[0].data);
-                                return maxValue * 1.2; // 增加20%的空间给数据标签
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: translations[currentLang].pieces || '件数'
+                            }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false
                             },
-                            ticks: {
-                                callback: function (value) {
-                                    return value.toLocaleString();
-                                }
+                            title: {
+                                display: true,
+                                text: translations[currentLang].vehicle_count || '车次'
                             }
                         }
                     }
