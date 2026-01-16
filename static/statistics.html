@@ -396,6 +396,14 @@
             </div>
         </div>
 
+        <!-- Forecast vs Actual Comparison Chart -->
+        <div class="stats-section">
+            <h3 data-lang="forecast_vs_actual_title">揽收预估与实际入库对比（历史数据）</h3>
+            <div class="chart-container">
+                <canvas id="forecastVsActualChart"></canvas>
+            </div>
+        </div>
+
         <!-- Statistics summary -->
         <div class="stats-section">
             <h3 data-lang="statistics_summary">统计摘要</h3>
@@ -593,6 +601,10 @@
                 previous_week: "上周",
                 change_percent: "环比变化",
                 historical_avg: "历史日均值",
+                forecast_vs_actual_title: "揽收预估与实际入库对比（历史数据）",
+                forecast_value: "预估值",
+                actual_value: "实际值",
+                difference_percent: "差异百分比",
             },
             en: {
                 statistics_title: "Inbound Statistics",
@@ -660,6 +672,10 @@
                 previous_week: "Previous Week",
                 change_percent: "Change %",
                 historical_avg: "Historical Daily Avg",
+                forecast_vs_actual_title: "Forecast vs Actual Comparison (All Historical Data)",
+                forecast_value: "Forecast",
+                actual_value: "Actual",
+                difference_percent: "Difference %",
             },
             es: {
                 statistics_title: "Estadísticas de Entrada",
@@ -725,7 +741,12 @@
                 week_comparison_chart: "Comparación Semanal",
                 current_week: "Semana Actual",
                 previous_week: "Semana Anterior",
-                change_percent: "Cambio %"
+                change_percent: "Cambio %",
+                historical_avg: "Promedio Diario Histórico",
+                forecast_vs_actual_title: "Comparación de Previsión vs Real (Todos los Datos Históricos)",
+                forecast_value: "Previsión",
+                actual_value: "Real",
+                difference_percent: "Diferencia %",
             }
         };
 
@@ -781,6 +802,30 @@
 
         // Current selected date
         let currentDate = null;
+
+        // Convert exact number to range display
+        // For example: 1,232,342 -> "1,230,000-1,240,000"
+        function convertToRange(value) {
+            if (!value || value === 0) {
+                return '0';
+            }
+
+            // For all numbers >= 10,000, round to nearest 10,000 (万位)
+            // Lower bound: round down to 万位 (千百十个位都取0)
+            // Upper bound: round up to 万位 (千百十个位都取0)
+            const roundTo = 10000;
+
+            if (value >= roundTo) {
+                // Calculate lower and upper bounds
+                const lowerBound = Math.floor(value / roundTo) * roundTo;
+                const upperBound = Math.ceil(value / roundTo) * roundTo;
+
+                return lowerBound.toLocaleString() + '-' + upperBound.toLocaleString();
+            } else {
+                // For small numbers (< 10,000), just return the value
+                return value.toLocaleString();
+            }
+        }
 
         // Check login status and update UI
         function checkLoginStatus() {
@@ -1028,7 +1073,8 @@
                     loadedStatsData = data;
                     // Update summary statistics
                     document.getElementById('totalVehicles').textContent = data.total_vehicles || 0;
-                    document.getElementById('totalPieces').textContent = data.total_pieces || 0;
+                    // Display total pieces as a range instead of exact number
+                    document.getElementById('totalPieces').textContent = convertToRange(data.total_pieces || 0);
                     document.getElementById('totalPallets').textContent = data.total_pallets || 0;
                     document.getElementById('vehicles19to20').textContent = data.vehicles_19_to_20 || 0;
                     document.getElementById('vehicles20to21').textContent = data.vehicles_20_to_21 || 0;
@@ -2431,7 +2477,184 @@
         window.addEventListener('load', function () {
             loadDailyTrendData();
             loadWeekComparisonData();
+            loadForecastVsActual();
+
+            // Poll for updates every 30 seconds
+            setInterval(loadForecastVsActual, 30000);
         });
+
+        // Load forecast vs actual comparison data
+        function loadForecastVsActual() {
+            // console.log('Starting to load forecast vs actual data...');
+            fetch('/api/forecast_vs_actual')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // console.log('Data received:', data);
+                    if (!data || !data.dates || data.dates.length === 0) {
+                        console.warn('No data received for forecast chart');
+                        const canvas = document.getElementById('forecastVsActualChart');
+                        if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            ctx.font = '14px Arial';
+                            ctx.fillStyle = 'black';
+                            ctx.fillText('暂无数据 / No Data', 10, 50);
+                        }
+                        return;
+                    }
+                    renderForecastVsActualChart(data);
+                })
+                .catch(error => {
+                    console.error('Error loading forecast vs actual data:', error);
+                    showMessage('Load Error: ' + error.message, 'error');
+                });
+        }
+
+        // Render forecast vs actual comparison chart
+        function renderForecastVsActualChart(data) {
+            try {
+                const canvas = document.getElementById('forecastVsActualChart');
+                if (!canvas) {
+                    console.error('Canvas element forecastVsActualChart not found');
+                    return;
+                }
+
+                // Ensure canvas has size
+                if (canvas.height === 0) canvas.height = 300;
+
+                const ctx = canvas.getContext('2d');
+
+                // Check if Chart is defined
+                if (typeof Chart === 'undefined') {
+                    throw new Error('Chart.js library not loaded');
+                }
+
+                // Update existing chart if it exists
+                if (window.forecastChartInstance) {
+                    window.forecastChartInstance.data.labels = data.dates;
+                    window.forecastChartInstance.data.datasets[0].data = data.forecast;
+                    window.forecastChartInstance.data.datasets[1].data = data.actual;
+                    window.forecastChartInstance.data.datasets[2].data = data.difference_percent;
+                    window.forecastChartInstance.update();
+                    return;
+                }
+
+                // Create new chart
+                window.forecastChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.dates,
+                        datasets: [
+                            {
+                                label: translations[currentLang].forecast_value,
+                                data: data.forecast,
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1,
+                                yAxisID: 'y',
+                                order: 2
+                            },
+                            {
+                                label: translations[currentLang].actual_value,
+                                data: data.actual,
+                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1,
+                                yAxisID: 'y',
+                                order: 1
+                            },
+                            {
+                                label: translations[currentLang].difference_percent,
+                                data: data.difference_percent,
+                                type: 'line',
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                borderWidth: 2,
+                                yAxisID: 'y1',
+                                tension: 0.3,
+                                order: 0
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            title: {
+                                display: true,
+                                text: translations[currentLang].forecast_vs_actual_title
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            if (context.dataset.type === 'line') {
+                                                label += context.parsed.y + '%';
+                                            } else {
+                                                label += context.parsed.y;
+                                            }
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: translations[currentLang].pieces || '件数'
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                grid: {
+                                    drawOnChartArea: true, // Enable grid lines to draw the zero line
+                                    color: function (context) {
+                                        if (context.tick.value === 0) {
+                                            return '#28a745'; // Green color for 0 line
+                                        }
+                                        return 'transparent'; // Hide other grid lines
+                                    },
+                                    lineWidth: function (context) {
+                                        if (context.tick.value === 0) {
+                                            return 2; // Thicker line for 0
+                                        }
+                                        return 0;
+                                    }
+                                },
+                                title: {
+                                    display: true,
+                                    text: translations[currentLang].difference_percent + ' (%)'
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error('Render Chart Error:', err);
+                showMessage('Render Chart Error: ' + err.message, 'error');
+            }
+        }
+
     </script>
 </body>
 

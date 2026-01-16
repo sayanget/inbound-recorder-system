@@ -61,6 +61,17 @@ def get_static_dir():
 # 定义洛杉矶时区
 LA_TZ = pytz.timezone('America/Los_Angeles')
 
+def round_to_ten_thousand(value):
+    """
+    将数值向下取整到万位(千百十个位全部为0)
+    例如: 1,232,342 -> 1,230,000
+         987,654 -> 980,000
+         45,678 -> 40,000
+    """
+    if value is None:
+        return 0
+    return (int(value) // 10000) * 10000
+
 def init_db():
     need = not os.path.exists(DB_PATH)
     conn = sqlite3.connect(DB_PATH)
@@ -506,6 +517,59 @@ def no_permission():
         return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
     else:
         return f"File not found: {file_path}", 404
+
+# 检查重复记录的API端点
+@app.route('/api/check_duplicate', methods=['POST'])
+def check_duplicate():
+    data = request.json
+    dock_no = data.get("dock_no")
+    vehicle_type = data.get("vehicle_type")
+    
+    # Car 和 Van 不检查重复
+    if vehicle_type in ['Car', 'Van']:
+        return jsonify({"is_duplicate": False})
+    
+    if not dock_no:
+        return jsonify({"is_duplicate": False})
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.execute("""
+        SELECT id, vehicle_type, vehicle_no, created_at 
+        FROM inbound_records 
+        WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van')
+        ORDER BY created_at DESC 
+        LIMIT 1
+    """, (dock_no,))
+    
+    last_record = cursor.fetchone()
+    conn.close()
+    
+    if not last_record:
+        return jsonify({"is_duplicate": False})
+    
+    # 计算时间差
+    try:
+        last_time = datetime.strptime(last_record[3], '%Y-%m-%d %H:%M:%S')
+        current_time = datetime.now()
+        time_diff_seconds = (current_time - last_time).total_seconds()
+        time_diff_minutes = int(time_diff_seconds / 60)
+        
+        if time_diff_minutes < 25:
+            return jsonify({
+                "is_duplicate": True,
+                "time_diff_minutes": time_diff_minutes,
+                "last_record": {
+                    "id": last_record[0],
+                    "vehicle_type": last_record[1],
+                    "vehicle_no": last_record[2] or "无",
+                    "created_at": last_record[3]
+                }
+            })
+    except Exception as e:
+        print(f"检查重复记录时出错: {e}")
+        return jsonify({"is_duplicate": False})
+    
+    return jsonify({"is_duplicate": False})
 
 @app.route('/api/record', methods=['POST'])
 def record():
@@ -1342,6 +1406,74 @@ def delete_sorting_record(record_id):
             except:
                 pass
 
+# 获取揽收预估与实际入库对比数据
+@app.route('/api/forecast_vs_actual')
+def forecast_vs_actual():
+    conn = sqlite3.connect(DB_PATH)
+    
+    # 查询所有有预估数据的日期，按日期升序排列
+    forecast_dates_cur = conn.execute("""
+        SELECT forecast_date, forecast_amount 
+        FROM pickup_forecast 
+        ORDER BY forecast_date ASC
+    """)
+    
+    forecast_records = forecast_dates_cur.fetchall()
+    
+    dates = []
+    forecast_data = []
+    actual_data = []
+    difference_percent = []
+    
+    # 遍历所有有预估数据的日期
+    for record in forecast_records:
+        date_str = record[0]
+        forecast_val = record[1]
+        
+        dates.append(date_str)
+        forecast_data.append(forecast_val)
+        
+        # 查询该日期的实际入库数据
+        try:
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            day_start = datetime.combine(date, datetime.min.time())
+            next_day = date + timedelta(days=1)
+            day_end = datetime.combine(next_day, datetime.min.time())
+            
+            actual_cur = conn.execute("""
+                SELECT SUM(CASE 
+                    WHEN vehicle_type = '53英尺' AND vehicle_no = 'G' THEN 0 
+                    ELSE pieces 
+                END) as total_pieces
+                FROM inbound_records
+                WHERE created_at >= ? AND created_at < ?
+            """, (day_start.strftime('%Y-%m-%d %H:%M:%S'), 
+                  day_end.strftime('%Y-%m-%d %H:%M:%S')))
+            
+            actual_row = actual_cur.fetchone()
+            actual_val = int(actual_row[0]) if actual_row and actual_row[0] else 0
+            actual_data.append(actual_val)
+            
+            # 计算差异百分比
+            if forecast_val > 0:
+                diff_pct = round((actual_val - forecast_val) / forecast_val * 100, 1)
+            else:
+                diff_pct = 0
+            difference_percent.append(diff_pct)
+        except Exception as e:
+            print(f"处理日期 {date_str} 时出错: {e}")
+            actual_data.append(0)
+            difference_percent.append(0)
+    
+    conn.close()
+    
+    return jsonify({
+        "dates": dates,
+        "forecast": forecast_data,
+        "actual": actual_data,
+        "difference_percent": difference_percent
+    })
+
 @app.route('/api/stats')
 def get_statistics():
     # 获取日期参数，默认为今天
@@ -1613,7 +1745,8 @@ def get_daily_trend():
                 day_end.strftime('%Y-%m-%d %H:%M:%S')
             ))
             row = cursor.fetchone()
-            total_pieces = int(row[0]) if row[0] else 0
+            # 应用取整规则：千百十个位全部为0
+            total_pieces = round_to_ten_thousand(row[0])
             total_vehicles = int(row[1]) if row[1] else 0
             total_pallets = int(row[2]) if row[2] else 0
             
@@ -1707,7 +1840,8 @@ def get_week_comparison():
             
             row = cursor.fetchone()
             vehicle_count = row[0] if row[0] else 0
-            total_pieces = int(row[1]) if row[1] else 0
+            # 应用取整规则：千百十个位全部为0
+            total_pieces = round_to_ten_thousand(row[1])
             
             # 计算环比（如果不是第一周）
             pieces_change_percent = 0
