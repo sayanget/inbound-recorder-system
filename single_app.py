@@ -1967,10 +1967,18 @@ def get_week_comparison():
             return jsonify([])  # 没有数据
             
         # 解析最小日期
+        # 解析最小日期
         try:
-            min_date = datetime.strptime(min_str.split(' ')[0], '%Y-%m-%d').date()
-        except Exception:
-            # 如果解析失败，回退到当前日期（不应该发生）
+            if hasattr(min_str, 'date'): # 检查是否为 datetime/date 对象
+                min_date = min_str.date() if hasattr(min_str, 'date') and callable(min_str.date) else min_str
+                # 如果是 datetime 对象，它有 date() 方法；如果是 date 对象，它就是 date
+                if isinstance(min_date, datetime):
+                     min_date = min_date.date()
+            else:
+                # 字符串处理
+                min_date = datetime.strptime(str(min_str).split(' ')[0], '%Y-%m-%d').date()
+        except Exception as e:
+            print(f"解析最小日期出错: {e}, 使用当前日期")
             min_date = datetime.now().date()
             
         # 设置最大日期为今天（确保显示到本周）
