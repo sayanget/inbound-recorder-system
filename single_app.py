@@ -51,11 +51,14 @@ def get_db():
     """获取数据库连接 - 自动适配 SQLite/PostgreSQL"""
     if USE_POSTGRES:
         import psycopg2
-        from psycopg2.extras import RealDictCursor
+        # 使用 DictCursor 替代 RealDictCursor
+        # DictCursor 返回的行对象同时支持 索引访问(row[0]) 和 键访问(row['id'])
+        # 这完美兼容了我们现有的代码 (混合使用了两种访问方式)
+        from psycopg2.extras import DictCursor
         from database import DATABASE_URL
         
         # 创建原始连接
-        original_conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        original_conn = psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
         
         # 创建连接包装类
         class ConnectionWrapper:
