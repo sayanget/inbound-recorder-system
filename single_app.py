@@ -108,7 +108,9 @@ def init_db():
                     WHERE table_name = 'inbound_records'
                 )
             """)
-            need = not cursor.fetchone()[0]
+            result = cursor.fetchone()
+            # PostgreSQL RealDictCursor 返回字典,需要用列名访问
+            need = not result['exists'] if USE_POSTGRES else not result[0]
         else:
             need = not os.path.exists(DB_PATH)
         
