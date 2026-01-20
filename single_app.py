@@ -697,7 +697,10 @@ def check_duplicate():
     
     # 计算时间差
     try:
-        last_time = datetime.strptime(last_record[3], '%Y-%m-%d %H:%M:%S')
+        if isinstance(last_record[3], str):
+            last_time = datetime.strptime(last_record[3], '%Y-%m-%d %H:%M:%S')
+        else:
+            last_time = last_record[3]
         current_time = datetime.now()
         time_diff_seconds = (current_time - last_time).total_seconds()
         time_diff_minutes = int(time_diff_seconds / 60)
@@ -1783,7 +1786,10 @@ def get_statistics():
             if created_at_str:
                 try:
                     # 将UTC时间字符串转换为datetime对象
-                    utc_time = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S')
+                    if isinstance(created_at_str, str):
+                        utc_time = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S')
+                    else:
+                        utc_time = created_at_str
                     utc_time = pytz.utc.localize(utc_time)
                     # 转换为系统本地时间（修改这里）
                     local_time = utc_time.astimezone()
