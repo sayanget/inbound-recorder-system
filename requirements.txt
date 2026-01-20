@@ -1,4 +1,12 @@
+# 核心依赖 (本地和生产都需要)
 Flask==2.3.3
 openpyxl==3.1.2
 pytz==2023.3
 schedule==1.2.0
+python-dotenv==1.0.0
+
+# 生产环境依赖 (仅 Zeabur 部署需要)
+# 本地开发不需要安装以下依赖
+# psycopg2-binary==2.9.9
+# gunicorn==21.2.0
+# Flask-Session==0.5.0

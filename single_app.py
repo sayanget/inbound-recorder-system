@@ -13,6 +13,9 @@ import json
 import hashlib
 import functools
 
+# 数据库抽象层 - 自动适配 SQLite/PostgreSQL
+from database import get_db_connection, convert_sql, get_placeholder, USE_POSTGRES
+
 app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
@@ -73,166 +76,179 @@ def round_to_ten_thousand(value):
     return (int(value) // 10000) * 10000
 
 def init_db():
-    need = not os.path.exists(DB_PATH)
-    conn = sqlite3.connect(DB_PATH)
-    if need:
-        conn.execute("""CREATE TABLE inbound_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            dock_no INTEGER,
-            vehicle_type TEXT,
-            vehicle_no TEXT,
-            unit TEXT,
-            load_amount INTEGER,
-            pieces INTEGER,
-            time_slot TEXT,
-            shift_type TEXT,
-            remark TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );""")
+    """初始化数据库 - 自动适配 SQLite/PostgreSQL"""
+    # 使用数据库抽象层
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
         
-        # 创建分拣记录表
-        conn.execute("""CREATE TABLE sorting_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sorting_time DATETIME,
-            pieces INTEGER,
-            remark TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );""")
+        # 检查表是否存在 (PostgreSQL 和 SQLite 语法不同)
+        if USE_POSTGRES:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'inbound_records'
+                )
+            """)
+            need = not cursor.fetchone()[0]
+        else:
+            need = not os.path.exists(DB_PATH)
         
-        # 创建操作日志表
-        conn.execute("""CREATE TABLE operation_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            operation_type TEXT,  -- 'edit' 或 'delete'
-            table_name TEXT,      -- 'inbound_records' 或 'sorting_records'
-            record_id INTEGER,    -- 被操作记录的ID
-            old_data TEXT,        -- 修改前的数据（JSON格式）
-            new_data TEXT,        -- 修改后的数据（JSON格式）
-            operator TEXT,        -- 操作人（可选）
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );""")
+        if need:
+            # 创建入库记录表
+            sql = convert_sql("""CREATE TABLE inbound_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dock_no INTEGER,
+                vehicle_type TEXT,
+                vehicle_no TEXT,
+                unit TEXT,
+                load_amount INTEGER,
+                pieces INTEGER,
+                time_slot TEXT,
+                shift_type TEXT,
+                remark TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );""")
+            cursor.execute(sql)
         
-        # 创建揽收预估数据表
-        conn.execute("""CREATE TABLE pickup_forecast (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            forecast_date DATE NOT NULL,  -- 预估日期
-            forecast_amount INTEGER NOT NULL,  -- 预估数量
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );""")
-        
-        # 创建分拣记录表
-        conn.execute("""CREATE TABLE IF NOT EXISTS sorting_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sorting_time DATE,  -- 分拣日期
-            pieces INTEGER,     -- 件数
-            remark TEXT,        -- 备注
-            time_slot TEXT,     -- 时间段
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );""")
-        
-        # 创建用户表
-        conn.execute("""CREATE TABLE users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT DEFAULT 'user',  -- 'admin' 或 'user'
-            is_active BOOLEAN DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );""")
-        
-        # 创建用户权限表
-        conn.execute("""CREATE TABLE user_permissions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            page_name TEXT NOT NULL,  -- 'index', 'sorting', 'history', 'statistics', 'logs'
-            can_view BOOLEAN DEFAULT 0,
-            can_edit BOOLEAN DEFAULT 0,
-            can_delete BOOLEAN DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-        );""")
-        
-        # 插入默认管理员用户 (用户名: admin, 密码: admin123)
-        import hashlib
-        admin_password = hashlib.sha256("admin123".encode()).hexdigest()
-        conn.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-                    ("admin", admin_password, "admin"))
-        
-        # 为管理员用户设置默认权限
-        cursor = conn.execute("SELECT id FROM users WHERE username = ?", ("admin",))
-        admin_user_id = cursor.fetchone()[0]
-        
-        # 管理员拥有所有页面的所有权限
-        pages = ['index', 'sorting', 'history', 'statistics', 'logs']
-        for page in pages:
-            conn.execute("""INSERT INTO user_permissions 
-                (user_id, page_name, can_view, can_edit, can_delete) 
-                VALUES (?, ?, 1, 1, 1)""", 
-                (admin_user_id, page))
-    else:
-        # 如果数据库已存在，检查并创建用户表和权限表（如果不存在）
-        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-        if not cursor.fetchone():
+            # 创建分拣记录表
+            sql = convert_sql("""CREATE TABLE sorting_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sorting_time DATETIME,
+                pieces INTEGER,
+                remark TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );""")
+            cursor.execute(sql)
+            
+            # 创建操作日志表
+            sql = convert_sql("""CREATE TABLE operation_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                operation_type TEXT,
+                table_name TEXT,
+                record_id INTEGER,
+                old_data TEXT,
+                new_data TEXT,
+                operator TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );""")
+            cursor.execute(sql)
+            
+            # 创建揽收预估数据表
+            sql = convert_sql("""CREATE TABLE pickup_forecast (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                forecast_date DATE NOT NULL,
+                forecast_amount INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );""")
+            cursor.execute(sql)
+            
             # 创建用户表
-            conn.execute("""CREATE TABLE users (
+            sql = convert_sql("""CREATE TABLE users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                role TEXT DEFAULT 'user',  -- 'admin' 或 'user'
+                role TEXT DEFAULT 'user',
                 is_active BOOLEAN DEFAULT 1,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );""")
+            cursor.execute(sql)
             
             # 创建用户权限表
-            conn.execute("""CREATE TABLE user_permissions (
+            sql = convert_sql("""CREATE TABLE user_permissions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
-                page_name TEXT NOT NULL,  -- 'index', 'sorting', 'history', 'statistics', 'logs'
+                page_name TEXT NOT NULL,
                 can_view BOOLEAN DEFAULT 0,
                 can_edit BOOLEAN DEFAULT 0,
                 can_delete BOOLEAN DEFAULT 0,
                 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
             );""")
-            
+            cursor.execute(sql)
+        
             # 插入默认管理员用户 (用户名: admin, 密码: admin123)
             import hashlib
             admin_password = hashlib.sha256("admin123".encode()).hexdigest()
-            conn.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+            placeholder = get_placeholder()
+            cursor.execute(f"INSERT INTO users (username, password_hash, role) VALUES ({placeholder}, {placeholder}, {placeholder})",
                         ("admin", admin_password, "admin"))
             
             # 为管理员用户设置默认权限
-            cursor = conn.execute("SELECT id FROM users WHERE username = ?", ("admin",))
-            admin_user_id = cursor.fetchone()[0]
+            cursor.execute(f"SELECT id FROM users WHERE username = {placeholder}", ("admin",))
+            result = cursor.fetchone()
+            admin_user_id = result[0] if USE_POSTGRES else result[0]
             
             # 管理员拥有所有页面的所有权限
             pages = ['index', 'sorting', 'history', 'statistics', 'logs']
             for page in pages:
-                conn.execute("""INSERT INTO user_permissions 
+                cursor.execute(f"""INSERT INTO user_permissions 
                     (user_id, page_name, can_view, can_edit, can_delete) 
-                    VALUES (?, ?, 1, 1, 1)""", 
+                    VALUES ({placeholder}, {placeholder}, 1, 1, 1)""", 
                     (admin_user_id, page))
-        
-        # 检查并创建揽收预估数据表（如果不存在）
-        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pickup_forecast'")
-        if not cursor.fetchone():
-            conn.execute("""CREATE TABLE pickup_forecast (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                forecast_date DATE NOT NULL,  -- 预估日期
-                forecast_amount INTEGER NOT NULL,  -- 预估数量
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );""")
+        else:
+            # 如果数据库已存在，检查并创建用户表和权限表（如果不存在）
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            if not cursor.fetchone():
+                # 创建用户表
+                conn.execute("""CREATE TABLE users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT DEFAULT 'user',  -- 'admin' 或 'user'
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );""")
+                
+                # 创建用户权限表
+                conn.execute("""CREATE TABLE user_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    page_name TEXT NOT NULL,  -- 'index', 'sorting', 'history', 'statistics', 'logs'
+                    can_view BOOLEAN DEFAULT 0,
+                    can_edit BOOLEAN DEFAULT 0,
+                    can_delete BOOLEAN DEFAULT 0,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                );""")
+                
+                # 插入默认管理员用户 (用户名: admin, 密码: admin123)
+                import hashlib
+                admin_password = hashlib.sha256("admin123".encode()).hexdigest()
+                conn.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                            ("admin", admin_password, "admin"))
+                
+                # 为管理员用户设置默认权限
+                cursor = conn.execute("SELECT id FROM users WHERE username = ?", ("admin",))
+                admin_user_id = cursor.fetchone()[0]
+                
+                # 管理员拥有所有页面的所有权限
+                pages = ['index', 'sorting', 'history', 'statistics', 'logs']
+                for page in pages:
+                    conn.execute("""INSERT INTO user_permissions 
+                        (user_id, page_name, can_view, can_edit, can_delete) 
+                        VALUES (?, ?, 1, 1, 1)""", 
+                        (admin_user_id, page))
             
-            # 创建分拣记录表
-            conn.execute("""CREATE TABLE IF NOT EXISTS sorting_records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sorting_time DATE,  -- 分拣日期
-                pieces INTEGER,     -- 件数
-                remark TEXT,        -- 备注
-                time_slot TEXT,     -- 时间段
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );""")
-    conn.commit()
-    conn.close()
+            # 检查并创建揽收预估数据表（如果不存在）
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pickup_forecast'")
+            if not cursor.fetchone():
+                conn.execute("""CREATE TABLE pickup_forecast (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    forecast_date DATE NOT NULL,  -- 预估日期
+                    forecast_amount INTEGER NOT NULL,  -- 预估数量
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );""")
+                
+                # 创建分拣记录表
+                conn.execute("""CREATE TABLE IF NOT EXISTS sorting_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sorting_time DATE,  -- 分拣日期
+                    pieces INTEGER,     -- 件数
+                    remark TEXT,        -- 备注
+                    time_slot TEXT,     -- 时间段
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );""")
+
 
 def convert_utc_to_la(utc_time_str):
     """直接返回时间字符串，因为数据库中存储的已经是洛杉矶时间"""
