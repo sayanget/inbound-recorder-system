@@ -1583,7 +1583,11 @@ def forecast_vs_actual():
         
         # 查询该日期的实际入库数据
         try:
-            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            # 兼容处理: PostgreSQL 可能直接返回 date 对象, SQLite 返回字符串
+            if isinstance(date_str, str):
+                date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            else:
+                date = date_str # 假设是 date 或 datetime 对象
             day_start = datetime.combine(date, datetime.min.time())
             next_day = date + timedelta(days=1)
             day_end = datetime.combine(next_day, datetime.min.time())
