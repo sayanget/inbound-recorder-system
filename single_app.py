@@ -47,6 +47,25 @@ DB_PATH = os.environ.get('DATABASE_PATH') or get_db_path()
 HOST = os.environ.get('HOST', '0.0.0.0')
 PORT = int(os.environ.get('PORT', 8080))
 
+# 应用初始化标志
+_app_initialized = False
+
+def initialize_app():
+    """初始化应用 - 确保在 Gunicorn 环境下也能正确初始化"""
+    global _app_initialized
+    if not _app_initialized:
+        try:
+            print("[应用初始化] 开始初始化数据库...")
+            init_db()
+            print("[应用初始化] 数据库初始化完成")
+            _app_initialized = True
+        except Exception as e:
+            print(f"[应用初始化] 错误: {e}")
+            import traceback
+            traceback.print_exc()
+            # 不要抛出异常,让应用继续启动
+            # 这样可以看到更详细的错误信息
+
 # 获取正确的静态文件目录
 def get_static_dir():
     if getattr(sys, 'frozen', False):
@@ -2842,6 +2861,17 @@ def get_pickup_forecast():
             return jsonify({'amount': 0})  # 如果没有预估数据，返回0
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# 模块级别初始化 - Gunicorn 导入模块时会执行
+# 这确保数据库在应用启动时被初始化
+print("[模块加载] 开始初始化应用...")
+try:
+    initialize_app()
+    print("[模块加载] 应用初始化成功")
+except Exception as e:
+    print(f"[模块加载] 警告: 初始化失败 - {e}")
+    import traceback
+    traceback.print_exc()
 
 if __name__ == "__main__":
     init_db()
