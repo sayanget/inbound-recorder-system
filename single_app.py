@@ -61,6 +61,12 @@ def get_db():
         conn.row_factory = sqlite3.Row
         return conn
 
+def convert_query_placeholders(query):
+    """转换 SQL 查询占位符 - SQLite 的 ? 转为 PostgreSQL 的 %s"""
+    if USE_POSTGRES:
+        return query.replace('?', '%s')
+    return query
+
 # 定义洛杉矶时区
 LA_TZ = pytz.timezone('America/Los_Angeles')
 
@@ -874,7 +880,7 @@ def get_record(record_id):
     """获取单个入库记录的详细信息"""
     try:
         conn = get_db()
-        cursor = conn.cursor(); cursor.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
+        cursor = conn.cursor(); cursor.execute(convert_query_placeholders("SELECT * FROM inbound_records WHERE id=?"), (record_id,))
         record = cursor.fetchone()
         
         if record:
@@ -902,7 +908,7 @@ def delete_record(record_id):
         old_record_cur = conn.cursor(); old_record_cur.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
         old_record = old_record_cur.fetchone()
         
-        cursor = conn.cursor(); cursor.execute("DELETE FROM inbound_records WHERE id=?", (record_id,))
+        cursor = conn.cursor(); cursor.execute(convert_query_placeholders("DELETE FROM inbound_records WHERE id=?"), (record_id,))
         
         # 如果记录被成功删除，记录日志
         if cursor.rowcount > 0:
@@ -1468,7 +1474,7 @@ def delete_sorting_record(record_id):
         old_record_cur = conn.cursor(); old_record_cur.execute("SELECT * FROM sorting_records WHERE id=?", (record_id,))
         old_record = old_record_cur.fetchone()
         
-        cursor = conn.cursor(); cursor.execute("DELETE FROM sorting_records WHERE id=?", (record_id,))
+        cursor = conn.cursor(); cursor.execute(convert_query_placeholders("DELETE FROM sorting_records WHERE id=?"), (record_id,))
         
         # 如果记录被成功删除，记录日志
         if cursor.rowcount > 0:
@@ -2882,7 +2888,7 @@ def set_pickup_forecast():
         conn = get_db()
         
         # 检查是否已存在该日期的预估数据
-        cursor = conn.cursor(); cursor.execute("SELECT id FROM pickup_forecast WHERE forecast_date = ?", (forecast_date,))
+        cursor = conn.cursor(); cursor.execute(convert_query_placeholders("SELECT id FROM pickup_forecast WHERE forecast_date = ?"), (forecast_date,))
         existing_record = cursor.fetchone()
         
         if existing_record:
@@ -2915,7 +2921,7 @@ def get_pickup_forecast():
             date_str = datetime.now().strftime('%Y-%m-%d')
         
         conn = get_db()
-        cursor = conn.cursor(); cursor.execute("SELECT forecast_amount FROM pickup_forecast WHERE forecast_date = ?", (date_str,))
+        cursor = conn.cursor(); cursor.execute(convert_query_placeholders("SELECT forecast_amount FROM pickup_forecast WHERE forecast_date = ?"), (date_str,))
         record = cursor.fetchone()
         conn.close()
         
