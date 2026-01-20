@@ -401,7 +401,7 @@ def check_user_permission(page_name, permission_type='view'):
     result = cursor.fetchone()
     conn.close()
     
-    return result and result[0]
+    return result and (result[f'can_{permission_type}'] if USE_POSTGRES else result[0])
 
 def daily_reset_check():
     """每日重置检查函数"""
@@ -1677,8 +1677,10 @@ def get_statistics():
         next_day_start.strftime('%Y-%m-%d %H:%M:%S')
     ))
     total_result = total_cur.fetchone()
-    total_vehicles = total_result[0] if total_result[0] else 0
-    total_pieces = int(total_result[1]) if total_result[1] else 0
+    total_vehicles = (total_result['total_vehicles'] if USE_POSTGRES else total_result[0]) if total_result else 0
+    # 注意: SQLite 中 SUM 可能返回 None, PostgreSQL 也可能
+    total_pieces_val = total_result['total_pieces'] if USE_POSTGRES else total_result[1]
+    total_pieces = int(total_pieces_val) if total_pieces_val else 0
     
     # 托盘总数（查询当天00:00之后到次日00:00之前，车辆类型为26英尺或53英尺的装载量总和）
     # 特殊规则: 53英尺车牌号为G的车辆,装载量不计入
@@ -1695,7 +1697,8 @@ def get_statistics():
         next_day_start.strftime('%Y-%m-%d %H:%M:%S')
     ))
     pallet_result = pallet_cur.fetchone()
-    total_pallets = int(pallet_result[0]) if pallet_result[0] else 0
+    pallet_val = pallet_result['total_pallets'] if USE_POSTGRES else pallet_result[0]
+    total_pallets = int(pallet_val) if pallet_val else 0
     
     # 各车型统计（查询当天00:00之后到次日00:00之前的所有记录）
     # 特殊规则: 53英尺车牌号为G的车辆,车次计入但货量不计入
@@ -1933,7 +1936,8 @@ def get_week_comparison():
         # 1. 获取最小日期（第一条记录的时间）
         query = "SELECT MIN(created_at) FROM inbound_records"
         cursor = conn.cursor(); cursor.execute(query)
-        min_str = cursor.fetchone()[0]
+        min_res = cursor.fetchone()
+        min_str = (min_res['min'] if USE_POSTGRES else min_res[0]) if min_res else None
         
         if not min_str:
             conn.close()
@@ -2523,7 +2527,7 @@ def check_page_permission(page_name):
         result = cursor.fetchone()
         conn.close()
         
-        return result and bool(result[0])
+        return result and bool(result['can_view'] if USE_POSTGRES else result[0])
     except:
         return False
 
@@ -2685,7 +2689,8 @@ def require_permission(page_name, permission_type='view'):
             result = cursor.fetchone()
             conn.close()
             
-            if not result or not result[0]:
+            check_val = result[f'can_{permission_type}'] if USE_POSTGRES else result[0]
+            if not result or not check_val:
                 return jsonify({'error': '权限不足'}), 403
             
             return func(*args, **kwargs)
