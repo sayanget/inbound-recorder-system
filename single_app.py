@@ -53,7 +53,20 @@ def get_db():
         import psycopg2
         from psycopg2.extras import RealDictCursor
         from database import DATABASE_URL
-        return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        # 包装 cursor 方法以自动转换占位符
+        original_cursor = conn.cursor
+        def cursor_wrapper(*args, **kwargs):
+            cur = original_cursor(*args, **kwargs)
+            original_execute = cur.execute
+            def execute_wrapper(query, params=None):
+                # 自动转换 ? 为 %s
+                converted_query = query.replace('?', '%s')
+                return original_execute(converted_query, params)
+            cur.execute = execute_wrapper
+            return cur
+        conn.cursor = cursor_wrapper
+        return conn
     else:
         import sqlite3
         conn = sqlite3.connect(DB_PATH)
