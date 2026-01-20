@@ -32,6 +32,46 @@ def get_db_path():
         # 开发环境
         return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inbound.db')
 
+# 获取正确的静态文件目录
+def get_static_dir():
+    if getattr(sys, 'frozen', False):
+        # 打包后的exe环境 - 静态文件被打包到exe中，需要使用特殊方法访问
+        # PyInstaller会将数据文件放在_sys_meipass目录中
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, 'static')
+        else:
+            # 备用方案
+            return os.path.join(os.path.dirname(sys.executable), 'static')
+    else:
+        # 开发环境 - 使用脚本所在目录的static子目录
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+
+# 数据库连接辅助函数 - 兼容 SQLite 和 PostgreSQL
+def get_db():
+    """获取数据库连接 - 自动适配 SQLite/PostgreSQL"""
+    if USE_POSTGRES:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        from database import DATABASE_URL
+        return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    else:
+        import sqlite3
+        return get_db()
+
+# 定义洛杉矶时区
+LA_TZ = pytz.timezone('America/Los_Angeles')
+
+def round_to_ten_thousand(value):
+    """
+    将数值向下取整到万位(千百十个位全部为0)
+    例如: 1,232,342 -> 1,230,000
+         987,654 -> 980,000
+         45,678 -> 40,000
+    """
+    if value is None:
+        return 0
+    return (int(value) // 10000) * 10000
+
 # 从环境变量获取配置，如果没有则使用默认值
 app.secret_key = os.environ.get('SECRET_KEY', 'your_secret_key_here_change_this_in_production')
 
@@ -302,7 +342,7 @@ def check_user_permission(page_name, permission_type='view'):
     user_id = session['user_id']
     
     # 查询用户权限
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     query = f"""
         SELECT up.can_{permission_type}
         FROM user_permissions up
@@ -588,7 +628,7 @@ def check_duplicate():
     if not dock_no:
         return jsonify({"is_duplicate": False})
     
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.execute("""
         SELECT id, vehicle_type, vehicle_no, created_at 
         FROM inbound_records 
@@ -659,7 +699,7 @@ def record():
             data["load_amount"] = data["pieces"] // 344
 
 
-    conn=sqlite3.connect(DB_PATH)
+    conn=get_db()
     # 获取当前系统时间
     current_time = datetime.now()
     current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
@@ -761,7 +801,7 @@ def update_record(record_id):
     
     conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         print(f"[DEBUG] 数据库连接成功: {DB_PATH}")
         
         # 获取修改前的数据
@@ -830,7 +870,7 @@ def update_record(record_id):
 def get_record(record_id):
     """获取单个入库记录的详细信息"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
         record = cursor.fetchone()
         
@@ -853,7 +893,7 @@ def get_record(record_id):
 def delete_record(record_id):
     conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         # 获取删除前的数据
         old_record_cur = conn.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
@@ -903,7 +943,7 @@ def delete_record(record_id):
 def list_data():
     print("[DEBUG] /api/list 路由被调用")
     print("[DEBUG] 函数开始执行")
-    conn=sqlite3.connect(DB_PATH)
+    conn=get_db()
     print(f"[DEBUG] 数据库连接成功: {DB_PATH}")
     
     # 获取当前日期和昨天日期
@@ -969,7 +1009,7 @@ def inbound_hourly_data():
     # 获取日期参数，默认为今天
     date_str = request.args.get('date')
     
-    conn=sqlite3.connect(DB_PATH)
+    conn=get_db()
     
     # 获取洛杉矶当前日期
     la_tz = pytz.timezone('America/Los_Angeles')
@@ -1030,7 +1070,7 @@ def pallet_hourly_data():
     # 获取日期参数，默认为今天
     date_str = request.args.get('date')
     
-    conn=sqlite3.connect(DB_PATH)
+    conn=get_db()
     
     # 获取洛杉矶当前日期
     la_tz = pytz.timezone('America/Los_Angeles')
@@ -1133,7 +1173,7 @@ def sorting_hourly_data():
     # 获取日期参数，默认为今天
     date_str = request.args.get('date')
     
-    conn=sqlite3.connect(DB_PATH)
+    conn=get_db()
     
     if date_str:
         # 如果提供了日期参数，使用指定日期
@@ -1179,7 +1219,7 @@ def get_history():
     if not date_str:
         return jsonify({"error": "请提供日期参数"}), 400
     
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     
     try:
         # 解析请求的日期
@@ -1296,7 +1336,7 @@ def get_history():
 def get_operation_logs():
     """获取操作日志列表"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.cursor()
         
         # 查询所有操作日志，按时间倒序排列
@@ -1342,7 +1382,7 @@ def get_operation_logs():
 def get_operation_log_detail(log_id):
     """获取单个操作日志详情"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.cursor()
         
         # 查询指定ID的操作日志
@@ -1389,7 +1429,7 @@ def get_operation_log_detail(log_id):
 def add_sorting_record():
     data = request.json
     
-    conn=sqlite3.connect(DB_PATH)
+    conn=get_db()
     
     # 获取当前洛杉矶时间
     la_tz = pytz.timezone('America/Los_Angeles')
@@ -1406,7 +1446,7 @@ def add_sorting_record():
 
 @app.route('/api/sorting', methods=['GET'])
 def get_sorting_records():
-    conn=sqlite3.connect(DB_PATH)
+    conn=get_db()
     cur=conn.execute("""SELECT id, sorting_time, pieces, remark, created_at, time_slot
                         FROM sorting_records ORDER BY created_at DESC""")
     rows=[{
@@ -1419,7 +1459,7 @@ def get_sorting_records():
 def delete_sorting_record(record_id):
     conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         # 获取删除前的数据
         old_record_cur = conn.execute("SELECT * FROM sorting_records WHERE id=?", (record_id,))
@@ -1465,7 +1505,7 @@ def delete_sorting_record(record_id):
 # 获取揽收预估与实际入库对比数据
 @app.route('/api/forecast_vs_actual')
 def forecast_vs_actual():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     
     # 查询所有有预估数据的日期，按日期升序排列
     forecast_dates_cur = conn.execute("""
@@ -1535,7 +1575,7 @@ def get_statistics():
     # 获取日期参数，默认为今天
     date_str = request.args.get('date')
     
-    conn=sqlite3.connect(DB_PATH)
+    conn=get_db()
     
     # 获取系统当前日期（改为使用系统时间而不是洛杉矶时间）
     if date_str:
@@ -1728,7 +1768,7 @@ def get_statistics():
 def get_daily_trend():
     """获取每日货物趋势数据（显示所有有记录的日期）"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         # 查询数据库中所有有记录的日期（按日期分组）
         # 使用DATE函数提取日期部分
@@ -1839,7 +1879,7 @@ def get_daily_trend():
 def get_week_comparison():
     """获取所有周的对比数据（使用自然周：周一00:00到周日23:59）"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         # 1. 获取最小日期（第一条记录的时间）
         query = "SELECT MIN(created_at) FROM inbound_records"
@@ -1952,7 +1992,7 @@ def export_csv():
             # 获取系统当前日期（改为使用系统时间而不是洛杉矶时间）
             date_str = datetime.now().strftime('%Y-%m-%d')
         
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         # 解析请求的日期
         request_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2136,7 +2176,7 @@ def export_excel():
             # 获取系统当前日期（改为使用系统时间而不是洛杉矶时间）
             date_str = datetime.now().strftime('%Y-%m-%d')
         
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         # 解析请求的日期
         request_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2305,7 +2345,7 @@ def export_excel():
 @app.route('/api/export_recent_records')
 def export_recent_records():
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         # 获取系统当前日期
         today = datetime.now().date()
@@ -2425,7 +2465,7 @@ def check_page_permission(page_name):
     
     # 查询用户权限
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.execute("""
             SELECT can_view FROM user_permissions
             WHERE user_id = ? AND page_name = ?
@@ -2457,7 +2497,7 @@ def get_first_accessible_page(user_id, role):
     ]
     
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         for page_name, page_url in page_priority:
             cursor = conn.execute("""
                 SELECT can_view FROM user_permissions
@@ -2494,7 +2534,7 @@ def login():
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     
     # 查询用户
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.execute("""
         SELECT u.id, u.username, u.role, u.is_active
         FROM users u
@@ -2555,7 +2595,7 @@ def get_user_permissions():
     user_id = session['user_id']
     
     # 查询用户权限
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.execute("""
         SELECT page_name, can_view, can_edit, can_delete
         FROM user_permissions
@@ -2584,7 +2624,7 @@ def require_permission(page_name, permission_type='view'):
                 return jsonify({'error': '未登录'}), 401
             
             # 检查权限
-            conn = sqlite3.connect(DB_PATH)
+            conn = get_db()
             query = f"""
                 SELECT up.can_{permission_type}
                 FROM user_permissions up
@@ -2611,7 +2651,7 @@ def get_users():
     if session.get('role') != 'admin':
         return jsonify({'error': '权限不足'}), 403
     
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.execute("""
         SELECT u.id, u.username, u.role, u.is_active, u.created_at
         FROM users u
@@ -2654,7 +2694,7 @@ def create_user():
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.execute("""
             INSERT INTO users (username, password_hash, role, is_active)
             VALUES (?, ?, ?, ?)
@@ -2693,7 +2733,7 @@ def manage_user_permissions(user_id):
     # GET - 获取指定用户的权限
     if request.method == 'GET':
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = get_db()
             cursor = conn.execute("""
                 SELECT page_name, can_view, can_edit, can_delete
                 FROM user_permissions
@@ -2720,7 +2760,7 @@ def manage_user_permissions(user_id):
         permissions = data.get('permissions', {})
         
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = get_db()
             
             # 删除旧权限
             conn.execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
@@ -2786,7 +2826,7 @@ def update_user(user_id):
     is_active = data.get('is_active')
     
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         if role is not None:
             conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
@@ -2816,7 +2856,7 @@ def delete_user(user_id):
         return jsonify({'error': '不能删除自己'}), 400
     
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         conn.close()
@@ -2836,7 +2876,7 @@ def set_pickup_forecast():
         if not forecast_date or forecast_amount is None:
             return jsonify({'error': '请提供日期和预估数量'}), 400
         
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         
         # 检查是否已存在该日期的预估数据
         cursor = conn.execute("SELECT id FROM pickup_forecast WHERE forecast_date = ?", (forecast_date,))
@@ -2871,7 +2911,7 @@ def get_pickup_forecast():
             # 获取系统当前日期
             date_str = datetime.now().strftime('%Y-%m-%d')
         
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.execute("SELECT forecast_amount FROM pickup_forecast WHERE forecast_date = ?", (date_str,))
         record = cursor.fetchone()
         conn.close()
