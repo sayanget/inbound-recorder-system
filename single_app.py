@@ -53,20 +53,47 @@ def get_db():
         import psycopg2
         from psycopg2.extras import RealDictCursor
         from database import DATABASE_URL
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-        # 包装 cursor 方法以自动转换占位符
-        original_cursor = conn.cursor
-        def cursor_wrapper(*args, **kwargs):
-            cur = original_cursor(*args, **kwargs)
-            original_execute = cur.execute
-            def execute_wrapper(query, params=None):
-                # 自动转换 ? 为 %s
-                converted_query = query.replace('?', '%s')
-                return original_execute(converted_query, params)
-            cur.execute = execute_wrapper
-            return cur
-        conn.cursor = cursor_wrapper
-        return conn
+        
+        # 创建原始连接
+        original_conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        
+        # 创建连接包装类
+        class ConnectionWrapper:
+            def __init__(self, conn):
+                self._conn = conn
+            
+            def cursor(self, *args, **kwargs):
+                cur = self._conn.cursor(*args, **kwargs)
+                original_execute = cur.execute
+                
+                def execute_wrapper(query, params=None):
+                    # 自动转换 ? 为 %s
+                    converted_query = query.replace('?', '%s')
+                    return original_execute(converted_query, params)
+                
+                cur.execute = execute_wrapper
+                return cur
+            
+            def commit(self):
+                return self._conn.commit()
+            
+            def rollback(self):
+                return self._conn.rollback()
+            
+            def close(self):
+                return self._conn.close()
+            
+            def __enter__(self):
+                return self
+            
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                if exc_type:
+                    self._conn.rollback()
+                else:
+                    self._conn.commit()
+                self._conn.close()
+        
+        return ConnectionWrapper(original_conn)
     else:
         import sqlite3
         conn = sqlite3.connect(DB_PATH)
