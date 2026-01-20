@@ -2595,20 +2595,22 @@ def login():
     
     if user:
         # 登录成功，设置session
-        session['user_id'] = user[0]
-        session['username'] = user[1]
-        session['role'] = user[2]
+        session['user_id'] = user['id'] if USE_POSTGRES else user[0]
+        session['username'] = user['username'] if USE_POSTGRES else user[1]
+        session['role'] = user['role'] if USE_POSTGRES else user[2]
         
         # 获取第一个有权限的页面
-        redirect_url = get_first_accessible_page(user[0], user[2])
+        user_id = user['id'] if USE_POSTGRES else user[0]
+        user_role = user['role'] if USE_POSTGRES else user[2]
+        redirect_url = get_first_accessible_page(user_id, user_role)
         
         return jsonify({
             'success': True,
             'redirect': redirect_url,
             'user': {
-                'id': user[0],
-                'username': user[1],
-                'role': user[2]
+                'id': user['id'] if USE_POSTGRES else user[0],
+                'username': user['username'] if USE_POSTGRES else user[1],
+                'role': user['role'] if USE_POSTGRES else user[2]
             }
         })
     else:
