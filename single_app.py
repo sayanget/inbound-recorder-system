@@ -208,68 +208,87 @@ def init_db():
                     (admin_user_id, page))
         else:
             # 如果数据库已存在，检查并创建用户表和权限表（如果不存在）
-            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-            if not cursor.fetchone():
+            if USE_POSTGRES:
+                cursor.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')")
+                result = cursor.fetchone()
+                table_exists = result['exists']
+            else:
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+                table_exists = cursor.fetchone() is not None
+            
+            if not table_exists:
                 # 创建用户表
-                conn.execute("""CREATE TABLE users (
+                sql = convert_sql("""CREATE TABLE users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
-                    role TEXT DEFAULT 'user',  -- 'admin' 或 'user'
+                    role TEXT DEFAULT 'user',
                     is_active BOOLEAN DEFAULT 1,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );""")
+                cursor.execute(sql)
                 
                 # 创建用户权限表
-                conn.execute("""CREATE TABLE user_permissions (
+                sql = convert_sql("""CREATE TABLE user_permissions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
-                    page_name TEXT NOT NULL,  -- 'index', 'sorting', 'history', 'statistics', 'logs'
+                    page_name TEXT NOT NULL,
                     can_view BOOLEAN DEFAULT 0,
                     can_edit BOOLEAN DEFAULT 0,
                     can_delete BOOLEAN DEFAULT 0,
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 );""")
+                cursor.execute(sql)
                 
-                # 插入默认管理员用户 (用户名: admin, 密码: admin123)
+                # 插入默认管理员用户
                 import hashlib
                 admin_password = hashlib.sha256("admin123".encode()).hexdigest()
-                conn.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                placeholder = get_placeholder()
+                cursor.execute(f"INSERT INTO users (username, password_hash, role) VALUES ({placeholder}, {placeholder}, {placeholder})",
                             ("admin", admin_password, "admin"))
                 
                 # 为管理员用户设置默认权限
-                cursor = conn.execute("SELECT id FROM users WHERE username = ?", ("admin",))
-                admin_user_id = cursor.fetchone()[0]
+                cursor.execute(f"SELECT id FROM users WHERE username = {placeholder}", ("admin",))
+                result = cursor.fetchone()
+                admin_user_id = result['id'] if USE_POSTGRES else result[0]
                 
                 # 管理员拥有所有页面的所有权限
                 pages = ['index', 'sorting', 'history', 'statistics', 'logs']
                 for page in pages:
-                    conn.execute("""INSERT INTO user_permissions 
+                    cursor.execute(f"""INSERT INTO user_permissions 
                         (user_id, page_name, can_view, can_edit, can_delete) 
-                        VALUES (?, ?, 1, 1, 1)""", 
+                        VALUES ({placeholder}, {placeholder}, 1, 1, 1)""", 
                         (admin_user_id, page))
             
             # 检查并创建揽收预估数据表（如果不存在）
-            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pickup_forecast'")
-            if not cursor.fetchone():
-                conn.execute("""CREATE TABLE pickup_forecast (
+            if USE_POSTGRES:
+                cursor.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'pickup_forecast')")
+                result = cursor.fetchone()
+                table_exists = result['exists']
+            else:
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pickup_forecast'")
+                table_exists = cursor.fetchone() is not None
+            
+            if not table_exists:
+                sql = convert_sql("""CREATE TABLE pickup_forecast (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    forecast_date DATE NOT NULL,  -- 预估日期
-                    forecast_amount INTEGER NOT NULL,  -- 预估数量
+                    forecast_date DATE NOT NULL,
+                    forecast_amount INTEGER NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );""")
+                cursor.execute(sql)
                 
                 # 创建分拣记录表
-                conn.execute("""CREATE TABLE IF NOT EXISTS sorting_records (
+                sql = convert_sql("""CREATE TABLE IF NOT EXISTS sorting_records (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sorting_time DATE,  -- 分拣日期
-                    pieces INTEGER,     -- 件数
-                    remark TEXT,        -- 备注
-                    time_slot TEXT,     -- 时间段
+                    sorting_time DATE,
+                    pieces INTEGER,
+                    remark TEXT,
+                    time_slot TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );""")
-
+                cursor.execute(sql)
 
 def convert_utc_to_la(utc_time_str):
     """直接返回时间字符串，因为数据库中存储的已经是洛杉矶时间"""
