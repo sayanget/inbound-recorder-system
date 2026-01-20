@@ -790,7 +790,10 @@ def record():
                 last_id = last_record[0]
                 last_vehicle_type = last_record[2]
                 # 解析上一条记录的时间
-                last_time = datetime.strptime(last_record[1], '%Y-%m-%d %H:%M:%S')
+                if isinstance(last_record[1], str):
+                    last_time = datetime.strptime(last_record[1], '%Y-%m-%d %H:%M:%S')
+                else:
+                    last_time = last_record[1] # 已经是 datetime 对象
                 # 计算上一台车的占用时长(分钟)
                 time_diff_seconds = (current_time - last_time).total_seconds()
                 last_duration = int(time_diff_seconds / 60)
@@ -2155,7 +2158,10 @@ def export_csv():
                 if created_at_str:
                     try:
                         # 将UTC时间字符串转换为datetime对象
-                        utc_time = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S')
+                        if isinstance(created_at_str, str):
+                            utc_time = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S')
+                        else:
+                            utc_time = created_at_str # 已经是 datetime 对象
                         utc_time = pytz.utc.localize(utc_time)
                         # 转换为系统本地时间（修改这里）
                         local_time = utc_time.astimezone()
