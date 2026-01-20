@@ -56,7 +56,10 @@ def get_db():
         return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     else:
         import sqlite3
-        return get_db()
+        conn = sqlite3.connect(DB_PATH)
+        # 使用 Row 工厂,使 SQLite 结果可以像字典一样访问
+        conn.row_factory = sqlite3.Row
+        return conn
 
 # 定义洛杉矶时区
 LA_TZ = pytz.timezone('America/Los_Angeles')
