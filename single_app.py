@@ -348,7 +348,7 @@ def check_user_permission(page_name, permission_type='view'):
         FROM user_permissions up
         WHERE up.user_id = ? AND up.page_name = ?
     """
-    cursor = conn.execute(query, (user_id, page_name))
+    cursor = conn.cursor(); cursor.execute(query, (user_id, page_name))
     result = cursor.fetchone()
     conn.close()
     
@@ -629,7 +629,7 @@ def check_duplicate():
         return jsonify({"is_duplicate": False})
     
     conn = get_db()
-    cursor = conn.execute("""
+    cursor = conn.cursor(); cursor.execute("""
         SELECT id, vehicle_type, vehicle_no, created_at 
         FROM inbound_records 
         WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van')
@@ -725,7 +725,7 @@ def record():
     # 只有非Car/Van车型才计算道口占用时长
     if dock_no and vehicle_type not in ['Car', 'Van']:
         # 查询同一道口的最后一条非Car/Van记录
-        cursor = conn.execute("""
+        cursor = conn.cursor(); cursor.execute("""
             SELECT id, created_at, vehicle_type FROM inbound_records 
             WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van')
             ORDER BY created_at DESC 
@@ -747,7 +747,7 @@ def record():
                     last_duration = 0
                 
                 # 更新上一条记录的时长
-                conn.execute("""
+                conn.cursor().execute("""
                     UPDATE inbound_records 
                     SET duration = ? 
                     WHERE id = ?
@@ -757,7 +757,7 @@ def record():
                 print(f"计算并更新上一条记录时长时出错: {e}")
     
     # 插入新记录,时长为NULL(车刚到,还不知道会占用多久)
-    conn.execute("""INSERT INTO inbound_records
+    conn.cursor().execute("""INSERT INTO inbound_records
         (dock_no, vehicle_type, vehicle_no, unit, load_amount, pieces, time_slot, shift_type, remark, created_at, duration)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)""",
         (data.get("dock_no"), data.get("vehicle_type"), data.get("vehicle_no"),
@@ -805,11 +805,11 @@ def update_record(record_id):
         print(f"[DEBUG] 数据库连接成功: {DB_PATH}")
         
         # 获取修改前的数据
-        old_record_cur = conn.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
+        old_record_cur = conn.cursor(); old_record_cur.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
         old_record = old_record_cur.fetchone()
         print(f"[DEBUG] 原始记录: {old_record}")
         
-        cursor = conn.execute("""UPDATE inbound_records SET
+        cursor = conn.cursor(); cursor.execute("""UPDATE inbound_records SET
             dock_no=?, vehicle_type=?, vehicle_no=?, unit=?, load_amount=?, pieces=?, time_slot=?, shift_type=?, remark=?, duration=?
             WHERE id=?""",
             (data.get("dock_no"), data.get("vehicle_type"), data.get("vehicle_no"),
@@ -821,7 +821,7 @@ def update_record(record_id):
         # 如果记录被成功更新，记录日志
         if cursor.rowcount > 0:
             # 获取修改后的数据
-            new_record_cur = conn.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
+            new_record_cur = conn.cursor(); new_record_cur.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
             new_record = new_record_cur.fetchone()
             
             # 记录操作日志
@@ -835,7 +835,7 @@ def update_record(record_id):
             if 'cursor' in new_data:
                 del new_data['cursor']
             
-            conn.execute("""INSERT INTO operation_logs 
+            conn.cursor().execute("""INSERT INTO operation_logs 
                 (operation_type, table_name, record_id, old_data, new_data)
                 VALUES (?, ?, ?, ?, ?)""",
                 ('edit', 'inbound_records', record_id, 
@@ -871,7 +871,7 @@ def get_record(record_id):
     """获取单个入库记录的详细信息"""
     try:
         conn = get_db()
-        cursor = conn.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
+        cursor = conn.cursor(); cursor.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
         record = cursor.fetchone()
         
         if record:
@@ -896,10 +896,10 @@ def delete_record(record_id):
         conn = get_db()
         
         # 获取删除前的数据
-        old_record_cur = conn.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
+        old_record_cur = conn.cursor(); old_record_cur.execute("SELECT * FROM inbound_records WHERE id=?", (record_id,))
         old_record = old_record_cur.fetchone()
         
-        cursor = conn.execute("DELETE FROM inbound_records WHERE id=?", (record_id,))
+        cursor = conn.cursor(); cursor.execute("DELETE FROM inbound_records WHERE id=?", (record_id,))
         
         # 如果记录被成功删除，记录日志
         if cursor.rowcount > 0:
@@ -911,7 +911,7 @@ def delete_record(record_id):
             if 'cursor' in old_data:
                 del old_data['cursor']
             
-            conn.execute("""INSERT INTO operation_logs 
+            conn.cursor().execute("""INSERT INTO operation_logs 
                 (operation_type, table_name, record_id, old_data, new_data)
                 VALUES (?, ?, ?, ?, ?)""",
                 ('delete', 'inbound_records', record_id, 
@@ -969,7 +969,7 @@ def list_data():
 
     # 查询当天和昨天的所有记录
     # 修改：排除车牌号包含'G'的53英尺车辆
-    cur=conn.execute("""
+    cur = conn.cursor(); cur.execute("""
         SELECT ir.id, ir.dock_no, ir.vehicle_type, ir.vehicle_no, ir.unit, ir.load_amount,
                ir.pieces, ir.time_slot, ir.shift_type, ir.remark, ir.created_at, ir.created_by,
                u.username as created_by_username, ir.duration
@@ -1042,7 +1042,7 @@ def inbound_hourly_data():
     
     # 查询入库记录，按时间段分组（查询当天05:00之后到次日05:00之前的所有记录）
     # 同时查询26英尺和53英尺车辆的装载量
-    cur=conn.execute("""
+    cur = conn.cursor(); cur.execute("""
         SELECT 
             ir.time_slot, 
             SUM(ir.pieces) as total_pieces,
@@ -1110,7 +1110,7 @@ def pallet_hourly_data():
     next_date_5am_local = next_date_5am_la.astimezone()
     
     # 查询当天数据：入库记录中车辆类型为26英尺或53英尺的记录，按时间段分组
-    cur=conn.execute("""
+    cur = conn.cursor(); cur.execute("""
         SELECT time_slot, SUM(load_amount) as total_load_amount, COUNT(*) as count
         FROM inbound_records 
         WHERE 
@@ -1127,7 +1127,7 @@ def pallet_hourly_data():
     } for r in cur.fetchall()]
     
     # 查询历史数据：所有历史数据按时段分组
-    historical_cur = conn.execute("""
+    historical_cur = conn.cursor(); historical_cur.execute("""
         SELECT 
             time_slot,
             SUM(load_amount) as total_load_amount,
@@ -1197,7 +1197,7 @@ def sorting_hourly_data():
     next_day_start = datetime.combine(next_date, datetime.min.time())
     
     # 查询分拣记录，按时间段分组（按照分拣日期逻辑查询，查询当天00:00之后到次日00:00之前的所有记录）
-    cur=conn.execute("""SELECT time_slot, SUM(pieces) as total_pieces
+    cur = conn.cursor(); cur.execute("""SELECT time_slot, SUM(pieces) as total_pieces
                         FROM sorting_records 
                         WHERE 
                             sorting_time >= ? AND sorting_time < ? AND time_slot IS NOT NULL
@@ -1263,7 +1263,7 @@ def get_history():
                 created_at >= ? AND created_at < ?
             ORDER BY created_at DESC
         """
-        inbound_cur = conn.execute(inbound_query, (
+        inbound_cur = conn.cursor(); inbound_cur.execute(inbound_query, (
             today_start.strftime('%Y-%m-%d %H:%M:%S'), 
             next_day_start.strftime('%Y-%m-%d %H:%M:%S')
         ))
@@ -1283,7 +1283,7 @@ def get_history():
                 sorting_time >= ? AND sorting_time < ?
             ORDER BY created_at DESC
         """
-        sorting_cur = conn.execute(sorting_query, (
+        sorting_cur = conn.cursor(); sorting_cur.execute(sorting_query, (
             today_start.strftime('%Y-%m-%d'), 
             next_day_start.strftime('%Y-%m-%d')
         ))
@@ -1436,7 +1436,7 @@ def add_sorting_record():
     current_la_time = datetime.now(la_tz)
     current_la_time_str = current_la_time.strftime('%Y-%m-%d %H:%M:%S')
     
-    conn.execute("""INSERT INTO sorting_records
+    conn.cursor().execute("""INSERT INTO sorting_records
         (sorting_time, pieces, remark, time_slot, created_at)
         VALUES (?, ?, ?, ?, ?)""",
         (data.get("sorting_time"), data.get("pieces"), data.get("remark"), data.get("time_slot"), current_la_time_str))
@@ -1447,7 +1447,7 @@ def add_sorting_record():
 @app.route('/api/sorting', methods=['GET'])
 def get_sorting_records():
     conn=get_db()
-    cur=conn.execute("""SELECT id, sorting_time, pieces, remark, created_at, time_slot
+    cur = conn.cursor(); cur.execute("""SELECT id, sorting_time, pieces, remark, created_at, time_slot
                         FROM sorting_records ORDER BY created_at DESC""")
     rows=[{
         "id":r[0], "sorting_time":r[1], "pieces":r[2], "remark":r[3],
@@ -1462,10 +1462,10 @@ def delete_sorting_record(record_id):
         conn = get_db()
         
         # 获取删除前的数据
-        old_record_cur = conn.execute("SELECT * FROM sorting_records WHERE id=?", (record_id,))
+        old_record_cur = conn.cursor(); old_record_cur.execute("SELECT * FROM sorting_records WHERE id=?", (record_id,))
         old_record = old_record_cur.fetchone()
         
-        cursor = conn.execute("DELETE FROM sorting_records WHERE id=?", (record_id,))
+        cursor = conn.cursor(); cursor.execute("DELETE FROM sorting_records WHERE id=?", (record_id,))
         
         # 如果记录被成功删除，记录日志
         if cursor.rowcount > 0:
@@ -1476,7 +1476,7 @@ def delete_sorting_record(record_id):
             # 删除游标对象，避免序列化错误
             old_data.pop('cursor', None)
             
-            conn.execute("""INSERT INTO operation_logs 
+            conn.cursor().execute("""INSERT INTO operation_logs 
                 (operation_type, table_name, record_id, old_data, new_data)
                 VALUES (?, ?, ?, ?, ?)""",
                 ('delete', 'sorting_records', record_id, 
@@ -1508,7 +1508,7 @@ def forecast_vs_actual():
     conn = get_db()
     
     # 查询所有有预估数据的日期，按日期升序排列
-    forecast_dates_cur = conn.execute("""
+    forecast_dates_cur = conn.cursor(); forecast_dates_cur.execute("""
         SELECT forecast_date, forecast_amount 
         FROM pickup_forecast 
         ORDER BY forecast_date ASC
@@ -1536,7 +1536,7 @@ def forecast_vs_actual():
             next_day = date + timedelta(days=1)
             day_end = datetime.combine(next_day, datetime.min.time())
             
-            actual_cur = conn.execute("""
+            actual_cur = conn.cursor(); actual_cur.execute("""
                 SELECT SUM(CASE 
                     WHEN vehicle_type = '53英尺' AND vehicle_no = 'G' THEN 0 
                     ELSE pieces 
@@ -1605,7 +1605,7 @@ def get_statistics():
         WHERE 
             created_at >= ? AND created_at < ?
     """
-    records_cur = conn.execute(records_query, (
+    records_cur = conn.cursor(); records_cur.execute(records_query, (
         today_start.strftime('%Y-%m-%d %H:%M:%S'), 
         next_day_start.strftime('%Y-%m-%d %H:%M:%S')
     ))
@@ -1623,7 +1623,7 @@ def get_statistics():
         WHERE 
             created_at >= ? AND created_at < ?
     """
-    total_cur = conn.execute(total_query, (
+    total_cur = conn.cursor(); total_cur.execute(total_query, (
         today_start.strftime('%Y-%m-%d %H:%M:%S'), 
         next_day_start.strftime('%Y-%m-%d %H:%M:%S')
     ))
@@ -1641,7 +1641,7 @@ def get_statistics():
             AND (vehicle_type = '26英尺' OR vehicle_type = '53英尺')
             AND NOT (vehicle_type = '53英尺' AND vehicle_no = 'G')
     """
-    pallet_cur = conn.execute(pallet_query, (
+    pallet_cur = conn.cursor(); pallet_cur.execute(pallet_query, (
         today_start.strftime('%Y-%m-%d %H:%M:%S'), 
         next_day_start.strftime('%Y-%m-%d %H:%M:%S')
     ))
@@ -1662,7 +1662,7 @@ def get_statistics():
             created_at >= ? AND created_at < ?
         GROUP BY vehicle_type
     """
-    vehicle_stats_cur = conn.execute(vehicle_stats_query, (
+    vehicle_stats_cur = conn.cursor(); vehicle_stats_cur.execute(vehicle_stats_query, (
         today_start.strftime('%Y-%m-%d %H:%M:%S'), 
         next_day_start.strftime('%Y-%m-%d %H:%M:%S')
     ))
@@ -1777,7 +1777,7 @@ def get_daily_trend():
             FROM inbound_records
             ORDER BY record_date ASC
         """
-        cursor = conn.execute(dates_query)
+        cursor = conn.cursor(); cursor.execute(dates_query)
         record_dates = [row[0] for row in cursor.fetchall()]
         
         # 如果没有记录，返回空数组
@@ -1836,7 +1836,7 @@ def get_daily_trend():
                 FROM inbound_records
                 WHERE created_at >= ? AND created_at < ?
             """
-            cursor = conn.execute(query, (
+            cursor = conn.cursor(); cursor.execute(query, (
                 day_start.strftime('%Y-%m-%d %H:%M:%S'),
                 day_end.strftime('%Y-%m-%d %H:%M:%S')
             ))
@@ -1883,7 +1883,7 @@ def get_week_comparison():
         
         # 1. 获取最小日期（第一条记录的时间）
         query = "SELECT MIN(created_at) FROM inbound_records"
-        cursor = conn.execute(query)
+        cursor = conn.cursor(); cursor.execute(query)
         min_str = cursor.fetchone()[0]
         
         if not min_str:
@@ -1929,7 +1929,7 @@ def get_week_comparison():
             week_start_dt = datetime.combine(current_start, datetime.min.time())
             week_end_dt = datetime.combine(current_end, datetime.max.time())
             
-            cursor = conn.execute(week_query, (
+            cursor = conn.cursor(); cursor.execute(week_query, (
                 week_start_dt.strftime('%Y-%m-%d %H:%M:%S'),
                 week_end_dt.strftime('%Y-%m-%d %H:%M:%S')
             ))
@@ -2014,7 +2014,7 @@ def export_csv():
             WHERE 
                 created_at >= ? AND created_at < ?
         """
-        total_cur = conn.execute(total_query, (
+        total_cur = conn.cursor(); total_cur.execute(total_query, (
             today_start.strftime('%Y-%m-%d %H:%M:%S'), 
             next_day_start.strftime('%Y-%m-%d %H:%M:%S')
         ))
@@ -2029,7 +2029,7 @@ def export_csv():
             WHERE 
                 created_at >= ? AND created_at < ? AND (vehicle_type = '26英尺' OR vehicle_type = '53英尺')
         """
-        pallet_cur = conn.execute(pallet_query, (
+        pallet_cur = conn.cursor(); pallet_cur.execute(pallet_query, (
             today_start.strftime('%Y-%m-%d %H:%M:%S'), 
             next_day_start.strftime('%Y-%m-%d %H:%M:%S')
         ))
@@ -2044,7 +2044,7 @@ def export_csv():
                 created_at >= ? AND created_at < ?
             GROUP BY vehicle_type
         """
-        vehicle_stats_cur = conn.execute(vehicle_stats_query, (
+        vehicle_stats_cur = conn.cursor(); vehicle_stats_cur.execute(vehicle_stats_query, (
             today_start.strftime('%Y-%m-%d %H:%M:%S'), 
             next_day_start.strftime('%Y-%m-%d %H:%M:%S')
         ))
@@ -2060,7 +2060,7 @@ def export_csv():
             WHERE 
                 created_at >= ? AND created_at < ?
         """
-        records_cur = conn.execute(records_query, (
+        records_cur = conn.cursor(); records_cur.execute(records_query, (
             today_start.strftime('%Y-%m-%d %H:%M:%S'), 
             next_day_start.strftime('%Y-%m-%d %H:%M:%S')
         ))
@@ -2200,7 +2200,7 @@ def export_excel():
                 created_at >= ? AND created_at < ?
             ORDER BY created_at DESC
         """
-        inbound_cur = conn.execute(inbound_query, (
+        inbound_cur = conn.cursor(); inbound_cur.execute(inbound_query, (
             today_start.strftime('%Y-%m-%d %H:%M:%S'), 
             next_day_start.strftime('%Y-%m-%d %H:%M:%S')
         ))
@@ -2220,7 +2220,7 @@ def export_excel():
                 created_at >= ? AND created_at < ?
             ORDER BY created_at DESC
         """
-        sorting_cur = conn.execute(sorting_query, (
+        sorting_cur = conn.cursor(); sorting_cur.execute(sorting_query, (
             today_start.strftime('%Y-%m-%d %H:%M:%S'), 
             next_day_start.strftime('%Y-%m-%d %H:%M:%S')
         ))
@@ -2361,7 +2361,7 @@ def export_recent_records():
         next_day_start = datetime.combine(next_date, datetime.min.time())
         
         # 查询属于当前自然日的记录（查询当天00:00之后到次日00:00之前的所有记录）
-        cur = conn.execute("""
+        cur = conn.cursor(); cur.execute("""
             SELECT id, dock_no, vehicle_type, vehicle_no, unit, load_amount,
                    pieces, time_slot, shift_type, remark, created_at
             FROM inbound_records 
@@ -2466,7 +2466,7 @@ def check_page_permission(page_name):
     # 查询用户权限
     try:
         conn = get_db()
-        cursor = conn.execute("""
+        cursor = conn.cursor(); cursor.execute("""
             SELECT can_view FROM user_permissions
             WHERE user_id = ? AND page_name = ?
         """, (session['user_id'], page_name))
@@ -2499,7 +2499,7 @@ def get_first_accessible_page(user_id, role):
     try:
         conn = get_db()
         for page_name, page_url in page_priority:
-            cursor = conn.execute("""
+            cursor = conn.cursor(); cursor.execute("""
                 SELECT can_view FROM user_permissions
                 WHERE user_id = ? AND page_name = ? AND can_view = 1
             """, (user_id, page_name))
@@ -2535,7 +2535,7 @@ def login():
     
     # 查询用户
     conn = get_db()
-    cursor = conn.execute("""
+    cursor = conn.cursor(); cursor.execute("""
         SELECT u.id, u.username, u.role, u.is_active
         FROM users u
         WHERE u.username = ? AND u.password_hash = ? AND u.is_active = 1
@@ -2596,7 +2596,7 @@ def get_user_permissions():
     
     # 查询用户权限
     conn = get_db()
-    cursor = conn.execute("""
+    cursor = conn.cursor(); cursor.execute("""
         SELECT page_name, can_view, can_edit, can_delete
         FROM user_permissions
         WHERE user_id = ?
@@ -2630,7 +2630,7 @@ def require_permission(page_name, permission_type='view'):
                 FROM user_permissions up
                 WHERE up.user_id = ? AND up.page_name = ?
             """
-            cursor = conn.execute(query, (session['user_id'], page_name))
+            cursor = conn.cursor(); cursor.execute(query, (session['user_id'], page_name))
             result = cursor.fetchone()
             conn.close()
             
@@ -2652,7 +2652,7 @@ def get_users():
         return jsonify({'error': '权限不足'}), 403
     
     conn = get_db()
-    cursor = conn.execute("""
+    cursor = conn.cursor(); cursor.execute("""
         SELECT u.id, u.username, u.role, u.is_active, u.created_at
         FROM users u
         ORDER BY u.created_at DESC
@@ -2695,7 +2695,7 @@ def create_user():
     
     try:
         conn = get_db()
-        cursor = conn.execute("""
+        cursor = conn.cursor(); cursor.execute("""
             INSERT INTO users (username, password_hash, role, is_active)
             VALUES (?, ?, ?, ?)
         """, (username, password_hash, role, is_active))
@@ -2706,7 +2706,7 @@ def create_user():
         # 为新用户设置默认权限（无权限）
         pages = ['index', 'sorting', 'history', 'statistics', 'logs']
         for page in pages:
-            conn.execute("""
+            conn.cursor().execute("""
                 INSERT INTO user_permissions (user_id, page_name, can_view, can_edit, can_delete)
                 VALUES (?, ?, 0, 0, 0)
             """, (user_id, page))
@@ -2734,7 +2734,7 @@ def manage_user_permissions(user_id):
     if request.method == 'GET':
         try:
             conn = get_db()
-            cursor = conn.execute("""
+            cursor = conn.cursor(); cursor.execute("""
                 SELECT page_name, can_view, can_edit, can_delete
                 FROM user_permissions
                 WHERE user_id = ?
@@ -2763,11 +2763,11 @@ def manage_user_permissions(user_id):
             conn = get_db()
             
             # 删除旧权限
-            conn.execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
+            conn.cursor().execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
             
             # 插入新权限
             for page_name, perms in permissions.items():
-                conn.execute("""
+                conn.cursor().execute("""
                     INSERT INTO user_permissions 
                     (user_id, page_name, can_view, can_edit, can_delete)
                     VALUES (?, ?, ?, ?, ?)
@@ -2785,7 +2785,7 @@ def manage_user_permissions(user_id):
             immediate_effect = False
             if session.get('user_id') == user_id:
                 # 重新加载权限到session
-                cursor = conn.execute("""
+                cursor = conn.cursor(); cursor.execute("""
                     SELECT page_name, can_view, can_edit, can_delete
                     FROM user_permissions
                     WHERE user_id = ?
@@ -2829,10 +2829,10 @@ def update_user(user_id):
         conn = get_db()
         
         if role is not None:
-            conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+            conn.cursor().execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
         
         if is_active is not None:
-            conn.execute("UPDATE users SET is_active = ? WHERE id = ?", (is_active, user_id))
+            conn.cursor().execute("UPDATE users SET is_active = ? WHERE id = ?", (is_active, user_id))
         
         conn.commit()
         conn.close()
@@ -2857,7 +2857,7 @@ def delete_user(user_id):
     
     try:
         conn = get_db()
-        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.cursor().execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         conn.close()
         
@@ -2879,17 +2879,17 @@ def set_pickup_forecast():
         conn = get_db()
         
         # 检查是否已存在该日期的预估数据
-        cursor = conn.execute("SELECT id FROM pickup_forecast WHERE forecast_date = ?", (forecast_date,))
+        cursor = conn.cursor(); cursor.execute("SELECT id FROM pickup_forecast WHERE forecast_date = ?", (forecast_date,))
         existing_record = cursor.fetchone()
         
         if existing_record:
             # 更新现有记录
-            conn.execute("""UPDATE pickup_forecast 
+            conn.cursor().execute("""UPDATE pickup_forecast 
                 SET forecast_amount = ?, updated_at = CURRENT_TIMESTAMP 
                 WHERE forecast_date = ?""", (forecast_amount, forecast_date))
         else:
             # 插入新记录
-            conn.execute("""INSERT INTO pickup_forecast 
+            conn.cursor().execute("""INSERT INTO pickup_forecast 
                 (forecast_date, forecast_amount) 
                 VALUES (?, ?)""", (forecast_date, forecast_amount))
         
@@ -2912,7 +2912,7 @@ def get_pickup_forecast():
             date_str = datetime.now().strftime('%Y-%m-%d')
         
         conn = get_db()
-        cursor = conn.execute("SELECT forecast_amount FROM pickup_forecast WHERE forecast_date = ?", (date_str,))
+        cursor = conn.cursor(); cursor.execute("SELECT forecast_amount FROM pickup_forecast WHERE forecast_date = ?", (date_str,))
         record = cursor.fetchone()
         conn.close()
         
