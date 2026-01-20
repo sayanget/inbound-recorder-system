@@ -2584,11 +2584,11 @@ def login():
     
     # 查询用户
     conn = get_db()
-    cursor = conn.cursor(); cursor.execute("""
+    cursor = conn.cursor(); cursor.execute(convert_query_placeholders("""
         SELECT u.id, u.username, u.role, u.is_active
         FROM users u
-        WHERE u.username = ? AND u.password_hash = ? AND u.is_active = 1
-    """, (username, password_hash))
+        WHERE u.username = ? AND u.password_hash = ? AND u.is_active = TRUE
+    """), (username, password_hash))
     
     user = cursor.fetchone()
     conn.close()
