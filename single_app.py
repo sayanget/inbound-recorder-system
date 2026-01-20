@@ -1846,7 +1846,14 @@ def get_daily_trend():
             ORDER BY record_date ASC
         """
         cursor = conn.cursor(); cursor.execute(dates_query)
-        record_dates = [row[0] for row in cursor.fetchall()]
+        # 兼容处理：确保转换为字符串
+        raw_dates = [row[0] for row in cursor.fetchall()]
+        record_dates = []
+        for d in raw_dates:
+            if isinstance(d, (datetime, date)):
+                record_dates.append(d.strftime('%Y-%m-%d'))
+            else:
+                record_dates.append(str(d))
         
         # 如果没有记录，返回空数组
         if not record_dates:
