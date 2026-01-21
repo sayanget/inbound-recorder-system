@@ -7,6 +7,17 @@ import pytz
 import threading
 import time
 from openpyxl import Workbook
+import json
+
+# Remote Database URL for Sync
+REMOTE_DB_URL = 'postgresql://neondb_owner:npg_G1pxCJTigOK2@ep-green-meadow-afwsztqi-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+
+try:
+    import psycopg2
+    from psycopg2.extras import DictCursor
+except ImportError:
+    psycopg2 = None
+    DictCursor = None
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import json
@@ -142,6 +153,88 @@ PORT = int(os.environ.get('PORT', 8080))
 # 应用初始化标志
 _app_initialized = False
 
+def sync_record_to_remote(record_id, operation='insert', table='inbound_records'):
+    """
+    Sync a local record to remote PostgreSQL
+    """
+    if not psycopg2:
+        print("[SYNC] Psycopg2 not installed, skipping sync")
+        return False
+        
+    print(f"[SYNC] Starting sync for {table} ID {record_id} ({operation})")
+    
+    try:
+        # 1. Get local record data
+        # Use direct connection for thread safety (avoid Flask 'g' context)
+        local_conn = sqlite3.connect(get_db_path())
+        local_conn.row_factory = sqlite3.Row
+        cursor = local_conn.cursor()
+        
+        if operation == 'delete':
+             # For delete, we just need ID
+             pass
+        else:
+            cursor.execute(f"SELECT * FROM {table} WHERE id = ?", (record_id,))
+            row = cursor.fetchone()
+            if not row and operation != 'delete':
+                print(f"[SYNC] Local record {record_id} not found")
+                local_conn.close()
+                return False
+                
+        # 2. Connect to Remote
+        remote_conn = psycopg2.connect(REMOTE_DB_URL)
+        remote_cursor = remote_conn.cursor()
+        
+        if table == 'inbound_records':
+            if operation == 'insert' or operation == 'update':
+                # Upsert approach
+                cols = ['id', 'dock_no', 'vehicle_type', 'vehicle_no', 'unit', 'load_amount', 
+                        'pieces', 'time_slot', 'shift_type', 'remark', 'created_at', 'duration']
+                
+                # Filter row data to match columns
+                values = []
+                for col in cols:
+                    val = row[col]
+                    # Handle boolean if needed, though inbound_records has none
+                    values.append(val)
+                
+                placeholders = ["%s"] * len(cols)
+                stmt = f"""
+                    INSERT INTO inbound_records ({', '.join(cols)}) 
+                    VALUES ({', '.join(placeholders)})
+                    ON CONFLICT (id) DO UPDATE SET
+                    dock_no=EXCLUDED.dock_no,
+                    vehicle_type=EXCLUDED.vehicle_type,
+                    vehicle_no=EXCLUDED.vehicle_no,
+                    unit=EXCLUDED.unit,
+                    load_amount=EXCLUDED.load_amount,
+                    pieces=EXCLUDED.pieces,
+                    time_slot=EXCLUDED.time_slot,
+                    shift_type=EXCLUDED.shift_type,
+                    remark=EXCLUDED.remark,
+                    duration=EXCLUDED.duration;
+                """
+                remote_cursor.execute(stmt, values)
+                
+            elif operation == 'delete':
+                remote_cursor.execute("DELETE FROM inbound_records WHERE id = %s", (record_id,))
+
+        remote_conn.commit()
+        remote_conn.close()
+        
+        # 3. Update local sync status
+        if operation != 'delete':
+            local_conn.cursor().execute(f"UPDATE {table} SET is_synced = 1 WHERE id = ?", (record_id,))
+            local_conn.commit()
+            
+        local_conn.close()
+        print(f"[SYNC] Sync success for {record_id}")
+        return True
+        
+    except Exception as e:
+        print(f"[SYNC] Error: {e}")
+        return False
+
 def initialize_app():
     """初始化应用 - 确保在 Gunicorn 环境下也能正确初始化"""
     global _app_initialized
@@ -219,7 +312,9 @@ def init_db():
                 time_slot TEXT,
                 shift_type TEXT,
                 remark TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                duration INTEGER,
+                is_synced BOOLEAN DEFAULT 0
             );""")
             cursor.execute(sql)
         
@@ -815,14 +910,24 @@ def record():
                 print(f"计算并更新上一条记录时长时出错: {e}")
     
     # 插入新记录,时长为NULL(车刚到,还不知道会占用多久)
-    conn.cursor().execute("""INSERT INTO inbound_records
-        (dock_no, vehicle_type, vehicle_no, unit, load_amount, pieces, time_slot, shift_type, remark, created_at, duration)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)""",
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO inbound_records
+        (dock_no, vehicle_type, vehicle_no, unit, load_amount, pieces, time_slot, shift_type, remark, created_at, duration, is_synced)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0)""",
         (data.get("dock_no"), data.get("vehicle_type"), data.get("vehicle_no"),
          data.get("unit"), data.get("load_amount"), data.get("pieces"),
          time_slot, shift_type, data.get("remark"), current_time_str))
+    
+    new_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    
+    # Trigger Real-time Sync
+    try:
+        threading.Thread(target=sync_record_to_remote, args=(new_id, 'insert')).start()
+    except Exception as e:
+        print(f"Sync thread error: {e}")
+        
     return jsonify({"success":True})
 
 @app.route('/api/record/<int:record_id>', methods=['PUT'])
@@ -868,7 +973,7 @@ def update_record(record_id):
         print(f"[DEBUG] 原始记录: {old_record}")
         
         cursor = conn.cursor(); cursor.execute("""UPDATE inbound_records SET
-            dock_no=?, vehicle_type=?, vehicle_no=?, unit=?, load_amount=?, pieces=?, time_slot=?, shift_type=?, remark=?, duration=?
+            dock_no=?, vehicle_type=?, vehicle_no=?, unit=?, load_amount=?, pieces=?, time_slot=?, shift_type=?, remark=?, duration=?, is_synced=0
             WHERE id=?""",
             (data.get("dock_no"), data.get("vehicle_type"), data.get("vehicle_no"),
              data.get("unit"), data.get("load_amount"), data.get("pieces"),
@@ -901,6 +1006,13 @@ def update_record(record_id):
                  json.dumps(new_data, default=str)))
             
             conn.commit()
+            
+            # Trigger Real-time Sync (Update)
+            try:
+                threading.Thread(target=sync_record_to_remote, args=(record_id, 'update')).start()
+            except Exception as e:
+                print(f"Sync thread error: {e}")
+
             if conn:
                 conn.close()
             print("[DEBUG] 记录更新成功")
@@ -977,17 +1089,25 @@ def delete_record(record_id):
                  json.dumps({})))  # 删除操作没有新数据
             
             conn.commit()
-            if conn:
-                conn.close()
+            
+            # 删除相关的操作日志
+            conn.cursor().execute("DELETE FROM operation_logs WHERE table_name='inbound_records' AND record_id=?", (record_id,))
+            conn.commit()
+            conn.close()
+            
+            # Trigger Real-time Sync (Delete)
+            try:
+                threading.Thread(target=sync_record_to_remote, args=(record_id, 'delete')).start()
+            except Exception as e:
+                print(f"Sync thread error: {e}")
+            
             return jsonify({"success": True})
         else:
-            conn.commit()
-            if conn:
-                conn.close()
+            conn.close()
             return jsonify({"success": False, "error": "记录未找到"}), 404
+            
     except Exception as e:
         if conn:
-            conn.rollback()
             conn.close()
         return jsonify({"success": False, "error": str(e)}), 500
     finally:
@@ -1315,7 +1435,7 @@ def get_history():
         # 查询指定日期的入库记录（查询当天00:00之后到次日00:00之前的所有记录）
         inbound_query = """
             SELECT id, dock_no, vehicle_type, vehicle_no, unit, load_amount,
-                   pieces, time_slot, shift_type, remark, created_at, duration
+                   pieces, time_slot, shift_type, remark, created_at, duration, is_synced
             FROM inbound_records 
             WHERE 
                 created_at >= ? AND created_at < ?
@@ -1330,7 +1450,8 @@ def get_history():
             "unit": r[4], "load_amount": r[5], "pieces": r[6],
             "time_slot": r[7], "shift_type": r[8], "remark": r[9],
             "created_at": r[10],  # 数据库中存储的是系统时间，直接返回
-            "duration": r[11]  # 时长(分钟)
+            "duration": r[11],  # 时长(分钟)
+            "is_synced": r[12]
         } for r in inbound_cur.fetchall()]
         
         # 查询指定日期的分拣记录（按照分拣日期逻辑查询，查询当天00:00之后到次日00:00之前的所有记录）
@@ -1648,8 +1769,8 @@ def get_statistics():
             conn.close()
             return jsonify({"error": "日期格式无效，请使用YYYY-MM-DD格式"}), 400
     else:
-        # 如果没有提供日期参数，使用系统当前日期（修改这里）
-        request_date = datetime.now().date()
+        # 如果没有提供日期参数，使用系统当前日期（使用洛杉矶时间）
+        request_date = datetime.now(LA_TZ).date()
     
     # 计算次日日期
     next_date = request_date + timedelta(days=1)
@@ -1979,10 +2100,10 @@ def get_week_comparison():
                 min_date = datetime.strptime(str(min_str).split(' ')[0], '%Y-%m-%d').date()
         except Exception as e:
             print(f"解析最小日期出错: {e}, 使用当前日期")
-            min_date = datetime.now().date()
+            min_date = datetime.now(LA_TZ).date()
             
         # 设置最大日期为今天（确保显示到本周）
-        max_date = datetime.now().date()
+        max_date = datetime.now(LA_TZ).date()
         
         # 辅助函数：获取自然周的起止日期
         def get_natural_week_range(date):
@@ -2073,8 +2194,8 @@ def export_csv():
         date_str = request.args.get('date')
         
         if not date_str:
-            # 获取系统当前日期（改为使用系统时间而不是洛杉矶时间）
-            date_str = datetime.now().strftime('%Y-%m-%d')
+            # 获取系统当前日期（使用洛杉矶时间）
+            date_str = datetime.now(LA_TZ).strftime('%Y-%m-%d')
         
         conn = get_db()
         
@@ -2260,8 +2381,8 @@ def export_excel():
         date_str = request.args.get('date')
         
         if not date_str:
-            # 获取系统当前日期（改为使用系统时间而不是洛杉矶时间）
-            date_str = datetime.now().strftime('%Y-%m-%d')
+            # 获取系统当前日期（使用洛杉矶时间）
+            date_str = datetime.now(LA_TZ).strftime('%Y-%m-%d')
         
         conn = get_db()
         
@@ -2653,6 +2774,118 @@ def login():
         })
     else:
         return jsonify({'error': '用户名或密码错误'}), 401
+def sync_batch_to_remote(records, table='inbound_records'):
+    """
+    Batch sync records to remote PostgreSQL using efficient execute_values
+    """
+    if not psycopg2:
+        return 0, []
+        
+    try:
+        from psycopg2.extras import execute_values
+        
+        # 1. Connect to Remote
+        remote_conn = psycopg2.connect(REMOTE_DB_URL)
+        remote_cursor = remote_conn.cursor()
+        
+        synced_ids = []
+        
+        if table == 'inbound_records':
+            cols = ['id', 'dock_no', 'vehicle_type', 'vehicle_no', 'unit', 'load_amount', 
+                    'pieces', 'time_slot', 'shift_type', 'remark', 'created_at', 'duration']
+            
+            # Prepare data tuples
+            values = []
+            for row in records:
+                record_values = []
+                for col in cols:
+                    record_values.append(row[col])
+                values.append(tuple(record_values))
+                synced_ids.append(row['id'])
+
+            if not values:
+                return 0, []
+
+            # Batch Upsert Query
+            columns_str = ', '.join(cols)
+            stmt = f"""
+                INSERT INTO inbound_records ({columns_str}) 
+                VALUES %s
+                ON CONFLICT (id) DO UPDATE SET
+                dock_no=EXCLUDED.dock_no,
+                vehicle_type=EXCLUDED.vehicle_type,
+                vehicle_no=EXCLUDED.vehicle_no,
+                unit=EXCLUDED.unit,
+                load_amount=EXCLUDED.load_amount,
+                pieces=EXCLUDED.pieces,
+                time_slot=EXCLUDED.time_slot,
+                shift_type=EXCLUDED.shift_type,
+                remark=EXCLUDED.remark,
+                duration=EXCLUDED.duration;
+            """
+            
+            execute_values(remote_cursor, stmt, values)
+            
+        remote_conn.commit()
+        remote_conn.close()
+        
+        return len(synced_ids), synced_ids
+        
+    except Exception as e:
+        print(f"[BATCH SYNC] Error: {e}")
+        return 0, []
+
+@app.route('/api/manual_sync', methods=['POST'])
+def manual_sync():
+    """
+    Manually trigger sync for all unsynced records (Optimized with Batch Processing)
+    """
+    if not psycopg2:
+        return jsonify({"error": "PostgreSQL driver not installed"}), 500
+        
+    try:
+        local_conn = sqlite3.connect(get_db_path())
+        local_conn.row_factory = sqlite3.Row
+        cursor = local_conn.cursor()
+        
+        # Find all unsynced records sorted by creation time
+        # Added limit to prevent memory issues with massive datasets, loop if needed
+        limit = 100 
+        cursor.execute("SELECT * FROM inbound_records WHERE is_synced = 0 OR is_synced IS NULL ORDER BY created_at ASC LIMIT ?", (limit,))
+        unsynced_records = cursor.fetchall()
+        
+        # Get total count for reporting
+        cursor.execute("SELECT COUNT(*) FROM inbound_records WHERE is_synced = 0 OR is_synced IS NULL")
+        total_unsynced = cursor.fetchone()[0]
+        
+        local_conn.close()
+        
+        if not unsynced_records:
+             return jsonify({"success": True, "total": 0, "synced": 0})
+            
+        # Perform Batch Sync
+        count, synced_ids = sync_batch_to_remote(unsynced_records)
+        
+        if count > 0:
+            # Update local status in batch
+            local_conn = sqlite3.connect(get_db_path())
+            cursor = local_conn.cursor()
+            
+            # Batch update is_synced status
+            placeholders = ','.join(['?'] * len(synced_ids))
+            cursor.execute(f"UPDATE inbound_records SET is_synced = 1 WHERE id IN ({placeholders})", synced_ids)
+            local_conn.commit()
+            local_conn.close()
+        
+        return jsonify({
+            "success": True, 
+            "total": total_unsynced, 
+            "synced": count,
+            "message": f"Synced {count} records in this batch"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # 用户登出API
 @app.route('/api/logout', methods=['POST'])
@@ -2999,7 +3232,7 @@ def get_pickup_forecast():
         
         if not date_str:
             # 获取系统当前日期
-            date_str = datetime.now().strftime('%Y-%m-%d')
+            date_str = datetime.now(LA_TZ).strftime('%Y-%m-%d')
         
         conn = get_db()
         cursor = conn.cursor(); cursor.execute(convert_query_placeholders("SELECT forecast_amount FROM pickup_forecast WHERE forecast_date = ?"), (date_str,))
@@ -3030,6 +3263,52 @@ if __name__ == "__main__":
     # 启动每日重置检查线程
     reset_thread = threading.Thread(target=daily_reset_check, daemon=True)
     reset_thread.start()
+    
+    # 启动自动同步线程
+    def auto_sync_daemon():
+        """后台自动同步线程 - 每10分钟执行一次"""
+        print("[AutoSync] 自动同步线程已启动")
+        while True:
+            try:
+                # 等待10分钟 (600秒)
+                time.sleep(600)
+                
+                print("[AutoSync] 开始执行定时同步...")
+                # 连接本地数据库
+                local_conn = sqlite3.connect(DB_PATH)
+                local_conn.row_factory = sqlite3.Row
+                cursor = local_conn.cursor()
+                
+                # 查询未同步记录 (一次最多同步100条)
+                cursor.execute("SELECT * FROM inbound_records WHERE is_synced = 0 OR is_synced IS NULL ORDER BY created_at ASC LIMIT 100")
+                unsynced_records = cursor.fetchall()
+                
+                if unsynced_records:
+                    print(f"[AutoSync] 发现 {len(unsynced_records)} 条未同步记录")
+                    # 执行同步
+                    count, synced_ids = sync_batch_to_remote(unsynced_records)
+                    
+                    if count > 0:
+                        # 批量更新本地同步状态
+                        placeholders = ','.join(['?'] * len(synced_ids))
+                        cursor.execute(f"UPDATE inbound_records SET is_synced = 1 WHERE id IN ({placeholders})", synced_ids)
+                        local_conn.commit()
+                        print(f"[AutoSync] 成功同步并更新 {count} 条记录")
+                    else:
+                        print("[AutoSync] 同步执行完成，但无记录更新")
+                else:
+                    # print("[AutoSync] 无未同步记录")
+                    pass
+                    
+                local_conn.close()
+                
+            except Exception as e:
+                print(f"[AutoSync] 同步出错: {str(e)}")
+                # 出错后短暂暂停避免死循环刷日志
+                time.sleep(60)
+
+    sync_thread = threading.Thread(target=auto_sync_daemon, daemon=True)
+    sync_thread.start()
     
     # 从环境变量获取主机和端口配置
     host = os.environ.get('HOST', HOST)
