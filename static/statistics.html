@@ -413,7 +413,7 @@
                     <div class="stat-value" id="totalVehicles">0</div>
                 </div>
                 <div class="stat-card">
-                    <h3 data-lang="total_cargo">总货物量</h3>
+                    <h3 data-lang="total_cargo">总货物量 (万)</h3>
                     <div class="stat-value" id="totalPieces">0</div>
                 </div>
                 <div class="stat-card">
@@ -547,7 +547,7 @@
                 today: "今天",
                 statistics_summary: "统计摘要",
                 total_vehicles: "总车次",
-                total_cargo: "总货物量",
+                total_cargo: "总货物量 (万)",
                 total_pallets: "托盘总数",
                 vehicles_19_20: "19:00-20:00到车数",
                 vehicles_20_21: "20:00-21:00到车数",
@@ -618,7 +618,7 @@
                 today: "Today",
                 statistics_summary: "Statistics Summary",
                 total_vehicles: "Total Vehicles",
-                total_cargo: "Total Cargo",
+                total_cargo: "Total Cargo (10k)",
                 total_pallets: "Total Pallets",
                 vehicles_19_20: "Vehicles 19:00-20:00",
                 vehicles_20_21: "Vehicles 20:00-21:00",
@@ -689,7 +689,7 @@
                 today: "Hoy",
                 statistics_summary: "Resumen Estadístico",
                 total_vehicles: "Vehículos Totales",
-                total_cargo: "Carga Total",
+                total_cargo: "Carga Total (10k)",
                 total_pallets: "Total de Palets",
                 vehicles_19_20: "Vehículos 19:00-20:00",
                 vehicles_20_21: "Vehículos 20:00-21:00",
@@ -810,9 +810,7 @@
                 return '0';
             }
 
-            // For all numbers >= 10,000, round to nearest 10,000 (万位)
-            // Lower bound: round down to 万位 (千百十个位都取0)
-            // Upper bound: round up to 万位 (千百十个位都取0)
+            // For all numbers >= 10,000, display range in units of 万
             const roundTo = 10000;
 
             if (value >= roundTo) {
@@ -820,7 +818,11 @@
                 const lowerBound = Math.floor(value / roundTo) * roundTo;
                 const upperBound = Math.ceil(value / roundTo) * roundTo;
 
-                return lowerBound.toLocaleString() + '-' + upperBound.toLocaleString();
+                // Convert to 万 units
+                const lowerInWan = (lowerBound / 10000).toFixed(1);
+                const upperInWan = (upperBound / 10000).toFixed(1);
+
+                return lowerInWan + '万-' + upperInWan + '万';
             } else {
                 // For small numbers (< 10,000), just return the value
                 return value.toLocaleString();
@@ -2367,8 +2369,14 @@
                 return `${startStr}-${endStr}`;
             });
 
-            const piecesData = data.map(week => week.total_pieces);
+            // Store original pieces data for tooltip
+            const piecesDataOriginal = data.map(week => week.total_pieces);
+            // Convert pieces data to units of 10,000 (万) for display
+            const piecesData = data.map(week => week.total_pieces / 10000);
             const vehiclesData = data.map(week => week.vehicle_count);
+
+            // Detect if it's a mobile device
+            const isMobile = window.innerWidth < 768;
 
             window.weekComparisonChart = new Chart(ctx, {
                 type: 'bar',
@@ -2376,12 +2384,26 @@
                     labels: labels,
                     datasets: [
                         {
-                            label: translations[currentLang].total_cargo || '货物总量',
+                            label: (translations[currentLang].total_cargo || '货物总量') + ' (万)',
                             data: piecesData,
                             backgroundColor: 'rgba(54, 162, 235, 0.6)',
                             borderColor: 'rgba(54, 162, 235, 1)',
                             borderWidth: 1,
-                            yAxisID: 'y'
+                            yAxisID: 'y',
+                            // Add data labels configuration
+                            datalabels: {
+                                anchor: 'center',
+                                align: 'center',
+                                formatter: function (value, context) {
+                                    // Display value in 万 with 1 decimal place
+                                    return value > 0 ? value.toFixed(1) + '万' : '';
+                                },
+                                font: {
+                                    weight: 'bold',
+                                    size: isMobile ? 11 : 13
+                                },
+                                color: '#fff'
+                            }
                         },
                         {
                             label: translations[currentLang].vehicle_count || '车次',
@@ -2391,7 +2413,11 @@
                             backgroundColor: 'transparent',
                             borderWidth: 2,
                             tension: 0.1,
-                            yAxisID: 'y1'
+                            yAxisID: 'y1',
+                            // Don't show data labels for line chart
+                            datalabels: {
+                                display: false
+                            }
                         }
                     ]
                 },
@@ -2401,10 +2427,18 @@
                     plugins: {
                         legend: {
                             position: 'top',
+                            labels: {
+                                font: {
+                                    size: isMobile ? 10 : 12
+                                }
+                            }
                         },
                         title: {
                             display: true,
-                            text: translations[currentLang].week_comparison_chart || '周环比对比'
+                            text: translations[currentLang].week_comparison_chart || '周环比对比',
+                            font: {
+                                size: isMobile ? 14 : 16
+                            }
                         },
                         tooltip: {
                             callbacks: {
@@ -2414,7 +2448,15 @@
                                         label += ': ';
                                     }
                                     if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toLocaleString();
+                                        if (context.datasetIndex === 0) {
+                                            // For cargo, show both original value and value in 万
+                                            const originalValue = piecesDataOriginal[context.dataIndex];
+                                            const valueInWan = context.parsed.y.toFixed(1);
+                                            label += `${originalValue.toLocaleString()} (${valueInWan}万)`;
+                                        } else {
+                                            // For vehicles, show as is
+                                            label += context.parsed.y.toLocaleString();
+                                        }
                                     }
                                     return label;
                                 },
@@ -2432,6 +2474,14 @@
                                     return '';
                                 }
                             }
+                        },
+                        // Configure data labels plugin
+                        datalabels: {
+                            color: '#333',
+                            font: {
+                                weight: 'bold',
+                                size: isMobile ? 10 : 12
+                            }
                         }
                     },
                     scales: {
@@ -2440,7 +2490,19 @@
                             position: 'left',
                             title: {
                                 display: true,
-                                text: translations[currentLang].pieces || '件数'
+                                text: (translations[currentLang].pieces || '件数') + ' (万)',
+                                font: {
+                                    size: isMobile ? 12 : 14
+                                }
+                            },
+                            ticks: {
+                                callback: function (value) {
+                                    // Display Y-axis labels in 万 with 1 decimal place
+                                    return value.toFixed(1);
+                                },
+                                font: {
+                                    size: isMobile ? 10 : 12
+                                }
                             }
                         },
                         y1: {
@@ -2451,8 +2513,30 @@
                             },
                             title: {
                                 display: true,
-                                text: translations[currentLang].vehicle_count || '车次'
+                                text: translations[currentLang].vehicle_count || '车次',
+                                font: {
+                                    size: isMobile ? 12 : 14
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    size: isMobile ? 10 : 12
+                                }
                             }
+                        }
+                    },
+                    // Improve mobile interaction
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    // Adjust layout padding for data labels
+                    layout: {
+                        padding: {
+                            top: isMobile ? 30 : 40,
+                            right: isMobile ? 10 : 20,
+                            bottom: isMobile ? 10 : 20,
+                            left: isMobile ? 10 : 20
                         }
                     }
                 },
