@@ -739,6 +739,10 @@
                 <button id="toggleSync" class="btn btn-sync-active btn-sm">
                     <i class="fas fa-sync-alt"></i> <span id="syncButtonText">实时同步: 开启</span>
                 </button>
+                <button id="manualSyncBtn" class="btn btn-primary btn-sm" onclick="manualSync()"
+                    style="background-color: #6610f2; color: white;">
+                    <i class="fas fa-cloud-upload-alt"></i> <span data-lang="sync_now">立即同步</span>
+                </button>
                 <span id="syncStatus" class="sync-status">
                     <i class="fas fa-circle"></i> <span id="syncStatusText">已同步</span>
                 </span>
@@ -858,7 +862,8 @@
                 delete_success: "记录删除成功！",
                 delete_error: "删除出错，请检查网络连接。",
                 duplicate_warning_template: "检测到该码头在 {minutes} 分钟前刚有记录（车型：{vehicle_type}，车牌：{vehicle_no}）。\n是否确认继续添加新记录？",
-                logout: "登出"
+                logout: "登出",
+                load_rate: "装载率"
             },
             en: {
                 inbound_recorder: "Inbound Recorder",
@@ -898,7 +903,8 @@
                 delete_success: "Record deleted successfully!",
                 delete_error: "Deletion error, please check your network connection.",
                 duplicate_warning_template: "A record was detected at this dock {minutes} minutes ago (Type: {vehicle_type}, Plate: {vehicle_no}).\nConfirm to continue adding new record?",
-                logout: "Logout"
+                logout: "Logout",
+                load_rate: "Load Rate"
             },
             es: {
                 inbound_recorder: "Registrador de Entrada",
@@ -938,7 +944,8 @@
                 delete_success: "¡Registro eliminado con éxito!",
                 delete_error: "Error al eliminar, por favor verifique su conexión de red.",
                 duplicate_warning_template: "Se detectó un registro en este muelle hace {minutes} minutos (Tipo: {vehicle_type}, Placa: {vehicle_no}).\n¿Confirmar para continuar agregando nuevo registro?",
-                logout: "Cerrar sesión"
+                logout: "Cerrar sesión",
+                load_rate: "Tasa de Carga"
             }
         };
 
@@ -1301,6 +1308,48 @@
             }
         }
 
+        /**
+         * Calculate load rate based on vehicle type and load amount
+         * @param {string} vehicleType - Vehicle type
+         * @param {number} loadAmount - Actual load amount
+         * @returns {object} - Object with loadRate string and color style
+         */
+        function calculateLoadRate(vehicleType, loadAmount) {
+            if (!vehicleType || loadAmount === null || loadAmount === undefined || loadAmount === '') {
+                return { rate: 'N/A', color: '' };
+            }
+
+            let ratedCapacity = 0;
+
+            // Determine rated capacity based on vehicle type
+            if (vehicleType === '26英尺') {
+                ratedCapacity = 12;
+            } else if (vehicleType === '53英尺') {
+                ratedCapacity = 26;
+            } else {
+                // Car, Van, Other - no calculation
+                return { rate: 'N/A', color: '' };
+            }
+
+            // Calculate load rate
+            const loadRateValue = (loadAmount / ratedCapacity) * 100;
+            const loadRateStr = loadRateValue.toFixed(1) + '%';
+
+            // Determine color based on load rate
+            let color = '';
+            if (loadRateValue > 100) {
+                color = 'color: #f72585; font-weight: bold;'; // Overload - red
+            } else if (loadRateValue >= 90) {
+                color = 'color: #f8961e;'; // Near full - orange
+            } else if (loadRateValue >= 70) {
+                color = 'color: #4cc9f0;'; // Normal - blue
+            } else {
+                color = 'color: #666;'; // Low load - gray
+            }
+
+            return { rate: loadRateStr, color: color };
+        }
+
         // Load recent records
         function loadRecords() {
             fetch('/api/list')
@@ -1331,6 +1380,7 @@
                             <th>车型</th>
                             <th>车牌</th>
                             <th>装载</th>
+                            <th data-lang="load_rate">装载率</th>
                             <th>时间</th>
                             <th>时长(分钟)</th>
                             <th>货物件数</th>
@@ -1344,6 +1394,10 @@
             records.forEach(record => {
                 const isNew = lastId > 0 && record.id > lastId;
                 const rowClass = isNew ? ' class="new-record"' : '';
+
+                // Calculate load rate
+                const loadRateData = calculateLoadRate(record.vehicle_type, record.load_amount);
+
                 tableHtml += `
                     <tr${rowClass}>
                         <td>${record.id}</td>
@@ -1351,6 +1405,7 @@
                         <td>${record.vehicle_type || ''}</td>
                         <td>${record.vehicle_no || ''}</td>
                         <td>${record.load_amount || ''}</td>
+                        <td style="${loadRateData.color}">${loadRateData.rate}</td>
                         <td>${record.time_slot || ''}</td>
                         <td>${record.duration || ''}</td>
                         <td>${record.pieces || 0}</td>
@@ -1701,8 +1756,8 @@
             }
         }
 
-        // 手动同步
-        async function manualSync() {
+        // 手动同步 (Offline)
+        async function offlineManualSync() {
             const syncButton = document.getElementById('syncButton');
             const syncProgress = document.getElementById('syncProgress');
             const progressBar = document.getElementById('progressBar');
@@ -1768,13 +1823,62 @@
             updateNetworkStatus(false);
         });
 
-        // 同步按钮点击事件
-        document.getElementById('syncButton').addEventListener('click', manualSync);
+        // 同步按钮点击事件 (for offline manager)
+        document.getElementById('syncButton').addEventListener('click', offlineManualSync);
+
+        // Manual Sync Function (for server-side sync)
+        function manualSync() {
+            const btn = document.getElementById('manualSyncBtn');
+            // Check if the button exists before trying to access its properties
+            if (!btn) {
+                console.warn("manualSyncBtn not found. Skipping manualSync execution.");
+                return;
+            }
+            const icon = btn.querySelector('i');
+            const originalText = btn.innerHTML;
+
+            // Set loading state
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+
+            fetch('/api/manual_sync', {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.count === 0) {
+                            showMessage('所有记录已同步', 'success');
+                        } else {
+                            showMessage(`成功同步 ${data.synced}/${data.total} 条记录`, 'success');
+                            // Refresh list
+                            loadRecords(); // Changed from loadRecentRecords() to loadRecords() for consistency
+                        }
+                    } else {
+                        showMessage('同步失败: ' + (data.error || '未知错误'), 'error');
+                    }
+                })
+                .catch(err => {
+                    showMessage('同步请求失败', 'error');
+                    console.error(err);
+                })
+                .finally(() => {
+                    // Restore button state
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                });
+        }
 
         // 页面加载时初始化
         document.addEventListener('DOMContentLoaded', async () => {
             updateNetworkStatus(navigator.onLine);
             await updatePendingCount();
+
+            // Initialize the new manual sync button if it exists
+            const manualSyncBtn = document.getElementById('manualSyncBtn');
+            if (manualSyncBtn) {
+                manualSyncBtn.addEventListener('click', manualSync);
+            }
 
             // 初始化实时同步
             initRealtimeSync();
