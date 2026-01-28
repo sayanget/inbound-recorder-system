@@ -10,20 +10,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- 添加Chart.js数据标签插件 -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
     <style>
-        :root {
-            --primary-color: #4361ee;
-            --secondary-color: #3f37c9;
-            --success-color: #4cc9f0;
-            --danger-color: #f72585;
-            --warning-color: #f8961e;
-            --info-color: #4895ef;
-            --light-color: #f8f9fa;
-            --dark-color: #212529;
-            --border-color: #dee2e6;
-            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
+        /* :root variables moved to theme.css */
+
 
         /* User info display */
         .user-info {
@@ -31,8 +22,8 @@
             top: 15px;
             right: 120px;
             z-index: 1000;
-            background-color: rgba(255, 255, 255, 0.2);
-            color: white;
+            background-color: transparent;
+            color: var(--text-color);
             padding: 5px 10px;
             border-radius: 4px;
             font-size: 14px;
@@ -57,7 +48,7 @@
         }
 
         #usernameDisplay {
-            color: white;
+            color: var(--text-color);
             font-weight: bold;
             font-size: 14px;
         }
@@ -82,9 +73,9 @@
 
         .lang-selected {
             padding: 5px 10px;
-            background-color: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
@@ -132,18 +123,19 @@
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: var(--body-bg);
+            color: var(--text-color);
         }
 
         .container {
-            background-color: white;
+            background-color: var(--card-bg);
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--card-shadow);
         }
 
         h2 {
-            color: #333;
+            color: var(--text-color);
             text-align: center;
             margin-bottom: 30px;
         }
@@ -160,8 +152,8 @@
         }
 
         .stat-card {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+            background-color: var(--table-header-bg);
+            border: 1px solid var(--border-color);
             border-radius: 5px;
             padding: 20px;
             text-align: center;
@@ -169,13 +161,13 @@
 
         .stat-card h3 {
             margin-top: 0;
-            color: #495057;
+            color: var(--text-muted);
         }
 
         .stat-value {
             font-size: 2em;
             font-weight: bold;
-            color: #007bff;
+            color: var(--primary-color);
         }
 
         table {
@@ -186,50 +178,36 @@
 
         th,
         td {
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             padding: 12px;
             text-align: left;
+            color: var(--text-color);
         }
 
         th {
-            background-color: #f2f2f2;
+            background-color: var(--table-header-bg);
         }
 
         tr:nth-child(even) {
-            background-color: #f9f9f9;
+            background-color: var(--table-stripe);
         }
 
-        .message {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
-        }
-
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
+        /* Messages styles moved to theme.css */
 
         button {
-            background-color: #007bff;
-            color: white;
+            background-color: var(--primary-color);
+            color: #fff;
             padding: 10px 20px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
             margin: 5px;
+            transition: background-color 0.3s;
         }
 
         button:hover {
-            background-color: #0056b3;
+            background-color: var(--primary-hover);
         }
 
         .button-group {
@@ -240,7 +218,7 @@
         .chart-container {
             margin: 30px 0;
             padding: 20px;
-            background: #f8f9fa;
+            background: var(--card-bg);
             border-radius: 8px;
             /* 优化图表容器在手机上的显示 */
             height: 400px;
@@ -288,7 +266,7 @@
         }
 
         .nav-btn.active {
-            background-color: #007bff;
+            background-color: var(--primary-color);
             color: white;
         }
 
@@ -316,8 +294,10 @@
         .date-selection input {
             padding: 8px;
             font-size: 16px;
-            border: 1px solid #ced4da;
+            border: 1px solid var(--input-border);
             border-radius: 4px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
         }
 
         .date-selection button {
@@ -338,6 +318,10 @@
             </button>
         </div>
         <div class="language-selector">
+            <button class="theme-toggle-btn" onclick="themeToggle.toggle()" title="Switch Theme"
+                style="background: transparent; border: 1px solid var(--border-color); color: var(--text-color); margin-right: 10px;">
+                <i id="themeIcon" class="fas fa-moon"></i>
+            </button>
             <div class="lang-dropdown">
                 <div class="lang-selected" id="langSelected">
                     <span id="currentLangText">中文</span>
@@ -385,9 +369,9 @@
                     <span id="forecastValue">0</span>
                 </div>
                 <div class="progress-bar"
-                    style="width: 100%; height: 20px; background-color: #e0e0e0; border-radius: 10px; overflow: hidden;">
-                    <div id="progressBar"
-                        style="height: 100%; width: 0%; background-color: #4CAF50; transition: width 0.3s;"></div>
+                    style="width: 100%; height: 20px; background-color: var(--table-stripe); border-radius: 10px; overflow: hidden;">
+                    <div id="progressBar" class="progress-bar-fill"
+                        style="height: 100%; width: 0%; transition: width 0.3s;"></div>
                 </div>
                 <div style="text-align: center; margin-top: 5px;">
                     <span data-lang="completion_rate">完成率:</span>
@@ -413,7 +397,7 @@
                     <div class="stat-value" id="totalVehicles">0</div>
                 </div>
                 <div class="stat-card">
-                    <h3 data-lang="total_cargo">总货物量 (万)</h3>
+                    <h3 data-lang="total_cargo">总货物量</h3>
                     <div class="stat-value" id="totalPieces">0</div>
                 </div>
                 <div class="stat-card">
@@ -962,6 +946,173 @@
                     }, 300);
                 }
             });
+
+            // Enhanced BroadcastChannel for real-time updates
+            let broadcastChannel = null;
+            let pollingInterval = null;
+
+            // Setup BroadcastChannel with improved error handling
+            function setupBroadcastChannel() {
+                if ('BroadcastChannel' in window) {
+                    try {
+                        broadcastChannel = new BroadcastChannel('inbound_updates');
+                        broadcastChannel.onmessage = function (event) {
+                            console.log('[Statistics] Received broadcast message:', event.data);
+                            if (event.data && event.data.type === 'refresh_stats') {
+                                console.log('[Statistics] Refreshing all statistics data...');
+                                loadData(); // This internally calls loadHourlyComparisonData and loadPalletHourlyData
+                            }
+                        };
+                        console.log('[Statistics] BroadcastChannel setup successfully - listening for inbound_updates');
+                    } catch (e) {
+                        console.error('[Statistics] Error setting up BroadcastChannel:', e);
+                        console.warn('[Statistics] Falling back to polling mode');
+                        setupPollingFallback();
+                    }
+                } else {
+                    console.warn('[Statistics] BroadcastChannel not supported in this browser');
+                    console.warn('[Statistics] Using polling fallback for real-time updates');
+                    setupPollingFallback();
+                }
+            }
+
+            // Polling fallback for browsers without BroadcastChannel support
+            function setupPollingFallback() {
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                }
+                // Poll every 30 seconds to check for updates
+                pollingInterval = setInterval(function () {
+                    console.log('[Statistics] Auto-refreshing data (polling mode)');
+                    loadData();
+                }, 30000);
+                console.log('[Statistics] Polling fallback enabled (30s interval)');
+            }
+
+            // ================================================================
+            // SSE (Server-Sent Events) for Cross-Device Real-Time Sync
+            // ================================================================
+
+            let sseConnection = null;
+            let sseReconnectTimer = null;
+            let hasRealtimeSync = false;
+
+            // Setup SSE connection for cross-device synchronization
+            function setupSSE() {
+                // If already connected, close first
+                if (sseConnection) {
+                    sseConnection.close();
+                }
+
+                try {
+                    console.log('[Statistics] Connecting to SSE...');
+                    sseConnection = new EventSource('/api/sse/updates');
+
+                    sseConnection.onopen = function () {
+                        console.log('[Statistics] SSE connection established');
+                        hasRealtimeSync = true;
+
+                        // If polling is active, disable it (SSE is better)
+                        if (pollingInterval) {
+                            clearInterval(pollingInterval);
+                            pollingInterval = null;
+                            console.log('[Statistics] Polling disabled (SSE active)');
+                        }
+
+                        // Clear reconnect timer
+                        if (sseReconnectTimer) {
+                            clearTimeout(sseReconnectTimer);
+                            sseReconnectTimer = null;
+                        }
+                    };
+
+                    sseConnection.onmessage = function (event) {
+                        try {
+                            const data = JSON.parse(event.data);
+                            console.log('[Statistics] SSE message received:', data);
+
+                            if (data.type === 'refresh_stats') {
+                                console.log('[Statistics] Refreshing statistics data (SSE)...');
+                                loadData();
+                            } else if (data.type === 'heartbeat') {
+                                // Heartbeat to keep connection alive
+                                console.log('[Statistics] SSE heartbeat');
+                            } else if (data.type === 'connected') {
+                                console.log('[Statistics] SSE connected:', data.message);
+                            }
+                        } catch (e) {
+                            console.error('[Statistics] Error parsing SSE message:', e);
+                        }
+                    };
+
+                    sseConnection.onerror = function (error) {
+                        console.error('[Statistics] SSE connection error:', error);
+                        sseConnection.close();
+                        hasRealtimeSync = false;
+
+                        // Try to reconnect after 5 seconds
+                        console.log('[Statistics] Will reconnect SSE in 5 seconds...');
+                        sseReconnectTimer = setTimeout(setupSSE, 5000);
+
+                        // If BroadcastChannel is also not available, enable polling
+                        if (!broadcastChannel) {
+                            setupPollingFallback();
+                        }
+                    };
+                } catch (e) {
+                    console.error('[Statistics] Error setting up SSE:', e);
+                    console.warn('[Statistics] SSE not available, relying on other sync methods');
+                    hasRealtimeSync = false;
+
+                    // If BroadcastChannel is also not available, enable polling
+                    if (!broadcastChannel) {
+                        setupPollingFallback();
+                    }
+                }
+            }
+
+            // Modified polling fallback - only activate if no other sync method works
+            function setupPollingFallback() {
+                // Only setup polling if neither SSE nor BroadcastChannel is available
+                if (hasRealtimeSync || broadcastChannel) {
+                    console.log('[Statistics] Real-time sync available, polling not needed');
+                    return;
+                }
+
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                }
+                // Poll every 30 seconds to check for updates
+                pollingInterval = setInterval(function () {
+                    console.log('[Statistics] Auto-refreshing data (polling mode)');
+                    loadData();
+                }, 30000);
+                console.log('[Statistics] Polling fallback enabled (30s interval)');
+            }
+
+            // Cleanup on page unload
+            window.addEventListener('beforeunload', function () {
+                if (sseConnection) {
+                    console.log('[Statistics] Closing SSE connection');
+                    sseConnection.close();
+                }
+                if (sseReconnectTimer) {
+                    clearTimeout(sseReconnectTimer);
+                }
+                if (broadcastChannel) {
+                    console.log('[Statistics] Closing BroadcastChannel');
+                    broadcastChannel.close();
+                }
+                if (pollingInterval) {
+                    console.log('[Statistics] Clearing polling interval');
+                    clearInterval(pollingInterval);
+                }
+            });
+
+            // Initialize real-time sync mechanisms
+            // Priority: SSE (cross-device) > BroadcastChannel (same browser) > Polling (fallback)
+            setupSSE();
+            setupBroadcastChannel();
         });
 
         // Refresh data button
