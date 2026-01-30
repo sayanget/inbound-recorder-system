@@ -584,17 +584,22 @@
                 current_week: "本周",
                 previous_week: "上周",
                 change_percent: "环比变化",
+                week: "周",
+                week_total: "周总计",
+                date: "日期",
                 historical_avg: "历史日均值",
                 forecast_vs_actual_title: "揽收预估与实际入库对比（历史数据）",
                 forecast_value: "预估值",
                 actual_value: "实际值",
                 difference_percent: "差异百分比",
+                vs_yesterday: "环比昨日",
             },
             en: {
                 statistics_title: "Inbound Statistics",
                 inbound_statistics: "Inbound Statistics Data",
                 inbound_entry: "Inbound Entry",
                 sorting_entry: "Sorting Entry",
+                vs_yesterday: "from yesterday",
                 statistics_data: "Statistics Data",
                 history_query: "History Query",
                 select_date: "Select Date",
@@ -655,6 +660,9 @@
                 current_week: "Current Week",
                 previous_week: "Previous Week",
                 change_percent: "Change %",
+                week: "Week",
+                week_total: "Week Total",
+                date: "Date",
                 historical_avg: "Historical Daily Avg",
                 forecast_vs_actual_title: "Forecast vs Actual Comparison (All Historical Data)",
                 forecast_value: "Forecast",
@@ -726,6 +734,9 @@
                 current_week: "Semana Actual",
                 previous_week: "Semana Anterior",
                 change_percent: "Cambio %",
+                week: "Semana",
+                week_total: "Total Semanal",
+                date: "Fecha",
                 historical_avg: "Promedio Diario Histórico",
                 forecast_vs_actual_title: "Comparación de Previsión vs Real (Todos los Datos Históricos)",
                 forecast_value: "Previsión",
@@ -1233,6 +1244,14 @@
                     document.getElementById('vehicles20to21').textContent = data.vehicles_20_to_21 || 0;
                     document.getElementById('vehiclesAfter24').textContent = data.vehicles_after_24 || 0;
 
+                    // Update trends
+                    updateTrend('totalVehicles', data.vehicles_trend);
+                    updateTrend('totalPieces', data.pieces_trend);
+                    updateTrend('totalPallets', data.pallets_trend);
+                    updateTrend('vehicles19to20', data.vehicles_19_to_20_trend);
+                    updateTrend('vehicles20to21', data.vehicles_20_to_21_trend);
+                    updateTrend('vehiclesAfter24', data.vehicles_after_24_trend);
+
                     // Update vehicle statistics table
                     const vehicleStatsBody = document.querySelector('#vehicleStatsTable tbody');
                     vehicleStatsBody.innerHTML = '';
@@ -1546,6 +1565,36 @@
                 console.error('Error processing difference data:', error);
                 showMessage(translations[currentLang].processing_error || '处理差异分析数据出错: ' + error.message, 'error');
                 return [];
+            }
+        }
+
+        // Helper to update trend display
+        function updateTrend(elementId, trendValue) {
+            const valueEl = document.getElementById(elementId);
+            if (!valueEl) return;
+
+            const card = valueEl.parentElement;
+            let trendEl = card.querySelector('.stat-trend');
+            if (!trendEl) {
+                trendEl = document.createElement('div');
+                trendEl.className = 'stat-trend';
+                trendEl.style.fontSize = '12px';
+                trendEl.style.marginTop = '5px';
+                trendEl.style.fontWeight = 'bold';
+                card.appendChild(trendEl);
+            }
+
+            if (trendValue !== undefined && trendValue !== null) {
+                const isPositive = trendValue > 0;
+                const isNegative = trendValue < 0;
+                // Red for increase, Green for decrease (China stock market style)
+                const color = isPositive ? '#d63031' : (isNegative ? '#00b894' : '#636e72');
+                const sign = isPositive ? '+' : '';
+                const text = translations[currentLang].vs_yesterday || '环比昨日';
+
+                trendEl.innerHTML = `<span style="color: ${color}">${sign}${trendValue}% ${text}</span>`;
+            } else {
+                trendEl.innerHTML = '';
             }
         }
 
@@ -2510,21 +2559,91 @@
                 return;
             }
 
-            // Generate labels and data
+            // 星期几翻译（简短版本用于周统计）
+            const weekdayShortTranslations = {
+                'zh': ['一', '二', '三', '四', '五', '六', '日'],
+                'en': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                'es': ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+            };
+
+            // 为每个星期几定义不同的颜色（7种颜色，周一到周日）
+            const weekdayColors = [
+                'rgba(54, 162, 235, 0.8)',   // 周一 - 蓝色
+                'rgba(255, 99, 132, 0.8)',   // 周二 - 红色
+                'rgba(75, 192, 192, 0.8)',   // 周三 - 青色
+                'rgba(255, 206, 86, 0.8)',   // 周四 - 黄色
+                'rgba(153, 102, 255, 0.8)',  // 周五 - 紫色
+                'rgba(255, 159, 64, 0.8)',   // 周六 - 橙色
+                'rgba(201, 203, 207, 0.8)'   // 周日 - 灰色
+            ];
+
+            const weekdayBorderColors = [
+                'rgba(54, 162, 235, 1)',
+                'rgba(255, 99, 132, 1)',
+                'rgba(75, 192, 192, 1)',
+                'rgba(255, 206, 86, 1)',
+                'rgba(153, 102, 255, 1)',
+                'rgba(255, 159, 64, 1)',
+                'rgba(201, 203, 207, 1)'
+            ];
+
+            // 准备图表数据
+            // X轴标签：每周一个标签
             const labels = data.map(week => {
-                // Formatting date range: "MM/DD - MM/DD"
-                const startDate = new Date(week.start_date);
-                const endDate = new Date(week.end_date);
-                const startStr = `${startDate.getMonth() + 1}/${startDate.getDate()}`;
-                const endStr = `${endDate.getMonth() + 1}/${endDate.getDate()}`;
-                return `${startStr}-${endStr}`;
+                // 返回多行标签：[周标签, 日期范围]
+                return [week.week_label, `${week.start_date.substring(5)} ~ ${week.end_date.substring(5)}`];
             });
 
-            // Store original pieces data for tooltip
-            const piecesDataOriginal = data.map(week => week.total_pieces);
-            // Convert pieces data to units of 10,000 (万) for display
-            const piecesData = data.map(week => week.total_pieces / 10000);
-            const vehiclesData = data.map(week => week.vehicle_count);
+            // 创建7个数据集，每个代表一周中的某一天
+            const datasets = [];
+
+            for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+                const dayData = data.map(week => {
+                    // 获取该周该天的数据
+                    const dayInfo = week.daily_data[dayIndex];
+                    return dayInfo ? dayInfo.pieces / 10000 : 0; // 转换为万
+                });
+
+                datasets.push({
+                    label: weekdayShortTranslations[currentLang][dayIndex],
+                    data: dayData,
+                    backgroundColor: weekdayColors[dayIndex],
+                    borderColor: weekdayBorderColors[dayIndex],
+                    borderWidth: 1,
+                    yAxisID: 'y'
+                });
+            }
+
+            // 添加环比变化率曲线
+            const changePercentData = data.map(week => week.pieces_change_percent);
+
+            // 为每个数据点设置颜色：增长用红色，下降用绿色
+            const pointColors = changePercentData.map(value => {
+                if (value > 0) return '#FF6384';      // 红色 - 增长
+                if (value < 0) return '#4BC0C0';      // 绿色 - 下降
+                return '#999999';                      // 灰色 - 无变化
+            });
+
+            datasets.push({
+                label: translations[currentLang].change_percent || '环比变化',
+                type: 'line',
+                data: changePercentData,
+                borderColor: '#FF6384',
+                backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: false,
+                yAxisID: 'y1',
+                pointRadius: 5,
+                pointHoverRadius: 8,
+                pointBackgroundColor: pointColors,  // 使用动态颜色
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                // 不显示数据标签
+                datalabels: {
+                    display: false
+                }
+            });
 
             // Detect if it's a mobile device
             const isMobile = window.innerWidth < 768;
@@ -2533,44 +2652,7 @@
                 type: 'bar',
                 data: {
                     labels: labels,
-                    datasets: [
-                        {
-                            label: (translations[currentLang].total_cargo || '货物总量') + ' (万)',
-                            data: piecesData,
-                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                            borderColor: 'rgba(54, 162, 235, 1)',
-                            borderWidth: 1,
-                            yAxisID: 'y',
-                            // Add data labels configuration
-                            datalabels: {
-                                anchor: 'center',
-                                align: 'center',
-                                formatter: function (value, context) {
-                                    // Display value in 万 with 1 decimal place
-                                    return value > 0 ? value.toFixed(1) + '万' : '';
-                                },
-                                font: {
-                                    weight: 'bold',
-                                    size: isMobile ? 11 : 13
-                                },
-                                color: '#fff'
-                            }
-                        },
-                        {
-                            label: translations[currentLang].vehicle_count || '车次',
-                            type: 'line', // Mix line chart for vehicles
-                            data: vehiclesData,
-                            borderColor: '#FF6384',
-                            backgroundColor: 'transparent',
-                            borderWidth: 2,
-                            tension: 0.1,
-                            yAxisID: 'y1',
-                            // Don't show data labels for line chart
-                            datalabels: {
-                                display: false
-                            }
-                        }
-                    ]
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
@@ -2580,8 +2662,10 @@
                             position: 'top',
                             labels: {
                                 font: {
-                                    size: isMobile ? 10 : 12
-                                }
+                                    size: isMobile ? 9 : 11
+                                },
+                                boxWidth: isMobile ? 12 : 15,
+                                padding: isMobile ? 5 : 10
                             }
                         },
                         title: {
@@ -2593,50 +2677,141 @@
                         },
                         tooltip: {
                             callbacks: {
+                                title: function (context) {
+                                    const weekIndex = context[0].dataIndex;
+                                    const week = data[weekIndex];
+                                    return `${week.week_label} (${week.start_date} ~ ${week.end_date})`;
+                                },
                                 label: function (context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
+                                    const weekIndex = context.dataIndex;
+                                    const dayIndex = context.datasetIndex;
+                                    const week = data[weekIndex];
+
+                                    // 判断是否是环比曲线（最后一个数据集）
+                                    if (dayIndex === 7) {
+                                        const changePercent = week.pieces_change_percent;
+                                        const sign = changePercent >= 0 ? '+' : '';
+                                        const trend = changePercent > 0 ? '↑' : (changePercent < 0 ? '↓' : '→');
+                                        return `${translations[currentLang].change_percent || '环比变化'}: ${sign}${changePercent.toFixed(1)}% ${trend}`;
                                     }
-                                    if (context.parsed.y !== null) {
-                                        if (context.datasetIndex === 0) {
-                                            // For cargo, show both original value and value in 万
-                                            const originalValue = piecesDataOriginal[context.dataIndex];
-                                            const valueInWan = context.parsed.y.toFixed(1);
-                                            label += `${originalValue.toLocaleString()} (${valueInWan}万)`;
-                                        } else {
-                                            // For vehicles, show as is
-                                            label += context.parsed.y.toLocaleString();
-                                        }
-                                    }
-                                    return label;
+
+                                    // 普通柱状图
+                                    const dayInfo = week.daily_data[dayIndex];
+                                    const weekdayName = weekdayShortTranslations[currentLang][dayIndex];
+                                    const valueInWan = context.parsed.y.toFixed(1);
+                                    const originalValue = dayInfo.pieces;
+
+                                    return `${weekdayName}: ${originalValue.toLocaleString()} (${valueInWan}万)`;
                                 },
                                 afterLabel: function (context) {
-                                    // Show change percentage in tooltip
-                                    const index = context.dataIndex;
-                                    const weekData = data[index];
-                                    if (context.datasetIndex === 0 && weekData.pieces_change_percent !== undefined) { // pieces
-                                        const sign = weekData.pieces_change_percent >= 0 ? '+' : '';
-                                        return `${translations[currentLang].change_percent || '环比变化'}: ${sign}${weekData.pieces_change_percent}%`;
-                                    } else if (context.datasetIndex === 1 && weekData.vehicles_change_percent !== undefined) { // vehicles
-                                        const sign = weekData.vehicles_change_percent >= 0 ? '+' : '';
-                                        return `${translations[currentLang].change_percent || '环比变化'}: ${sign}${weekData.vehicles_change_percent}%`;
+                                    const weekIndex = context.dataIndex;
+                                    const dayIndex = context.datasetIndex;
+
+                                    // 环比曲线不显示车次
+                                    if (dayIndex === 7) {
+                                        return '';
                                     }
-                                    return '';
+
+                                    const week = data[weekIndex];
+                                    const dayInfo = week.daily_data[dayIndex];
+
+                                    return `${translations[currentLang].vehicle_count || '车次'}: ${dayInfo.vehicles}`;
+                                },
+                                footer: function (context) {
+                                    const weekIndex = context[0].dataIndex;
+                                    const week = data[weekIndex];
+                                    const dayIndex = context[0].datasetIndex;
+
+                                    // 如果是环比曲线，不显示footer
+                                    if (dayIndex === 7) {
+                                        return '';
+                                    }
+
+                                    const totalPiecesWan = (week.week_total_pieces / 10000).toFixed(1);
+                                    let footer = `\n${translations[currentLang].week_total || '周总计'}: ${week.week_total_pieces.toLocaleString()} (${totalPiecesWan}万)`;
+                                    footer += `\n${translations[currentLang].vehicle_count || '车次'}: ${week.week_total_vehicles}`;
+
+                                    // 显示环比变化
+                                    if (week.pieces_change_percent !== undefined && week.pieces_change_percent !== 0) {
+                                        const sign = week.pieces_change_percent >= 0 ? '+' : '';
+                                        footer += `\n${translations[currentLang].change_percent || '环比变化'}: ${sign}${week.pieces_change_percent}%`;
+                                    }
+
+                                    return footer;
+                                },
+                                labelColor: function (context) {
+                                    const dayIndex = context.datasetIndex;
+
+                                    // 如果是环比曲线，根据数值设置颜色
+                                    if (dayIndex === 7) {
+                                        const weekIndex = context.dataIndex;
+                                        const week = data[weekIndex];
+                                        const changePercent = week.pieces_change_percent;
+
+                                        let color;
+                                        if (changePercent > 0) {
+                                            color = '#FF6384';  // 红色 - 增长
+                                        } else if (changePercent < 0) {
+                                            color = '#4BC0C0';  // 绿色 - 下降
+                                        } else {
+                                            color = '#999999';  // 灰色 - 无变化
+                                        }
+
+                                        return {
+                                            borderColor: color,
+                                            backgroundColor: color
+                                        };
+                                    }
+
+                                    // 默认返回数据集的颜色
+                                    return {
+                                        borderColor: context.dataset.borderColor,
+                                        backgroundColor: context.dataset.backgroundColor
+                                    };
                                 }
                             }
                         },
-                        // Configure data labels plugin
+                        // Configure data labels plugin - 只在最顶部（周日）显示周总计
                         datalabels: {
-                            color: '#333',
+                            display: function (context) {
+                                // 只在最后一个数据集（周日，索引6）上显示标签
+                                return context.datasetIndex === 6;
+                            },
+                            anchor: 'end',
+                            align: 'top',
+                            offset: 4,
+                            formatter: function (value, context) {
+                                // 显示该周的总货量（万）
+                                const weekIndex = context.dataIndex;
+                                const week = data[weekIndex];
+                                const totalWan = (week.week_total_pieces / 10000).toFixed(1);
+                                return totalWan + '万';
+                            },
                             font: {
                                 weight: 'bold',
-                                size: isMobile ? 10 : 12
-                            }
+                                size: isMobile ? 11 : 13
+                            },
+                            color: '#333'
                         }
                     },
                     scales: {
+                        x: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: translations[currentLang].week || '周',
+                                font: {
+                                    size: isMobile ? 12 : 14
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    size: isMobile ? 8 : 10
+                                }
+                            }
+                        },
                         y: {
+                            stacked: true,
                             beginAtZero: true,
                             position: 'left',
                             title: {
@@ -2660,16 +2835,19 @@
                             beginAtZero: true,
                             position: 'right',
                             grid: {
-                                drawOnChartArea: false
+                                drawOnChartArea: false  // 不绘制网格线，避免与左侧Y轴重叠
                             },
                             title: {
                                 display: true,
-                                text: translations[currentLang].vehicle_count || '车次',
+                                text: (translations[currentLang].change_percent || '环比变化') + ' (%)',
                                 font: {
                                     size: isMobile ? 12 : 14
                                 }
                             },
                             ticks: {
+                                callback: function (value) {
+                                    return value.toFixed(1) + '%';
+                                },
                                 font: {
                                     size: isMobile ? 10 : 12
                                 }
@@ -2681,10 +2859,10 @@
                         intersect: false,
                         mode: 'index'
                     },
-                    // Adjust layout padding for data labels
+                    // Adjust layout padding
                     layout: {
                         padding: {
-                            top: isMobile ? 30 : 40,
+                            top: isMobile ? 30 : 40,  // 增加顶部padding为标签留空间
                             right: isMobile ? 10 : 20,
                             bottom: isMobile ? 10 : 20,
                             left: isMobile ? 10 : 20

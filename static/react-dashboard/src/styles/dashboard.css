@@ -1,0 +1,306 @@
+/* Import theme variables from existing theme.css */
+@import url('../../../css/theme.css');
+
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.app {
+    min-height: 100vh;
+    background-color: var(--bg-color, #f5f5f5);
+    color: var(--text-color, #333);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+
+/* Dashboard Layout */
+.statistics-dashboard {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header Styles */
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: var(--card-bg, #fff);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 24px;
+}
+
+.header-left h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-color, #333);
+}
+
+.header-right {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.language-selector {
+    display: flex;
+    gap: 8px;
+}
+
+.lang-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border-color, #ddd);
+    background: transparent;
+    color: var(--text-color, #333);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.lang-btn:hover {
+    background: var(--hover-bg, #f0f0f0);
+}
+
+.lang-btn.active {
+    background: var(--primary-color, #4CAF50);
+    color: white;
+    border-color: var(--primary-color, #4CAF50);
+}
+
+.theme-toggle,
+.refresh-btn {
+    padding: 8px 12px;
+    border: 1px solid var(--border-color, #ddd);
+    background: var(--card-bg, #fff);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.3s ease;
+}
+
+.theme-toggle:hover,
+.refresh-btn:hover {
+    background: var(--hover-bg, #f0f0f0);
+    transform: scale(1.05);
+}
+
+/* Dashboard Content */
+.dashboard-content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.stats-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 24px;
+    background: var(--card-bg, #fff);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stats-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.stats-card-icon {
+    font-size: 48px;
+    line-height: 1;
+}
+
+.stats-card-content {
+    flex: 1;
+}
+
+.stats-card-title {
+    font-size: 14px;
+    color: var(--text-secondary, #666);
+    margin-bottom: 8px;
+}
+
+.stats-card-value {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.stats-card-value .value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-color, #333);
+}
+
+.stats-card-value .unit {
+    font-size: 16px;
+    color: var(--text-secondary, #666);
+}
+
+.stats-card-trend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 14px;
+}
+
+.stats-card-trend.trend-up {
+    color: #4CAF50;
+}
+
+.stats-card-trend.trend-down {
+    color: #f44336;
+}
+
+.stats-card-trend.trend-neutral {
+    color: #999;
+}
+
+/* Charts Grid */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+}
+
+.chart-card {
+    background: var(--card-bg, #fff);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: 24px;
+}
+
+.chart-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text-color, #333);
+}
+
+.chart-card-content {
+    height: 300px;
+    position: relative;
+}
+
+.no-data {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary, #999);
+    font-size: 16px;
+}
+
+/* Loading and Error States */
+.loading,
+.error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    font-size: 18px;
+}
+
+.error {
+    color: #f44336;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .statistics-dashboard {
+        padding: 12px;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+    }
+
+    .header-left h1 {
+        font-size: 20px;
+        text-align: center;
+    }
+
+    .header-right {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-card-content {
+        height: 250px;
+    }
+}
+
+@media (max-width: 480px) {
+    .language-selector {
+        width: 100%;
+    }
+
+    .lang-btn {
+        flex: 1;
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .stats-card {
+        padding: 16px;
+    }
+
+    .stats-card-icon {
+        font-size: 36px;
+    }
+
+    .stats-card-value .value {
+        font-size: 24px;
+    }
+}
+
+/* Dark Theme Support */
+[data-theme="dark"] .app {
+    background-color: #1a1a1a;
+}
+
+[data-theme="dark"] .dashboard-header,
+[data-theme="dark"] .stats-card,
+[data-theme="dark"] .chart-card {
+    background: #2a2a2a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .lang-btn,
+[data-theme="dark"] .theme-toggle,
+[data-theme="dark"] .refresh-btn {
+    background: #2a2a2a;
+    border-color: #444;
+    color: #fff;
+}
+
+[data-theme="dark"] .lang-btn:hover,
+[data-theme="dark"] .theme-toggle:hover,
+[data-theme="dark"] .refresh-btn:hover {
+    background: #333;
+}

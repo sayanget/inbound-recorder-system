@@ -1,0 +1,6 @@
+Users found: 3 IDs: [1, 2, 4]
+Orphaned User Permissions for user_ids: {3}
+
+--- Inbound Records Issues ---
+Total rows: 2175
+Total problem rows: 0

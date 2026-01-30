@@ -7,20 +7,11 @@
     <title data-lang="history_query_title">历史记录查询</title>
     <link rel="icon" type="image/x-icon" href="/static/in0.ico">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
     <style>
-        :root {
-            --primary-color: #4361ee;
-            --secondary-color: #3f37c9;
-            --success-color: #4cc9f0;
-            --danger-color: #f72585;
-            --warning-color: #f8961e;
-            --info-color: #4895ef;
-            --light-color: #f8f9fa;
-            --dark-color: #212529;
-            --border-color: #dee2e6;
-            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
+        /* :root variables moved to theme.css */
+
 
         /* User info display */
         .user-info {
@@ -112,8 +103,8 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f7fb;
-            color: #333;
+            background-color: var(--body-bg);
+            color: var(--text-color);
             line-height: 1.5;
         }
 
@@ -173,7 +164,8 @@
         }
 
         .btn-secondary {
-            background-color: #6c757d;
+            background-color: var(--secondary-color);
+            color: white;
         }
 
         .btn-info {
@@ -181,7 +173,7 @@
         }
 
         .card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 8px;
             padding: 25px;
             margin-bottom: 25px;
@@ -208,7 +200,7 @@
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #555;
+            color: var(--text-color);
             font-size: 16px;
         }
 
@@ -218,6 +210,8 @@
             width: 100%;
             padding: 12px;
             border: 1px solid var(--border-color);
+            background-color: var(--input-bg);
+            color: var(--text-color);
             border-radius: 5px;
             font-size: 16px;
             transition: var(--transition);
@@ -254,7 +248,7 @@
         }
 
         .btn-reset {
-            background-color: #6c757d;
+            background-color: var(--secondary-color);
             color: white;
         }
 
@@ -266,7 +260,7 @@
         }
 
         .stat-card {
-            background-color: #f8f9fa;
+            background-color: var(--table-header-bg);
             border: 1px solid var(--border-color);
             border-radius: 5px;
             padding: 20px;
@@ -275,7 +269,7 @@
 
         .stat-card h3 {
             margin-top: 0;
-            color: #495057;
+            color: var(--text-muted);
         }
 
         .stat-value {
@@ -292,36 +286,21 @@
 
         th,
         td {
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             padding: 15px;
             text-align: left;
+            color: var(--text-color);
         }
 
         th {
-            background-color: #f2f2f2;
+            background-color: var(--table-header-bg);
         }
 
         tr:nth-child(even) {
-            background-color: #f9f9f9;
+            background-color: var(--table-stripe);
         }
 
-        .message {
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 5px;
-        }
-
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
+        /* Message styles moved to theme.css */
 
         .action-cell {
             display: flex;
@@ -438,6 +417,10 @@
                 </button>
             </div>
             <div class="language-selector">
+                <button class="theme-toggle-btn" onclick="themeToggle.toggle()" title="Switch Theme"
+                    style="background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); color: white; margin-right: 10px;">
+                    <i id="themeIcon" class="fas fa-moon"></i>
+                </button>
                 <div class="lang-dropdown">
                     <div class="lang-selected" id="langSelected">
                         <span id="currentLangText">中文</span>
@@ -879,6 +862,7 @@
                     <thead>
                         <tr>
                             <th>${translations[currentLang].id || 'ID'}</th>
+                            <th>${translations[currentLang].status || '状态'}</th>
                             <th>${translations[currentLang].dock || '码头'}</th>
                             <th>${translations[currentLang].vehicle_type || '车型'}</th>
                             <th>${translations[currentLang].license_plate || '车牌'}</th>
@@ -899,6 +883,7 @@
                 tableHtml += `
                     <tr>
                         <td>${record.id}</td>
+                        <td><span title="${record.is_synced ? '已同步' : '未同步'}">${record.is_synced ? '✅' : '⏳'}</span></td>
                         <td>${record.dock_no || ''}</td>
                         <td>${record.vehicle_type || ''}</td>
                         <td>${record.vehicle_no || ''}</td>

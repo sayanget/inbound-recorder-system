@@ -75,7 +75,7 @@ class OfflineManager {
                 type: type,
                 data: data,
                 timestamp: new Date().toISOString(),
-                synced: false,
+                synced: 0,
                 retryCount: 0
             };
 
@@ -105,7 +105,7 @@ class OfflineManager {
             const transaction = this.db.transaction(['pendingRecords'], 'readonly');
             const store = transaction.objectStore('pendingRecords');
             const index = store.index('synced');
-            const request = index.getAll(false);
+            const request = index.getAll(0);
 
             request.onsuccess = () => {
                 resolve(request.result);

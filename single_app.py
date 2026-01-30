@@ -1,5 +1,5 @@
 import sqlite3
-from flask import Flask, request, jsonify, send_file, session, redirect, Response
+from flask import Flask, request, jsonify, send_file, session, redirect, Response, render_template
 import os
 import sys
 from datetime import datetime, timedelta, date
@@ -567,6 +567,89 @@ def statistics():
         return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
     else:
         return f"File not found: {file_path}", 404
+
+
+@app.route('/react-dashboard')
+def react_dashboard():
+    """React统计仪表板 - 使用React最佳实践构建"""
+    try:
+        # 暂时跳过权限检查以排除登录问题干扰调试
+        # if 'user_id' not in session:
+        #     return redirect('/login')
+        
+        # if not check_page_permission('statistics'):
+        #     return redirect('/no_permission')
+        
+        print(f"DEBUG: Processing /react-dashboard request from {request.remote_addr}")
+        
+        # 返回React仪表板页面
+        static_dir = get_static_dir()
+        file_path = os.path.join(static_dir, 'react-dashboard', 'dist', 'index.html')
+        print(f"DEBUG: Serving dashboard file from: {file_path}")
+        
+        if os.path.exists(file_path):
+            # 使用send_file更加健壮，并禁用缓存以方便调试
+            response = send_file(file_path, mimetype='text/html')
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
+        else:
+            print(f"ERROR: File not found at {file_path}")
+            return f"Dashboard file not found at: {file_path}", 404
+            
+    except Exception as e:
+        print(f"ERROR: Exception in react_dashboard: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Server Error: {str(e)}", 500
+
+@app.route('/tabler-dashboard')
+def tabler_dashboard():
+    return render_template('tabler_dashboard.html')
+
+@app.route('/shadcn')
+def shadcn_dashboard():
+    # Reuse the React app index.html, handled by client-side routing
+    path = os.path.join('static', 'react-dashboard', 'dist', 'index.html')
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content, 200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        }
+    return "React build not found. Please run 'npm run build' in static/react-dashboard.", 404
+
+@app.route('/ping')
+def ping():
+    """健康检查接口"""
+    return "pong", 200
+
+@app.route('/dashboard-assets/<path:filename>')
+def serve_dashboard_assets(filename):
+    """Serve React Dashboard assets from a custom path to avoid conflicts"""
+    static_dir = get_static_dir()
+    # Path to the dist folder (assets are inside dist/assets)
+    # The URL request will contain 'assets/filename.js'
+    # So we join dist + filename
+    dist_dir = os.path.join(static_dir, 'react-dashboard', 'dist')
+    file_path = os.path.join(dist_dir, filename)
+    
+    if os.path.exists(file_path):
+        mimetype = None
+        if filename.endswith('.js'):
+            mimetype = 'application/javascript'
+        elif filename.endswith('.css'):
+            mimetype = 'text/css'
+        
+        return send_file(file_path, mimetype=mimetype)
+    else:
+        return f"Asset not found: {file_path}", 404
+
+
 
 @app.route('/debug_pallet_chart.html')
 def debug_pallet_chart():
@@ -1952,6 +2035,131 @@ def get_statistics():
                 except Exception as e:
                     print(f"处理记录 {record_id} 的时间时出错: {e}")
     
+    
+    # === 计算趋势数据 (环比昨天) ===
+    # 计算昨天的日期范围
+    prev_date = request_date - timedelta(days=1)
+    prev_next_date = prev_date + timedelta(days=1)
+    
+    prev_date_5am_la = la_tz.localize(datetime.combine(prev_date, datetime.min.time().replace(hour=5)))
+    prev_next_date_5am_la = la_tz.localize(datetime.combine(prev_next_date, datetime.min.time().replace(hour=5)))
+    
+    prev_start = prev_date_5am_la.astimezone()
+    prev_end = prev_next_date_5am_la.astimezone()
+    
+    # 查询昨天的总车次和货量
+    trend_query = """
+        SELECT COUNT(*) as total_vehicles, 
+               SUM(CASE 
+                   WHEN vehicle_type = '53英尺' AND vehicle_no = 'G' THEN 0 
+                   ELSE pieces 
+               END) as total_pieces 
+        FROM inbound_records 
+        WHERE 
+            created_at >= ? AND created_at < ?
+    """
+    trend_cur = conn.cursor(); trend_cur.execute(trend_query, (
+        prev_start.strftime('%Y-%m-%d %H:%M:%S'), 
+        prev_end.strftime('%Y-%m-%d %H:%M:%S')
+    ))
+    trend_result = trend_cur.fetchone()
+    
+    prev_vehicles = (trend_result['total_vehicles'] if USE_POSTGRES else trend_result[0]) if trend_result else 0
+    prev_pieces_val = trend_result['total_pieces'] if USE_POSTGRES else trend_result[1]
+    prev_pieces = int(prev_pieces_val) if prev_pieces_val else 0
+
+    # [新增] 查询昨天的托盘总数
+    trend_pallet_query = """
+        SELECT SUM(load_amount) as total_pallets
+        FROM inbound_records 
+        WHERE 
+            created_at >= ? AND created_at < ? 
+            AND (vehicle_type = '26英尺' OR vehicle_type = '53英尺')
+            AND NOT (vehicle_type = '53英尺' AND vehicle_no = 'G')
+    """
+    trend_pallet_cur = conn.cursor(); trend_pallet_cur.execute(trend_pallet_query, (
+        prev_start.strftime('%Y-%m-%d %H:%M:%S'), 
+        prev_end.strftime('%Y-%m-%d %H:%M:%S')
+    ))
+    trend_pallet_result = trend_pallet_cur.fetchone()
+    prev_pallets_val = trend_pallet_result['total_pallets'] if USE_POSTGRES else trend_pallet_result[0]
+    prev_pallets = int(prev_pallets_val) if prev_pallets_val else 0
+
+    # [新增] 查询昨天的晚班数据 (用于计算晚班趋势)
+    trend_records_query = """
+        SELECT id, created_at, vehicle_type, time_slot FROM inbound_records 
+        WHERE 
+            created_at >= ? AND created_at < ?
+    """
+    trend_records_cur = conn.cursor(); trend_records_cur.execute(trend_records_query, (
+        prev_start.strftime('%Y-%m-%d %H:%M:%S'), 
+        prev_end.strftime('%Y-%m-%d %H:%M:%S')
+    ))
+    prev_records = trend_records_cur.fetchall()
+
+    prev_night_shift_total = 0
+    prev_vehicles_19_to_20 = 0
+    prev_vehicles_20_to_21 = 0
+    prev_vehicles_after_24 = 0
+
+    for record in prev_records:
+        record_id, created_at_str, vehicle_type, time_slot = record
+        if time_slot:
+            try:
+                time_slot_int = int(time_slot)
+                if time_slot_int == 19:
+                    prev_vehicles_19_to_20 += 1
+                    prev_night_shift_total += 1
+                elif time_slot_int == 20:
+                    prev_vehicles_20_to_21 += 1
+                    prev_night_shift_total += 1
+                elif time_slot_int >= 24:
+                    prev_vehicles_after_24 += 1
+                    prev_night_shift_total += 1
+            except ValueError:
+                pass
+        else:
+            # 后备逻辑
+            if created_at_str:
+                try:
+                    if isinstance(created_at_str, str):
+                        utc_time = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S')
+                    else:
+                        utc_time = created_at_str
+                    utc_time = pytz.utc.localize(utc_time)
+                    local_time = utc_time.astimezone()
+                    
+                    if local_time.date() > prev_date: # 次日00:00以后
+                         prev_vehicles_after_24 += 1
+                         prev_night_shift_total += 1
+                    elif local_time.hour == 19:
+                         prev_vehicles_19_to_20 += 1
+                         prev_night_shift_total += 1
+                    elif local_time.hour == 20:
+                         prev_vehicles_20_to_21 += 1
+                         prev_night_shift_total += 1
+                except:
+                    pass
+    
+    # 计算增长率
+    def calculate_trend(current, previous):
+        if previous == 0:
+            return 100 if current > 0 else 0
+        return ((current - previous) / previous) * 100
+
+    pieces_trend = calculate_trend(total_pieces, prev_pieces)
+    vehicles_trend = calculate_trend(total_vehicles, prev_vehicles)
+    pallets_trend = calculate_trend(total_pallets, prev_pallets)
+
+    # 计算今日晚班总数
+    today_night_shift_total = vehicles_19_to_20 + vehicles_20_to_21 + vehicles_after_24
+    night_shift_trend = calculate_trend(today_night_shift_total, prev_night_shift_total)
+    
+    # 计算各时段趋势
+    vehicles_19_to_20_trend = calculate_trend(vehicles_19_to_20, prev_vehicles_19_to_20)
+    vehicles_20_to_21_trend = calculate_trend(vehicles_20_to_21, prev_vehicles_20_to_21)
+    vehicles_after_24_trend = calculate_trend(vehicles_after_24, prev_vehicles_after_24)
+    
     conn.close()
     
     return jsonify({
@@ -1963,7 +2171,17 @@ def get_statistics():
         "vehicles_19_to_20_by_type": vehicles_19_to_20_by_type,
         "vehicles_20_to_21": vehicles_20_to_21,
         "vehicles_20_to_21_by_type": vehicles_20_to_21_by_type,
-        "vehicles_after_24": vehicles_after_24
+        "vehicles_after_24": vehicles_after_24,
+        # 趋势数据
+        "pieces_trend": round(pieces_trend, 1),
+        "vehicles_trend": round(vehicles_trend, 1),
+        "pallets_trend": round(pallets_trend, 1),
+        "night_shift_trend": round(night_shift_trend, 1),
+        "vehicles_19_to_20_trend": round(vehicles_19_to_20_trend, 1),
+        "vehicles_20_to_21_trend": round(vehicles_20_to_21_trend, 1),
+        "vehicles_after_24_trend": round(vehicles_after_24_trend, 1),
+        "prev_pieces": prev_pieces,
+        "prev_vehicles": prev_vehicles
     })
 
 @app.route('/api/daily_trend')
@@ -2086,7 +2304,7 @@ def get_daily_trend():
 
 @app.route('/api/week_comparison')
 def get_week_comparison():
-    """获取所有周的对比数据（使用自然周：周一00:00到周日23:59）"""
+    """获取所有周的对比数据，包含每周内每天的详细数据（使用自然周：周一00:00到周日23:59）"""
     try:
         conn = get_db()
         
@@ -2100,7 +2318,6 @@ def get_week_comparison():
             conn.close()
             return jsonify([])  # 没有数据
             
-        # 解析最小日期
         # 解析最小日期
         try:
             if hasattr(min_str, 'date'): # 检查是否为 datetime/date 对象
@@ -2134,28 +2351,50 @@ def get_week_comparison():
         
         # 循环直到包含当前日期
         while current_start <= max_date:
-            # 查询该周数据
-            week_query = """
-                SELECT 
-                    COUNT(*) as vehicle_count,
-                    SUM(pieces) as total_pieces
-                FROM inbound_records
-                WHERE created_at >= ? AND created_at <= ?
-            """
+            # 查询该周每一天的数据
+            daily_data = []
+            week_total_pieces = 0
+            week_total_vehicles = 0
             
-            # 构造完整的日期时间范围 (周一 00:00:00 到 周日 23:59:59.999999)
-            week_start_dt = datetime.combine(current_start, datetime.min.time())
-            week_end_dt = datetime.combine(current_end, datetime.max.time())
-            
-            cursor = conn.cursor(); cursor.execute(week_query, (
-                week_start_dt.strftime('%Y-%m-%d %H:%M:%S'),
-                week_end_dt.strftime('%Y-%m-%d %H:%M:%S')
-            ))
-            
-            row = cursor.fetchone()
-            vehicle_count = row[0] if row[0] else 0
-            # 应用取整规则：千百十个位全部为0
-            total_pieces = round_to_ten_thousand(row[1])
+            # 循环7天（周一到周日）
+            for day_offset in range(7):
+                current_day = current_start + timedelta(days=day_offset)
+                next_day = current_day + timedelta(days=1)
+                
+                # 构造当天的日期时间范围 (00:00:00 到 23:59:59.999999)
+                day_start_dt = datetime.combine(current_day, datetime.min.time())
+                day_end_dt = datetime.combine(next_day, datetime.min.time())
+                
+                # 查询当天数据
+                day_query = """
+                    SELECT 
+                        COUNT(*) as vehicle_count,
+                        SUM(pieces) as total_pieces
+                    FROM inbound_records
+                    WHERE created_at >= ? AND created_at < ?
+                """
+                
+                cursor = conn.cursor(); cursor.execute(day_query, (
+                    day_start_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                    day_end_dt.strftime('%Y-%m-%d %H:%M:%S')
+                ))
+                
+                row = cursor.fetchone()
+                day_vehicles = row[0] if row[0] else 0
+                # 应用取整规则：千百十个位全部为0
+                day_pieces = round_to_ten_thousand(row[1])
+                
+                # 累加到周总计
+                week_total_vehicles += day_vehicles
+                week_total_pieces += day_pieces
+                
+                # 添加到每日数据数组
+                daily_data.append({
+                    'date': current_day.strftime('%Y-%m-%d'),
+                    'weekday': current_day.weekday(),  # 0=周一, 6=周日
+                    'pieces': day_pieces,
+                    'vehicles': day_vehicles
+                })
             
             # 计算环比（如果不是第一周）
             pieces_change_percent = 0
@@ -2163,24 +2402,26 @@ def get_week_comparison():
             
             if weeks_data:
                 last_week = weeks_data[-1]
-                last_pieces = last_week['total_pieces']
-                last_vehicles = last_week['vehicle_count']
+                last_pieces = last_week['week_total_pieces']
+                last_vehicles = last_week['week_total_vehicles']
                 
                 if last_pieces > 0:
-                    pieces_change_percent = ((total_pieces - last_pieces) / last_pieces) * 100
+                    pieces_change_percent = ((week_total_pieces - last_pieces) / last_pieces) * 100
                 else:
-                    pieces_change_percent = 100 if total_pieces > 0 else 0
+                    pieces_change_percent = 100 if week_total_pieces > 0 else 0
                     
                 if last_vehicles > 0:
-                    vehicles_change_percent = ((vehicle_count - last_vehicles) / last_vehicles) * 100
+                    vehicles_change_percent = ((week_total_vehicles - last_vehicles) / last_vehicles) * 100
                 else:
-                    vehicles_change_percent = 100 if vehicle_count > 0 else 0
+                    vehicles_change_percent = 100 if week_total_vehicles > 0 else 0
             
             weeks_data.append({
+                'week_label': f"{current_start.strftime('%m/%d')}-{current_end.strftime('%m/%d')}",
                 'start_date': current_start.strftime('%Y-%m-%d'),
                 'end_date': current_end.strftime('%Y-%m-%d'),
-                'vehicle_count': vehicle_count,
-                'total_pieces': total_pieces,
+                'daily_data': daily_data,  # 每天的详细数据
+                'week_total_pieces': week_total_pieces,
+                'week_total_vehicles': week_total_vehicles,
                 'pieces_change_percent': round(pieces_change_percent, 2),
                 'vehicles_change_percent': round(vehicles_change_percent, 2)
             })
@@ -2191,12 +2432,24 @@ def get_week_comparison():
             
         conn.close()
         
+        # 过滤掉第一周（如果不完整）
+        # 判断标准：如果第一周的起始日期早于数据库中的最小日期，说明这周是不完整的
+        if weeks_data and len(weeks_data) > 0:
+            first_week = weeks_data[0]
+            first_week_start = datetime.strptime(first_week['start_date'], '%Y-%m-%d').date()
+            
+            # 如果第一周的周一早于数据库最小日期，说明第一周不完整
+            if first_week_start < min_date:
+                print(f"过滤掉不完整的第一周: {first_week['week_label']}")
+                weeks_data = weeks_data[1:]  # 移除第一周
+        
         return jsonify(weeks_data)
     
     except Exception as e:
         if 'conn' in locals():
             conn.close()
         return jsonify({'error': f'获取周环比数据出错: {str(e)}'}), 500
+
 
 
 

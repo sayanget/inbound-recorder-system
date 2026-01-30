@@ -1,0 +1,5 @@
+Table: inbound_records Columns: ['id', 'dock_no', 'vehicle_type', 'vehicle_no', 'unit', 'load_amount', 'pieces', 'time_slot', 'shift_type', 'remark', 'created_at', 'created_by', 'duration']
+Table: sorting_records Columns: ['id', 'sorting_time', 'pieces', 'remark', 'time_slot', 'created_at']
+Table: pickup_forecast Columns: ['id', 'forecast_date', 'forecast_amount', 'created_at', 'updated_at']
+Table: users Columns: ['id', 'username', 'password_hash', 'role', 'is_active', 'created_at']
+Table: user_permissions Columns: ['id', 'user_id', 'page_name', 'can_view', 'can_edit', 'can_delete']

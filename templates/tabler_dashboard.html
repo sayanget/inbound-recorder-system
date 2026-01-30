@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>入库统计仪表板 - Inbound Dashboard</title>
+    <!-- CSS files -->
+    <link href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+    <style>
+        @import url('https://rsms.me/inter/inter.css');
+
+        :root {
+            --tblr-font-sans-serif: 'Inter Var', -apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif;
+        }
+
+        body {
+            font-feature-settings: "cv03", "cv04", "cv11";
+        }
+
+        .card-icon {
+            background: rgba(var(--tblr-primary-rgb), 0.1);
+            color: var(--tblr-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            width: 48px;
+            height: 48px;
+            font-size: 24px;
+        }
+
+        /* Increase number size for better visibility */
+        .card .h1 {
+            font-size: 2.5rem !important;
+            font-weight: 800;
+            letter-spacing: -1px;
+        }
+
+        .card-sm .font-weight-medium {
+            font-size: 1.75rem !important;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .subheader {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/js/demo-theme.min.js"></script>
+    <div class="page">
+        <!-- Navbar -->
+        <header class="navbar navbar-expand-md navbar-light d-print-none">
+            <div class="container-xl">
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu"
+                    aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
+                    <a href=".">
+                        <i class="ti ti-dashboard"></i> Inbound Stats
+                    </a>
+                </h1>
+                <div class="navbar-nav flex-row order-md-last">
+                    <div class="nav-item d-none d-md-flex me-3">
+                        <div class="btn-list">
+                            <a href="https://github.com/tabler/tabler" class="btn" target="_blank" rel="noreferrer">
+                                <!-- SVG icon -->
+                                <i class="ti ti-brand-github"></i>
+                                Source code
+                            </a>
+                        </div>
+                    </div>
+                    <div class="d-none d-md-flex">
+                        <a href="?theme=dark" class="nav-link px-0 hide-theme-dark" title="Enable dark mode"
+                            data-bs-toggle="tooltip" data-bs-placement="bottom">
+                            <i class="ti ti-moon"></i>
+                        </a>
+                        <a href="?theme=light" class="nav-link px-0 hide-theme-light" title="Enable light mode"
+                            data-bs-toggle="tooltip" data-bs-placement="bottom">
+                            <i class="ti ti-sun"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <div class="page-wrapper">
+            <!-- Page header -->
+            <div class="page-header d-print-none">
+                <div class="container-xl">
+                    <div class="row g-2 align-items-center">
+                        <div class="col">
+                            <h2 class="page-title">
+                                入库数据概览
+                            </h2>
+                            <div class="text-muted mt-1">
+                                <span id="current-date">Fetching data...</span>
+                            </div>
+                        </div>
+                        <!-- Page title actions -->
+                        <div class="col-auto ms-auto d-print-none">
+                            <div class="btn-list">
+                                <span class="d-none d-sm-inline">
+                                    <a href="#" class="btn btn-white" onclick="fetchData()">
+                                        <i class="ti ti-refresh"></i> Refresh
+                                    </a>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Page body -->
+            <div class="page-body">
+                <div class="container-xl">
+                    <div class="row row-deck row-cards">
+                        <!-- Metric Cards -->
+                        <!-- Row 1: Totals -->
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center">
+                                        <div class="subheader">总货量 (Total Pieces)</div>
+                                        <div class="ms-auto lh-1">
+                                            <span class="text-white d-inline-flex align-items-center lh-1"
+                                                id="pieces-trend-badge">
+                                                <!-- Trend badge inserted by JS -->
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-baseline">
+                                        <div class="h1 mb-0 me-2" id="total-pieces">0</div>
+                                        <div class="me-auto">
+                                            <span class="text-green d-inline-flex align-items-center lh-1">
+                                                <!-- Trend text -->
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="minichart-pieces" class="chart-sm"></div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center">
+                                        <div class="subheader">总车次 (Total Vehicles)</div>
+                                    </div>
+                                    <div class="d-flex align-items-baseline">
+                                        <div class="h1 mb-0 me-2" id="total-vehicles">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center">
+                                        <div class="subheader">总托盘 (Total Pallets)</div>
+                                    </div>
+                                    <div class="d-flex align-items-baseline">
+                                        <div class="h1 mb-0 me-2" id="total-pallets">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center">
+                                        <div class="subheader">夜班车次 (Night Shift)</div>
+                                    </div>
+                                    <div class="d-flex align-items-baseline">
+                                        <div class="h1 mb-0 me-2" id="night-shift">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Row 2: Averages -->
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card card-sm">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col-auto">
+                                            <span class="bg-primary text-white avatar"><!-- SVG icon -->
+                                                <i class="ti ti-box"></i>
+                                            </span>
+                                        </div>
+                                        <div class="col">
+                                            <div class="font-weight-medium" id="avg-pieces">0</div>
+                                            <div class="text-muted">平均货量 (件/车)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card card-sm">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col-auto">
+                                            <span class="bg-green text-white avatar"><!-- SVG icon -->
+                                                <i class="ti ti-stack-2"></i>
+                                            </span>
+                                        </div>
+                                        <div class="col">
+                                            <div class="font-weight-medium" id="avg-pallets">0</div>
+                                            <div class="text-muted">平均托盘 (板/车)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card card-sm">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col-auto">
+                                            <span class="bg-yellow text-white avatar"><!-- SVG icon -->
+                                                <i class="ti ti-truck-delivery"></i>
+                                            </span>
+                                        </div>
+                                        <div class="col">
+                                            <div class="font-weight-medium" id="avg-53">0</div>
+                                            <div class="text-muted">53尺均货 (件)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card card-sm">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col-auto">
+                                            <span class="bg-teal text-white avatar"><!-- SVG icon -->
+                                                <i class="ti ti-truck"></i>
+                                            </span>
+                                        </div>
+                                        <div class="col">
+                                            <div class="font-weight-medium" id="avg-26">0</div>
+                                            <div class="text-muted">26尺均货 (件)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Row 3: Charts -->
+                        <div class="col-lg-8">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h3 class="card-title">每周对比趋势 (Weekly Trend)</h3>
+                                    <div id="chart-daily-trend" style="min-height: 300px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h3 class="card-title">车型分布 (Vehicle Types)</h3>
+                                    <div id="chart-vehicle-types" style="min-height: 300px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+            <footer class="footer footer-transparent d-print-none">
+                <div class="container-xl">
+                    <div class="row text-center align-items-center flex-row-reverse">
+                        <div class="col-lg-auto ms-lg-auto">
+                            <ul class="list-inline list-inline-dots mb-0">
+                                <li class="list-inline-item"><a href="." class="link-secondary">Documentation</a></li>
+                                <li class="list-inline-item"><a href="." class="link-secondary">License</a></li>
+                            </ul>
+                        </div>
+                        <div class="col-12 col-lg-auto mt-3 mt-lg-0">
+                            <ul class="list-inline list-inline-dots mb-0">
+                                <li class="list-inline-item">
+                                    Copyright &copy; 2026
+                                    <a href="." class="link-secondary">Inbound System</a>.
+                                    All rights reserved.
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <!-- Libs JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/libs/apexcharts/dist/apexcharts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/js/tabler.min.js"></script>
+    <script>
+        // Data Fetching and Rendering logic
+        document.addEventListener("DOMContentLoaded", function () {
+            fetchData();
+        });
+
+        async function fetchData() {
+            try {
+                document.getElementById('current-date').textContent = 'Updating...';
+
+                // Parallel fetch
+                // Change daily_trend to week_comparison
+                const [statsRes, weeklyRes] = await Promise.all([
+                    fetch('/api/stats'),
+                    fetch('/api/week_comparison')
+                ]);
+
+                const statsData = await statsRes.json();
+                const weeklyData = weeklyRes.ok ? await weeklyRes.json() : [];
+
+                renderStats(statsData);
+                renderCharts(weeklyData, statsData.vehicle_stats);
+
+                document.getElementById('current-date').textContent = new Date().toLocaleDateString();
+
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('current-date').textContent = 'Error loading data';
+            }
+        }
+
+        function renderStats(data) {
+            // Helper to format numbers
+            const fmt = (n) => n ? n.toLocaleString() : '0';
+
+            document.getElementById('total-pieces').textContent = fmt(data.total_pieces);
+            document.getElementById('total-vehicles').textContent = fmt(data.total_vehicles);
+            document.getElementById('total-pallets').textContent = fmt(data.total_pallets);
+
+            // Night shift calculation
+            const nightShift = (data.vehicles_19_to_20 || 0) + (data.vehicles_20_to_21 || 0) + (data.vehicles_after_24 || 0);
+            document.getElementById('night-shift').textContent = fmt(nightShift);
+
+            // Averages
+            const avgPieces = data.total_vehicles > 0 ? (data.total_pieces / data.total_vehicles).toFixed(0) : 0;
+            const avgPallets = data.total_vehicles > 0 ? (data.total_pallets / data.total_vehicles).toFixed(1) : 0;
+            document.getElementById('avg-pieces').textContent = avgPieces;
+            document.getElementById('avg-pallets').textContent = avgPallets;
+
+            // Specific averages
+            document.getElementById('avg-53').textContent = calculateTypeAvg(data.vehicle_stats, '53英尺');
+            document.getElementById('avg-26').textContent = calculateTypeAvg(data.vehicle_stats, '26英尺');
+        }
+
+        function calculateTypeAvg(stats, type) {
+            if (!stats) return '0';
+            const item = stats.find(s => s[0] === type) || stats.find(s => s.vehicle_type === type);
+            // Note: API returns array of tuples or dicts depending on endpoint version.
+            // In previous steps we saw it returns dicts {vehicle_type, count, total_pieces} 
+
+            if (!item) return '0';
+
+            const count = item.count || item[1];
+            const pieces = item.total_pieces || item[2];
+
+            if (!count || count === 0) return '0';
+            return (pieces / count).toFixed(0);
+        }
+
+        function renderCharts(weeklyRawData, vehicleStats) {
+            // Weekly Comparison Chart
+            // Use last 12 weeks
+            const weeklyData = Array.isArray(weeklyRawData) ? weeklyRawData.slice(-12) : [];
+
+            const optionsTrend = {
+                series: [{
+                    name: '货量 (Pieces)',
+                    type: 'column',
+                    data: weeklyData.map(w => w.week_total_pieces)
+                }, {
+                    name: '车次 (Vehicles)',
+                    type: 'line',
+                    data: weeklyData.map(w => w.week_total_vehicles)
+                }],
+                chart: {
+                    height: 300,
+                    type: 'line',
+                    stacked: false,
+                    parentHeightOffset: 0,
+                    toolbar: { show: false }
+                },
+                stroke: {
+                    width: [0, 2],
+                    curve: 'smooth'
+                },
+                plotOptions: {
+                    bar: {
+                        columnWidth: '50%',
+                        borderRadius: 4
+                    }
+                },
+                dataLabels: { enabled: false },
+                fill: { opacity: [0.85, 1] },
+                labels: weeklyData.map(w => w.week_label),
+                markers: {
+                    size: 4
+                },
+                xaxis: {
+                    type: 'category',
+                    tooltip: { enabled: false }
+                },
+                yaxis: [
+                    {
+                        title: { text: 'Pieces' },
+                        labels: { formatter: (val) => val ? val.toLocaleString() : val }
+                    },
+                    {
+                        opposite: true,
+                        title: { text: 'Vehicles' },
+                    }
+                ],
+                colors: ['#206bc4', '#ea4c89'],
+                legend: {
+                    position: 'top',
+                    labels: {
+                        useSeriesColors: true
+                    }
+                },
+                tooltip: {
+                    theme: 'dark',
+                    style: {
+                        fontSize: '13px'
+                    },
+                    shared: true,
+                    intersect: false,
+                    y: {
+                        formatter: function (y) {
+                            if (typeof y !== "undefined") {
+                                return y.toLocaleString();
+                            }
+                            return y;
+                        }
+                    }
+                }
+            };
+
+            // Clean previous chart if exist
+            document.getElementById('chart-daily-trend').innerHTML = '';
+            new ApexCharts(document.getElementById('chart-daily-trend'), optionsTrend).render();
+
+            // Vehicle Types Chart
+            // Prepare data
+            const labels = vehicleStats.map(s => s.vehicle_type || s[0]);
+            const series = vehicleStats.map(s => s.count || s[1]);
+
+            const optionsPie = {
+                series: series,
+                labels: labels,
+                chart: {
+                    type: 'donut',
+                    height: 300
+                },
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        useSeriesColors: true
+                    }
+                },
+                plotOptions: {
+                    pie: {
+                        donut: {
+                            size: '50%',
+                        }
+                    }
+                },
+                tooltip: {
+                    theme: 'dark',
+                    style: {
+                        fontSize: '13px'
+                    }
+                }
+            };
+
+            document.getElementById('chart-vehicle-types').innerHTML = '';
+            new ApexCharts(document.getElementById('chart-vehicle-types'), optionsPie).render();
+        }
+    </script>
+</body>
+
+</html>

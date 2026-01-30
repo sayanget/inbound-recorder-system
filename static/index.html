@@ -12,20 +12,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/offline.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
     <style>
-        :root {
-            --primary-color: #4361ee;
-            --secondary-color: #3f37c9;
-            --success-color: #4cc9f0;
-            --danger-color: #f72585;
-            --warning-color: #f8961e;
-            --info-color: #4895ef;
-            --light-color: #f8f9fa;
-            --dark-color: #212529;
-            --border-color: #dee2e6;
-            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
+        /* :root variables moved to theme.css */
 
         /* Language selector dropdown */
         .user-info {
@@ -54,6 +44,9 @@
             top: 15px;
             right: 15px;
             z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .lang-dropdown {
@@ -116,8 +109,9 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f7fb;
-            color: #333;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--body-bg);
+            color: var(--text-color);
             line-height: 1.5;
         }
 
@@ -293,12 +287,12 @@
         }
 
         th {
-            background-color: #f8f9fa;
+            background-color: var(--table-header-bg);
             font-weight: 600;
         }
 
         tr:nth-child(even) {
-            background-color: #f8f9fa;
+            background-color: var(--table-stripe);
         }
 
         .action-buttons {
@@ -612,6 +606,10 @@
                 </button>
             </div>
             <div class="language-selector">
+                <button class="theme-toggle-btn" onclick="themeToggle.toggle()" title="Switch Theme"
+                    style="background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); margin-right: 10px;">
+                    <i id="themeIcon" class="fas fa-moon"></i>
+                </button>
                 <div class="lang-dropdown">
                     <div class="lang-selected" id="langSelected">
                         <span id="currentLangText">中文</span>
@@ -1316,7 +1314,7 @@
          */
         function calculateLoadRate(vehicleType, loadAmount) {
             if (!vehicleType || loadAmount === null || loadAmount === undefined || loadAmount === '') {
-                return { rate: 'N/A', color: '' };
+                return { rate: 'N/A', class: 'text-muted' };
             }
 
             let ratedCapacity = 0;
@@ -1328,26 +1326,26 @@
                 ratedCapacity = 26;
             } else {
                 // Car, Van, Other - no calculation
-                return { rate: 'N/A', color: '' };
+                return { rate: 'N/A', class: 'text-muted' };
             }
 
             // Calculate load rate
             const loadRateValue = (loadAmount / ratedCapacity) * 100;
             const loadRateStr = loadRateValue.toFixed(1) + '%';
 
-            // Determine color based on load rate
-            let color = '';
+            // Determine class based on load rate
+            let className = '';
             if (loadRateValue > 100) {
-                color = 'color: #f72585; font-weight: bold;'; // Overload - red
+                className = 'text-danger font-bold'; // Overload
             } else if (loadRateValue >= 90) {
-                color = 'color: #f8961e;'; // Near full - orange
+                className = 'text-warning font-bold'; // Near full
             } else if (loadRateValue >= 70) {
-                color = 'color: #4cc9f0;'; // Normal - blue
+                className = 'text-success font-bold'; // Normal
             } else {
-                color = 'color: #666;'; // Low load - gray
+                className = 'text-muted'; // Low load
             }
 
-            return { rate: loadRateStr, color: color };
+            return { rate: loadRateStr, class: className };
         }
 
         // Load recent records
@@ -1367,7 +1365,7 @@
             const recordsList = document.getElementById('recordsList');
 
             if (!records || records.length === 0) {
-                recordsList.innerHTML = `<p style="text-align: center; color: #666;">暂无记录</p>`;
+                recordsList.innerHTML = `<p class="text-muted" style="text-align: center;">暂无记录</p>`;
                 return;
             }
 
@@ -1405,7 +1403,7 @@
                         <td>${record.vehicle_type || ''}</td>
                         <td>${record.vehicle_no || ''}</td>
                         <td>${record.load_amount || ''}</td>
-                        <td style="${loadRateData.color}">${loadRateData.rate}</td>
+                        <td class="${loadRateData.class}">${loadRateData.rate}</td>
                         <td>${record.time_slot || ''}</td>
                         <td>${record.duration || ''}</td>
                         <td>${record.pieces || 0}</td>
@@ -1508,6 +1506,17 @@
                             // Reload stats and records
                             loadStats();
                             loadRecords();
+
+                            // Broadcast update to other tabs
+                            try {
+                                const channel = new BroadcastChannel('inbound_updates');
+                                channel.postMessage({ type: 'refresh_stats' });
+                                console.log('Posted refresh_stats message');
+                                // Close channel after sending to avoid memory leaks
+                                setTimeout(() => channel.close(), 1000);
+                            } catch (e) {
+                                console.error('Error broadcasting update:', e);
+                            }
                         } else {
                             showMessage(translations[currentLang].submit_failed || '提交失败：' + (result.error || '未知错误'), 'error');
                         }
@@ -1665,6 +1674,15 @@
                         // Reload records and stats
                         loadRecords();
                         loadStats();
+
+                        // Broadcast update to other tabs
+                        try {
+                            const channel = new BroadcastChannel('inbound_updates');
+                            channel.postMessage({ type: 'refresh_stats' });
+                            setTimeout(() => channel.close(), 1000);
+                        } catch (e) {
+                            console.error('Error broadcasting update:', e);
+                        }
                     } else {
                         showMessage(translations[currentLang].update_failed || '更新失败：' + (result.error || '未知错误'), 'error');
                     }
@@ -1696,6 +1714,15 @@
                             // Reload records and stats
                             loadRecords();
                             loadStats();
+
+                            // Broadcast update to other tabs
+                            try {
+                                const channel = new BroadcastChannel('inbound_updates');
+                                channel.postMessage({ type: 'refresh_stats' });
+                                setTimeout(() => channel.close(), 1000);
+                            } catch (e) {
+                                console.error('Error broadcasting update:', e);
+                            }
                         } else {
                             // 显示具体的错误信息
                             const errorMessage = result.error || '删除出错，请检查网络连接。';
