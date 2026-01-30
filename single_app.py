@@ -2268,8 +2268,8 @@ def get_daily_trend():
                 day_end.strftime('%Y-%m-%d %H:%M:%S')
             ))
             row = cursor.fetchone()
-            # 应用取整规则：千百十个位全部为0
-            total_pieces = round_to_ten_thousand(row[0])
+            # 直接使用实际数值，不取整
+            total_pieces = int(row[0]) if row[0] else 0
             total_vehicles = int(row[1]) if row[1] else 0
             total_pallets = int(row[2]) if row[2] else 0
             
@@ -2381,8 +2381,8 @@ def get_week_comparison():
                 
                 row = cursor.fetchone()
                 day_vehicles = row[0] if row[0] else 0
-                # 应用取整规则：千百十个位全部为0
-                day_pieces = round_to_ten_thousand(row[1])
+                # 直接使用实际数值，不取整
+                day_pieces = int(row[1]) if row[1] else 0
                 
                 # 累加到周总计
                 week_total_vehicles += day_vehicles
@@ -2442,6 +2442,11 @@ def get_week_comparison():
             if first_week_start < min_date:
                 print(f"过滤掉不完整的第一周: {first_week['week_label']}")
                 weeks_data = weeks_data[1:]  # 移除第一周
+        
+        # [Option A] 将显示的第一个周的环比设为 0%
+        if weeks_data and len(weeks_data) > 0:
+            weeks_data[0]['pieces_change_percent'] = 0
+            weeks_data[0]['vehicles_change_percent'] = 0
         
         return jsonify(weeks_data)
     

@@ -165,9 +165,11 @@
         }
 
         .stat-value {
-            font-size: 2em;
+            font-size: 3em;
             font-weight: bold;
             color: var(--primary-color);
+            margin-bottom: 15px;
+            /* Add spacing between value and trend */
         }
 
         table {
@@ -1578,8 +1580,8 @@
             if (!trendEl) {
                 trendEl = document.createElement('div');
                 trendEl.className = 'stat-trend';
-                trendEl.style.fontSize = '12px';
-                trendEl.style.marginTop = '5px';
+                trendEl.style.fontSize = '18px'; /* Increased from 12px */
+                trendEl.style.marginTop = '10px';
                 trendEl.style.fontWeight = 'bold';
                 card.appendChild(trendEl);
             }
