@@ -1,0 +1,28 @@
+# =============================================================================
+# 生产部署依赖（Docker / Gunicorn / Neon PostgreSQL / Render / Zeabur 等）
+# 安装: pip install -r requirements-prod.txt
+#
+# 环境变量: DATABASE_URL 或 POSTGRES_URL（PostgreSQL 连接串，建议 sslmode=require）
+#           SECRET_KEY（生产必须固定，否则重启后会话失效）
+# =============================================================================
+
+Flask==2.3.3
+openpyxl==3.1.2
+pytz==2023.3
+schedule==1.2.0
+python-dotenv==1.0.0
+
+# HTTP / 飞书等（single_app、calc_outsource_finance 使用）
+requests>=2.31.0,<3
+
+# calc_outsource_finance 与 single_app 同进程加载，生产必须安装
+pandas>=2.0.0,<3
+
+# PostgreSQL（Neon / RDS 等）
+psycopg2-binary==2.9.9
+
+# WSGI 服务器
+gunicorn==22.0.0
+
+# 以下为可选：代码未 import；若将来启用 Flask-Session 服务端会话再取消注释
+# Flask-Session==0.5.0

@@ -1,0 +1,3735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>产能计划看板</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/nav_component.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            font-size: var(--font-size-base);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            animation: fadeInDown 0.6s ease-out;
+        }
+
+        .header h1 {
+            font-size: var(--font-size-xl);
+            font-weight: 800;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            letter-spacing: -0.02em;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            animation: fadeInUp 0.6s ease-out;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        @media (max-width: 768px) {
+            .card {
+                padding: 1.5rem 1rem;
+            }
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .card-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-right: 15px;
+        }
+
+        .icon-manual {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .icon-machine {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .icon-night {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .card-title {
+            flex: 1;
+        }
+
+        .card-title h2 {
+            font-size: var(--font-size-lg);
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .card-title p {
+            font-size: 0.9rem;
+            color: #718096;
+        }
+
+        .schedule-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            overflow: hidden;
+        }
+
+        .schedule-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 10px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .schedule-table th:first-child {
+            border-top-left-radius: 8px;
+        }
+
+        .schedule-table th:last-child {
+            border-top-right-radius: 8px;
+        }
+
+        .schedule-table td {
+            padding: 12px 10px;
+            text-align: center;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .schedule-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .schedule-table tr:hover {
+            background: #f7fafc;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .input-number {
+            width: 80px;
+            padding: 8px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .input-number:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .input-number:disabled {
+            background: #f7fafc;
+            color: #a0aec0;
+            cursor: not-allowed;
+        }
+
+        .toggle-btn {
+            margin-left: 10px;
+            padding: 6px 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-btn:hover {
+            background: #5568d3;
+            transform: scale(1.05);
+        }
+
+        .toggle-btn.active {
+            background: #48bb78;
+        }
+
+        .manual-station-panel {
+            margin: 16px 0 8px;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .manual-station-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 14px;
+            margin-bottom: 14px;
+        }
+
+        .manual-station-toolbar .panel-title {
+            font-weight: 700;
+            color: #2d3748;
+            margin-right: 4px;
+        }
+
+        .manual-station-toolbar .hint {
+            font-size: 0.9rem;
+            color: #64748b;
+        }
+
+        .manual-station-toolbar .fill-inline {
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .btn-mini {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn-mini:hover {
+            opacity: 0.92;
+        }
+
+        .manual-station-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+            gap: 10px;
+        }
+
+        .st-chip {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .st-chip label {
+            font-size: 0.8rem;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .st-chip input {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .hint.subtle {
+            font-size: 0.82rem;
+            color: #94a3b8;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+
+        .manual-shift-editor-wrap {
+            margin-top: 8px;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .manual-shift-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .manual-copy-bar {
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            background: #fff;
+            border-radius: 10px;
+            border: 1px dashed #cbd5e1;
+        }
+
+        .manual-copy-hint {
+            display: block;
+            font-size: 0.88rem;
+            color: #475569;
+            margin-bottom: 10px;
+            line-height: 1.45;
+        }
+
+        .manual-copy-hint strong {
+            color: #667eea;
+        }
+
+        .manual-copy-targets {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 16px;
+            margin-bottom: 10px;
+        }
+
+        .manual-copy-cb {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #334155;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .manual-copy-cb input:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .manual-copy-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .btn-mini-outline {
+            background: #fff !important;
+            color: #667eea !important;
+            border: 2px solid #667eea !important;
+        }
+
+        .btn-mini-outline:hover {
+            background: #f5f3ff !important;
+        }
+
+        .manual-shift-toolbar label {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .manual-shift-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .manual-shift-table th,
+        .manual-shift-table td {
+            padding: 8px 6px;
+            text-align: center;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .manual-shift-table th {
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .manual-shift-table input {
+            width: 100%;
+            max-width: 96px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .manual-shift-del {
+            background: #fed7d7;
+            color: #742a2a;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .manual-shift-del:hover {
+            background: #fc8181;
+            color: #fff;
+        }
+
+        .info-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-item {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-item label {
+            display: block;
+            font-size: 0.85rem;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+
+        .info-item .value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .summary-item {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .summary-item h3 {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .summary-item .number {
+            font-size: var(--font-size-xl);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 14px 32px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 16px 24px;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            display: none;
+            animation: slideInRight 0.3s ease-out;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        .toast.success {
+            border-left: 4px solid #48bb78;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+            }
+
+            to {
+                transform: translateX(0);
+            }
+        }
+
+        /* 权限配置按钮 */
+        .permission-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            z-index: 100;
+            display: none;
+            /* 默认隐藏，仅管理员可见 */
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .permission-btn:hover {
+            transform: scale(1.1) rotate(90deg);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        /* 模态框样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal {
+            background: white;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            animation: zoomIn 0.3s ease-out;
+        }
+
+        @keyframes zoomIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .modal-header h2 {
+            margin-bottom: 20px;
+            color: #2d3748;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 15px;
+        }
+
+        .user-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #edf2f7;
+        }
+
+        .user-info .name {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .user-info .role-badge {
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 10px;
+        }
+
+        .role-admin {
+            background: #feeebc;
+            color: #d69e2e;
+        }
+
+        .role-user {
+            background: #c6f6d5;
+            color: #38a169;
+        }
+
+        .role-viewer {
+            background: #e2e8f0;
+            color: #718096;
+        }
+
+        .role-select {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e0;
+            background: white;
+            cursor: pointer;
+        }
+
+        .modal-footer {
+            margin-top: 25px;
+            text-align: right;
+        }
+
+        /* ============================================
+           响应式设计 - 移动端和平板适配
+           ============================================ */
+
+        /* 移动端适配 (< 768px) */
+        @media (max-width: 767px) {
+            body {
+                padding: 10px;
+            }
+
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .header p {
+                font-size: 0.9rem;
+            }
+
+            .card {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+
+            .card-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .card-icon {
+                margin-bottom: 10px;
+                margin-right: 0;
+            }
+
+            .card-title h2 {
+                font-size: 1.2rem;
+            }
+
+            .card-title p {
+                font-size: 0.85rem;
+            }
+
+            /* 移动端隐藏表格，使用卡片式布局 */
+            .schedule-table {
+                display: none;
+            }
+
+            /* 创建每日卡片布局 - 2行网格显示 */
+            .mobile-schedule {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+
+            .day-card {
+                background: #f7fafc;
+                border-radius: 8px;
+                padding: 8px;
+                border-left: 4px solid #667eea;
+            }
+
+            .day-card-header {
+                margin-bottom: 6px;
+                text-align: center;
+            }
+
+            .day-name {
+                font-weight: 700;
+                color: #2d3748;
+                font-size: 0.9rem;
+            }
+
+            .day-card-content {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .day-label {
+                font-size: 0.75rem;
+                color: #718096;
+                text-align: center;
+            }
+
+            .day-card .input-group {
+                display: flex;
+                gap: 4px;
+                justify-content: center;
+            }
+
+            .day-card .input-number {
+                width: 50px;
+                font-size: 0.85rem;
+                padding: 4px;
+                text-align: center;
+            }
+
+
+            /* 隐藏桌面表格中的编辑按钮（移动端使用统一保存按钮） */
+            .schedule-table .toggle-btn {
+                display: none;
+            }
+
+            /* 输入组优化 */
+            .input-group {
+                flex-wrap: nowrap;
+                justify-content: center;
+            }
+
+            .input-number {
+                width: 50px;
+                padding: 6px 4px;
+                font-size: 0.85rem;
+            }
+
+
+            /* 信息行单列布局 */
+            .info-row {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .info-item {
+                padding: 12px;
+            }
+
+            .info-item label {
+                font-size: 0.8rem;
+            }
+
+            .info-item .value {
+                font-size: 1rem;
+            }
+
+            /* 汇总卡片单列布局 */
+            .summary-card {
+                padding: 20px;
+                margin-top: 20px;
+            }
+
+            .summary-grid {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .summary-item {
+                padding: 15px;
+                width: 100%;
+            }
+
+            .summary-item h3 {
+                font-size: 0.85rem;
+            }
+
+            .summary-item .number {
+                font-size: 1.5rem;
+            }
+
+            /* 操作按钮全宽 */
+            .action-buttons {
+                flex-direction: column;
+                gap: 10px;
+                margin-top: 20px;
+            }
+
+            .btn {
+                width: 100%;
+                padding: 12px 24px;
+                font-size: 0.95rem;
+                min-height: 48px;
+            }
+
+            /* 权限按钮优化 */
+            .permission-btn {
+                width: 50px;
+                height: 50px;
+                bottom: 20px;
+                right: 20px;
+                font-size: 20px;
+            }
+
+            /* 模态框优化 */
+            .modal {
+                width: 95%;
+                padding: 20px;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+
+            .modal-header h2 {
+                font-size: 1.3rem;
+            }
+
+            .user-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .role-select {
+                width: 100%;
+            }
+
+            /* Toast 通知优化 */
+            .toast {
+                top: 10px;
+                right: 10px;
+                left: 10px;
+                padding: 12px 16px;
+                font-size: 0.9rem;
+            }
+
+            /* 日选择器优化 */
+            #day-selector {
+                width: 100%;
+                max-width: 200px;
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+
+            /* 日分拣力汇总特殊优化 */
+            .summary-card h2 {
+                font-size: 1.3rem;
+            }
+
+            /* 每小时综合产能卡片 */
+            .summary-item[style*="scale(1.05)"] {
+                transform: scale(1) !important;
+            }
+
+            .summary-item[style*="scale(1.05)"] .number {
+                font-size: 1.8rem !important;
+            }
+        }
+
+        /* 平板端适配 (768px - 1024px) */
+        @media (min-width: 768px) and (max-width: 1024px) {
+            body {
+                padding: 15px;
+            }
+
+            .header h1 {
+                font-size: 2.2rem;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            /* 恢复表格显示 */
+            .schedule-table {
+                display: table;
+                width: 100%;
+            }
+
+            .mobile-schedule {
+                display: none;
+            }
+
+            .schedule-table th,
+            .schedule-table td {
+                padding: 10px 8px;
+                font-size: 0.9rem;
+            }
+
+            .input-number {
+                width: 70px;
+            }
+
+            /* 汇总网格2列布局 */
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+
+            /* 信息行2列布局 */
+            .info-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* 小平板横屏优化 (1025px - 1280px) */
+        @media (min-width: 1025px) and (max-width: 1280px) {
+            .summary-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            /* 恢复表格显示 */
+            .schedule-table {
+                display: table;
+            }
+
+            .mobile-schedule {
+                display: none;
+            }
+        }
+
+        /* 桌面端恢复表格 */
+        @media (min-width: 1281px) {
+            .schedule-table {
+                display: table;
+            }
+
+            .mobile-schedule {
+                display: none;
+            }
+        }
+
+        /* 触摸设备优化 */
+        @media (hover: none) {
+            .card:hover {
+                transform: none;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            }
+
+            .btn:hover {
+                transform: none;
+            }
+
+            .toggle-btn:hover {
+                transform: none;
+            }
+
+            .permission-btn:hover {
+                transform: none;
+            }
+        }
+
+        /* 确保所有交互元素有足够的触摸目标 */
+        @media (max-width: 1024px) {
+
+            .toggle-btn,
+            .btn,
+            .role-select,
+            .input-number {
+                min-height: 44px;
+            }
+
+            #day-selector {
+                min-height: 44px;
+            }
+        }
+
+        /* 导航按钮样式 */
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.95);
+            color: #667eea;
+            border: none;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+            color: #5568d3;
+        }
+
+        .nav-btn i {
+            font-size: 1.1rem;
+        }
+
+        /* 移动端导航按钮适配 */
+        @media (max-width: 767px) {
+            .nav-buttons {
+                flex-direction: column;
+                gap: 10px;
+                margin: 15px 0;
+            }
+
+            .nav-btn {
+                width: 100%;
+                text-align: center;
+                justify-content: center;
+                padding: 14px 20px;
+            }
+        }
+
+        /* ===== v2 Mobile-first Capacity Planner ===== */
+        .planner-v2 {
+            margin-bottom: 24px;
+            background: rgba(255, 255, 255, 0.96);
+            color: #2d3748;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+            backdrop-filter: blur(10px);
+        }
+
+        .planner-v2 * {
+            box-sizing: border-box;
+        }
+
+        .planner-v2-header {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .planner-v2-headline {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #2d3748;
+        }
+
+        .planner-v2-sub {
+            font-size: 0.9rem;
+            color: #718096;
+        }
+
+        .planner-v2-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .planner-v2-tool-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 14px 14px 16px;
+            margin-bottom: 14px;
+            background: #f8fafc;
+        }
+
+        .planner-v2-tool-card-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            font-weight: 900;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+
+        .planner-v2-tool-card-hint {
+            font-size: 0.8rem;
+            color: #64748b;
+            line-height: 1.45;
+            margin-bottom: 12px;
+        }
+
+        .planner-v2-tool-card-hint strong {
+            color: #334155;
+        }
+
+        .planner-v2-controls label,
+        .planner-v2-company-mgr label {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .planner-v2 input,
+        .planner-v2 select,
+        .planner-v2 button {
+            font-size: 14px;
+        }
+
+        .planner-v2 input[type="number"],
+        .planner-v2 select,
+        .planner-v2-company-mgr input {
+            min-height: 42px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+            background: #ffffff;
+            color: #2d3748;
+            padding: 0 10px;
+        }
+
+        .planner-v2 button {
+            min-height: 42px;
+            border-radius: 10px;
+            border: 0;
+            padding: 0 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-blue {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+
+        .btn-orange {
+            background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+            color: #fff;
+        }
+
+        .btn-slate {
+            background: #ffffff;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .btn-slate:hover {
+            background: #f7fafc;
+            color: #5568d3;
+        }
+
+        .planner-v2-company-mgr {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 14px;
+            background: #f8fafc;
+        }
+
+        .planner-v2-company-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .company-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            background: #edf2f7;
+            border: 1px solid #cbd5e0;
+            color: #2d3748;
+            padding: 5px 10px;
+            font-size: 0.82rem;
+        }
+
+        .company-tag button {
+            min-height: 24px;
+            height: 24px;
+            padding: 0 7px;
+            border-radius: 999px;
+            background: #ef4444;
+            color: #fff;
+            font-size: 0.75rem;
+        }
+
+        .planner-v2-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .resource-card {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            background: #f8fafc;
+            color: #0f172a;
+            padding: 10px;
+        }
+
+        .resource-card.active {
+            border: 2px solid #2563eb;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.26);
+            background: #ffffff;
+        }
+
+        .resource-title {
+            font-size: 0.92rem;
+            font-weight: 900;
+            margin-bottom: 8px;
+        }
+
+        .resource-title .v2-name-input {
+            width: 100%;
+            font-size: 0.92rem;
+            font-weight: 900;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            padding: 6px 8px;
+            background: #fff;
+        }
+
+        .resource-meta {
+            display: grid;
+            gap: 8px;
+        }
+
+        .resource-meta label {
+            font-size: 0.78rem;
+            color: #334155;
+            font-weight: 700;
+        }
+
+        .resource-cap-hint {
+            font-size: 0.78rem;
+            color: #0f172a;
+            font-weight: 700;
+            background: #dbeafe;
+            padding: 6px 8px;
+            border-radius: 8px;
+        }
+
+        .planner-v2-section-title {
+            color: #2d3748;
+            font-size: 0.95rem;
+            font-weight: 900;
+            margin: 12px 0 8px;
+        }
+
+        .planner-v2-snapshot {
+            margin-top: 6px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: auto;
+            background: #ffffff;
+        }
+
+        .planner-v2-snapshot table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+
+        .planner-v2-snapshot th,
+        .planner-v2-snapshot td {
+            font-size: 0.78rem;
+            padding: 8px 6px;
+            border-bottom: 1px solid #edf2f7;
+            text-align: left;
+            color: #2d3748;
+            word-break: break-word;
+        }
+
+        .planner-v2-snapshot th {
+            background: #eff6ff;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+        .planner-v2-snapshot tr.v2-snapshot-inactive td {
+            color: #94a3b8;
+            background: #f8fafc;
+        }
+
+        .planner-v2-report {
+            margin-top: 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .planner-v2-report table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .planner-v2-report th,
+        .planner-v2-report td {
+            font-size: 0.82rem;
+            padding: 8px 6px;
+            border-bottom: 1px solid #edf2f7;
+            text-align: center;
+            color: #2d3748;
+            word-break: break-word;
+        }
+
+        .planner-v2-report th {
+            background: #f7fafc;
+            font-weight: 900;
+        }
+
+        .planner-v2-sticky {
+            position: sticky;
+            bottom: 8px;
+            margin-top: 14px;
+            z-index: 10;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+        }
+
+        .planner-v2-stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .planner-v2-stat {
+            padding: 10px 8px;
+            border-right: 1px solid #edf2f7;
+            border-bottom: 1px solid #edf2f7;
+            text-align: center;
+        }
+
+        .planner-v2-stat:nth-child(2n) {
+            border-right: 0;
+        }
+
+        .planner-v2-stat label {
+            display: block;
+            font-size: 0.74rem;
+            color: #718096;
+            margin-bottom: 2px;
+            font-weight: 700;
+        }
+
+        .planner-v2-stat .v {
+            font-size: 1.2rem;
+            font-weight: 900;
+            color: #2d3748;
+            letter-spacing: -0.01em;
+        }
+
+        .legacy-schedule-card {
+            display: none !important;
+        }
+
+        .legacy-summary-card {
+            display: none !important;
+        }
+
+        .legacy-action-block {
+            display: none !important;
+        }
+
+        @media (min-width: 768px) {
+            .planner-v2-grid {
+                gap: 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="nav-container"></div>
+    <div class="container">
+        <section class="planner-v2" id="planner-v2">
+            <div class="planner-v2-header">
+                <div class="planner-v2-headline">分拣中心产能排班工具（移动端优先）</div>
+                <div class="planner-v2-sub">设备线固定 3100 件/小时，人工分拣台按人数×310 件/小时；每条线/台单独设置开工时间（保存后自动沿用）；劳务公司为空即视为未激活。</div>
+            </div>
+
+            <div class="planner-v2-tool-card planner-v2-query-card">
+                <div class="planner-v2-tool-card-title"><span aria-hidden="true">🔍</span> 查询已保存配置</div>
+                <p class="planner-v2-tool-card-hint"><strong>查询日期</strong>：从服务器按日历日读取已保存的排班快照，仅用于加载到下方编辑区；加载成功后，<strong>排班日期</strong>会与该条记录对齐。</p>
+                <div class="planner-v2-controls">
+                    <label for="v2-query-date">查询日期</label>
+                    <input id="v2-query-date" type="date" style="width: 160px;" title="要读取哪一天的已存配置">
+                    <button class="btn-slate" id="v2-query-plan-btn" type="button">按天查询</button>
+                </div>
+            </div>
+
+            <div class="planner-v2-tool-card planner-v2-schedule-card">
+                <div class="planner-v2-tool-card-title"><span aria-hidden="true">📅</span> 排班与保存</div>
+                <p class="planner-v2-tool-card-hint"><strong>排班日期（班次所属日）</strong>：保存写入与文本报告中的「排班日期」均指该日；打开页面时默认显示<strong>洛杉矶日历的次日</strong>（第二天班次）。与上方查询日期含义不同。</p>
+                <div class="planner-v2-controls">
+                    <label for="v2-schedule-date">排班日期</label>
+                    <input id="v2-schedule-date" type="date" style="width: 160px;" title="默认：洛杉矶时间次日；本条配置对应的班次所属日">
+                    <button class="btn-blue" id="v2-save-plan-btn" type="button">保存配置</button>
+                    <button class="btn-slate" id="v2-reset-plan-btn" type="button">恢复默认</button>
+                    <button class="btn-orange" id="v2-toggle-company-btn" type="button">劳务库管理</button>
+                </div>
+            </div>
+
+            <div class="planner-v2-company-mgr" id="v2-company-mgr" style="display:none;">
+                <label>劳务公司列表（支持 Add/Delete）</label>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                    <input id="v2-company-input" type="text" placeholder="输入公司名，如 AAS" style="flex:1;">
+                    <button class="btn-blue" id="v2-company-add-btn" type="button">Add</button>
+                </div>
+                <div class="planner-v2-company-tags" id="v2-company-tags"></div>
+            </div>
+
+            <div class="planner-v2-section-title">设备分拣线（5单元）</div>
+            <div class="planner-v2-grid" id="v2-line-grid"></div>
+
+            <div class="planner-v2-section-title">人工分拣台（9单元）</div>
+            <div class="planner-v2-grid" id="v2-station-grid"></div>
+
+            <div class="planner-v2-section-title">排班一览</div>
+            <div class="planner-v2-snapshot">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>类型</th>
+                            <th>名称</th>
+                            <th>开工</th>
+                            <th>劳务公司</th>
+                            <th>人数</th>
+                            <th>时均产能</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="v2-snapshot-tbody"></tbody>
+                </table>
+            </div>
+
+            <div class="planner-v2-section-title" style="margin-top:14px;">劳务汇总（按公司）</div>
+            <div class="planner-v2-report">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>劳务公司</th>
+                            <th>负责点位数</th>
+                            <th>派出总人数</th>
+                            <th>预估产能贡献(件/小时)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="v2-report-tbody"></tbody>
+                </table>
+            </div>
+            <div style="margin-top:10px;">
+                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:6px;">
+                    <label for="v2-report-text" style="font-size:0.86rem; color:#4a5568; font-weight:700;">文本报告（「排班日期」与上方排班日期一致；可手动编辑，保存时一并入库）</label>
+                    <button type="button" class="btn-slate" id="v2-refresh-report-text-btn" style="padding:6px 12px; font-size:13px;">根据当前排班生成文本</button>
+                    <button type="button" class="btn-slate" id="v2-export-report-btn" style="padding:6px 12px; font-size:13px;">导出文本报告</button>
+                    <button type="button" class="btn-slate" id="v2-copy-report-btn" style="padding:6px 12px; font-size:13px;">一键复制</button>
+                </div>
+                <textarea id="v2-report-text" rows="12" style="width:100%; margin-top:6px; border-radius:10px; border:2px solid #e2e8f0; background:#fff; color:#2d3748; padding:10px; font-size:14px; line-height:1.45; font-family: ui-monospace, Consolas, monospace;"></textarea>
+            </div>
+
+            <div class="planner-v2-sticky">
+                <div class="planner-v2-stats">
+                    <div class="planner-v2-stat">
+                        <label>总人数</label>
+                        <div class="v" id="v2-stat-headcount">0</div>
+                    </div>
+                    <div class="planner-v2-stat">
+                        <label>启用线/台数</label>
+                        <div class="v" id="v2-stat-active">0 / 0</div>
+                    </div>
+                    <div class="planner-v2-stat">
+                        <label>时均产能</label>
+                        <div class="v" id="v2-stat-hourly">0</div>
+                    </div>
+                    <div class="planner-v2-stat">
+                        <label>预计班次总产能</label>
+                        <div class="v" id="v2-stat-total">0</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 人工分拣台 -->
+        <div class="card legacy-schedule-card">
+            <div class="card-header">
+                <div class="card-icon icon-manual">👥</div>
+                <div class="card-title">
+                    <h2>人工分拣台</h2>
+                    <p>多班次 · 重叠时段产能叠加 · <span id="manual-capacity-display">单人每小时600件 · 日产能按积分估算</span></p>
+                </div>
+            </div>
+            <div class="info-row">
+                <div class="info-item">
+                    <label>单人每小时产能</label>
+                    <div class="value">
+                        <input type="number" id="manual-pieces-per-person" value="600" min="1" step="10"
+                            class="input-number"
+                            style="width: 80px; padding: 4px 8px; border: 2px solid #e2e8f0; border-radius: 6px; text-align: center; font-weight: 600;">
+                        <span> 件/人·小时</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label>新班次默认时长</label>
+                    <div class="value">
+                        <input type="number" id="manual-default-shift-hours" value="3" min="0.5" max="24" step="0.5"
+                            style="width: 72px; padding: 4px 8px; border: 2px solid #e2e8f0; border-radius: 6px; text-align: center; font-weight: 600;">
+                        <span> 小时</span>
+                    </div>
+                </div>
+            </div>
+            <p class="hint subtle" style="margin: 0 0 12px;">说明：按星期分别配置多个班次；开始时刻支持小数（如 17.5 = 17:30）。时段重叠时，小时产能为各班次人数×单人产能之和。日/周汇总按 5 分钟步长积分（与后端一致）。可先配好一天，再用下方「复制到」批量套用，再逐日微调。</p>
+            <div class="manual-shift-editor-wrap">
+                <div class="manual-shift-toolbar">
+                    <label for="manual-shift-day-select">编辑星期</label>
+                    <select id="manual-shift-day-select" title="与下方「日分拣力汇总」星期联动"
+                        style="padding: 8px 12px; border-radius: 8px; border: 2px solid #e2e8f0; font-weight: 600;">
+                        <option value="mon">周一</option>
+                        <option value="tue">周二</option>
+                        <option value="wed">周三</option>
+                        <option value="thu">周四</option>
+                        <option value="fri">周五</option>
+                        <option value="sat">周六</option>
+                        <option value="sun">周日</option>
+                    </select>
+                    <button type="button" class="btn-mini" id="manual-shift-add">＋ 添加班次</button>
+                </div>
+                <div class="manual-copy-bar" id="manual-copy-bar">
+                    <span class="manual-copy-hint">将 <strong id="manual-copy-source-label">周一</strong> 的排班<strong>复制到</strong>（可多选，会覆盖目标日已有班次，之后仍可微调）：</span>
+                    <div class="manual-copy-targets" id="manual-copy-targets">
+                        <label class="manual-copy-cb"><input type="checkbox" data-day="mon"> 周一</label>
+                        <label class="manual-copy-cb"><input type="checkbox" data-day="tue"> 周二</label>
+                        <label class="manual-copy-cb"><input type="checkbox" data-day="wed"> 周三</label>
+                        <label class="manual-copy-cb"><input type="checkbox" data-day="thu"> 周四</label>
+                        <label class="manual-copy-cb"><input type="checkbox" data-day="fri"> 周五</label>
+                        <label class="manual-copy-cb"><input type="checkbox" data-day="sat"> 周六</label>
+                        <label class="manual-copy-cb"><input type="checkbox" data-day="sun"> 周日</label>
+                    </div>
+                    <div class="manual-copy-actions">
+                        <button type="button" class="btn-mini" id="manual-copy-apply">应用到已选</button>
+                        <button type="button" class="btn-mini btn-mini-outline" id="manual-copy-weekdays" title="勾选周一至周五（不含当前编辑日）">勾选工作日</button>
+                        <button type="button" class="btn-mini btn-mini-outline" id="manual-copy-all" title="勾选除当前编辑日外的全部">勾选其余六天</button>
+                        <button type="button" class="btn-mini btn-mini-outline" id="manual-copy-clear">清空勾选</button>
+                    </div>
+                </div>
+                <table class="manual-shift-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>开始（点）</th>
+                            <th>时长（小时）</th>
+                            <th>人数</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="manual-shift-tbody"></tbody>
+                </table>
+            </div>
+            <div class="mobile-schedule" style="padding: 12px;">
+                <p style="color:#64748b; font-size:0.9rem; line-height:1.45;">人工多班次请在上方表格中编辑（横屏更易操作）；与桌面共用同一配置。</p>
+                <button class="mobile-save-btn" onclick="saveMobileSchedule('manual')"
+                    style="width:100%; margin-top: 8px; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                    💾 保存人工分拣台配置
+                </button>
+            </div>
+        </div>
+
+        <!-- 分拣机轨道 -->
+        <div class="card legacy-schedule-card">
+            <div class="card-header">
+                <div class="card-icon icon-machine">⚙️</div>
+                <div class="card-title">
+                    <h2>分拣机轨道</h2>
+                    <p>默认17:30开工 · <span id="machine-capacity-display">每小时4500件分拣力</span> · 共4条轨道</p>
+                </div>
+            </div>
+            <div class="info-row">
+                <div class="info-item">
+                    <label>默认开工时间</label>
+                    <div class="value">17:30 (可每日配置)</div>
+                </div>
+                <div class="info-item">
+                    <label>单轨分拣力</label>
+                    <div class="value">
+                        <input type="number" id="machine-capacity-input" value="4500" min="1" step="100"
+                            style="width: 80px; padding: 4px 8px; border: 2px solid #e2e8f0; border-radius: 6px; text-align: center; font-weight: 600;"
+                            disabled>
+                        <span> 件/小时</span>
+                        <button class="toggle-btn" onclick="toggleEdit('machine-capacity-input')"
+                            style="margin-left: 8px; padding: 4px 10px; font-size: 0.8rem;">编辑</button>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label>轨道总数</label>
+                    <div class="value">4 条</div>
+                </div>
+                <div class="info-item">
+                    <label>班次时长</label>
+                    <div class="value">
+                        <input type="number" id="machine-shift-hours" value="6" min="1" max="24"
+                            style="width: 60px; padding: 4px 8px; border: 2px solid #e2e8f0; border-radius: 6px; text-align: center; font-weight: 600;"
+                            disabled>
+                        <span> 小时/班次</span>
+                        <button class="toggle-btn" onclick="toggleEdit('machine-shift-hours')"
+                            style="margin-left: 8px; padding: 4px 10px; font-size: 0.8rem;">编辑</button>
+                    </div>
+                </div>
+            </div>
+            <table class="schedule-table">
+                <thead>
+                    <tr>
+                        <th>星期</th>
+                        <th>周一</th>
+                        <th>周二</th>
+                        <th>周三</th>
+                        <th>周四</th>
+                        <th>周五</th>
+                        <th>周六</th>
+                        <th>周日</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>开启轨道数</strong></td>
+                        <td>
+                            <input type="number" class="input-number" id="machine-mon" value="4" min="0" max="4">
+                        </td>
+                        <td>
+                            <input type="number" class="input-number" id="machine-tue" value="4" min="0" max="4">
+                        </td>
+                        <td>
+                            <input type="number" class="input-number" id="machine-wed" value="4" min="0" max="4">
+                        </td>
+                        <td>
+                            <input type="number" class="input-number" id="machine-thu" value="4" min="0" max="4">
+                        </td>
+                        <td>
+                            <input type="number" class="input-number" id="machine-fri" value="4" min="0" max="4">
+                        </td>
+                        <td>
+                            <input type="number" class="input-number" id="machine-sat" value="2" min="0" max="4">
+                        </td>
+                        <td>
+                            <input type="number" class="input-number" id="machine-sun" value="2" min="0" max="4">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>开工时间</strong></td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="machine-startTime-mon" value="17.5"
+                                    min="0" max="23" step="0.5">
+                                <span style="font-size: 0.8rem; color: #718096; margin-left: 2px;">点</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="machine-startTime-tue" value="17.5"
+                                    min="0" max="23" step="0.5">
+                                <span style="font-size: 0.8rem; color: #718096; margin-left: 2px;">点</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="machine-startTime-wed" value="17.5"
+                                    min="0" max="23" step="0.5">
+                                <span style="font-size: 0.8rem; color: #718096; margin-left: 2px;">点</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="machine-startTime-thu" value="17.5"
+                                    min="0" max="23" step="0.5">
+                                <span style="font-size: 0.8rem; color: #718096; margin-left: 2px;">点</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="machine-startTime-fri" value="17.5"
+                                    min="0" max="23" step="0.5">
+                                <span style="font-size: 0.8rem; color: #718096; margin-left: 2px;">点</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="machine-startTime-sat" value="17.5"
+                                    min="0" max="23" step="0.5">
+                                <span style="font-size: 0.8rem; color: #718096; margin-left: 2px;">点</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="machine-startTime-sun" value="17.5"
+                                    min="0" max="23" step="0.5">
+                                <span style="font-size: 0.8rem; color: #718096; margin-left: 2px;">点</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- 移动端卡片布局 -->
+            <div class="mobile-schedule">
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周一</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">开启轨道数</span>
+                        <input type="number" class="input-number" id="machine-mon" value="4" min="0" max="4"
+                            style="width: 60px;">
+                        <span class="day-label" style="margin-top: 8px;">开工</span>
+                        <div class="input-group">
+                            <input type="number" class="input-number" id="machine-startTime-mon-mobile" value="17.5"
+                                min="0" max="23" step="0.5" style="width: 50px;"
+                                onchange="syncInputs('machine-startTime-mon', this.value)">
+                            <span style="font-size: 0.8rem; line-height: 28px;">点</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周二</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">开启轨道数</span>
+                        <input type="number" class="input-number" id="machine-tue" value="4" min="0" max="4"
+                            style="width: 60px;">
+                        <span class="day-label" style="margin-top: 8px;">开工</span>
+                        <div class="input-group">
+                            <input type="number" class="input-number" id="machine-startTime-tue-mobile" value="17.5"
+                                min="0" max="23" step="0.5" style="width: 50px;"
+                                onchange="syncInputs('machine-startTime-tue', this.value)">
+                            <span style="font-size: 0.8rem; line-height: 28px;">点</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周三</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">开启轨道数</span>
+                        <input type="number" class="input-number" id="machine-wed" value="4" min="0" max="4"
+                            style="width: 60px;">
+                        <span class="day-label" style="margin-top: 8px;">开工</span>
+                        <div class="input-group">
+                            <input type="number" class="input-number" id="machine-startTime-wed-mobile" value="17.5"
+                                min="0" max="23" step="0.5" style="width: 50px;"
+                                onchange="syncInputs('machine-startTime-wed', this.value)">
+                            <span style="font-size: 0.8rem; line-height: 28px;">点</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周四</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">开启轨道数</span>
+                        <input type="number" class="input-number" id="machine-thu" value="4" min="0" max="4"
+                            style="width: 60px;">
+                        <span class="day-label" style="margin-top: 8px;">开工</span>
+                        <div class="input-group">
+                            <input type="number" class="input-number" id="machine-startTime-thu-mobile" value="17.5"
+                                min="0" max="23" step="0.5" style="width: 50px;"
+                                onchange="syncInputs('machine-startTime-thu', this.value)">
+                            <span style="font-size: 0.8rem; line-height: 28px;">点</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周五</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">开启轨道数</span>
+                        <input type="number" class="input-number" id="machine-fri" value="4" min="0" max="4"
+                            style="width: 60px;">
+                        <span class="day-label" style="margin-top: 8px;">开工</span>
+                        <div class="input-group">
+                            <input type="number" class="input-number" id="machine-startTime-fri-mobile" value="17.5"
+                                min="0" max="23" step="0.5" style="width: 50px;"
+                                onchange="syncInputs('machine-startTime-fri', this.value)">
+                            <span style="font-size: 0.8rem; line-height: 28px;">点</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周六</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">开启轨道数</span>
+                        <input type="number" class="input-number" id="machine-sat" value="2" min="0" max="4"
+                            style="width: 60px;">
+                        <span class="day-label" style="margin-top: 8px;">开工</span>
+                        <div class="input-group">
+                            <input type="number" class="input-number" id="machine-startTime-sat-mobile" value="17.5"
+                                min="0" max="23" step="0.5" style="width: 50px;"
+                                onchange="syncInputs('machine-startTime-sat', this.value)">
+                            <span style="font-size: 0.8rem; line-height: 28px;">点</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周日</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">开启轨道数</span>
+                        <input type="number" class="input-number" id="machine-sun" value="2" min="0" max="4"
+                            style="width: 60px;">
+                        <span class="day-label" style="margin-top: 8px;">开工</span>
+                        <div class="input-group">
+                            <input type="number" class="input-number" id="machine-startTime-sun-mobile" value="17.5"
+                                min="0" max="23" step="0.5" style="width: 50px;"
+                                onchange="syncInputs('machine-startTime-sun', this.value)">
+                            <span style="font-size: 0.8rem; line-height: 28px;">点</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- 统一保存按钮 -->
+                <button class="mobile-save-btn" onclick="saveMobileSchedule('machine')"
+                    style="grid-column: 1 / -1; margin-top: 8px; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                    💾 保存分拣机轨道配置
+                </button>
+            </div>
+        </div>
+
+        <!-- 大夜班 -->
+        <div class="card" style="display: none;">
+            <div class="card-header">
+                <div class="card-icon icon-night">🌙</div>
+                <div class="card-title">
+                    <h2>大夜班分拣机</h2>
+                    <p>手动输入每日分拣机台数 · 每小时4500件分拣力</p>
+                </div>
+            </div>
+            <div class="info-row">
+                <div class="info-item">
+                    <label>单机分拣力</label>
+                    <div class="value">4,500 件/小时</div>
+                </div>
+                <div class="info-item">
+                    <label>班次时长</label>
+                    <div class="value">
+                        <span id="night-shift-hours-display">6</span> 小时/班次
+                        <span style="font-size: 0.85rem; color: #718096; margin-left: 8px;">(与分拣机共用)</span>
+                    </div>
+                </div>
+            </div>
+            <table class="schedule-table">
+                <thead>
+                    <tr>
+                        <th>星期</th>
+                        <th>周一</th>
+                        <th>周二</th>
+                        <th>周三</th>
+                        <th>周四</th>
+                        <th>周五</th>
+                        <th>周六</th>
+                        <th>周日</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>分拣机台数</strong></td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="night-mon" value="0" min="0">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="night-tue" value="0" min="0">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="night-wed" value="0" min="0">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="night-thu" value="0" min="0">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="night-fri" value="0" min="0">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="night-sat" value="0" min="0">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="input-group">
+                                <input type="number" class="input-number" id="night-sun" value="0" min="0">
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- 移动端卡片布局 -->
+            <div class="mobile-schedule">
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周一</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">分拣机台数</span>
+                        <input type="number" class="input-number" id="night-mon-mobile" value="0" min="0"
+                            style="width: 60px;"
+                            onchange="var d=document.getElementById('night-mon');if(d){d.value=this.value;calculateTotals();calculateDailyTotals();}">
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周二</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">分拣机台数</span>
+                        <input type="number" class="input-number" id="night-tue-mobile" value="0" min="0"
+                            style="width: 60px;"
+                            onchange="var d=document.getElementById('night-tue');if(d){d.value=this.value;calculateTotals();calculateDailyTotals();}">
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周三</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">分拣机台数</span>
+                        <input type="number" class="input-number" id="night-wed-mobile" value="0" min="0"
+                            style="width: 60px;"
+                            onchange="var d=document.getElementById('night-wed');if(d){d.value=this.value;calculateTotals();calculateDailyTotals();}">
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周四</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">分拣机台数</span>
+                        <input type="number" class="input-number" id="night-thu-mobile" value="0" min="0"
+                            style="width: 60px;"
+                            onchange="var d=document.getElementById('night-thu');if(d){d.value=this.value;calculateTotals();calculateDailyTotals();}">
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周五</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">分拣机台数</span>
+                        <input type="number" class="input-number" id="night-fri-mobile" value="0" min="0"
+                            style="width: 60px;"
+                            onchange="var d=document.getElementById('night-fri');if(d){d.value=this.value;calculateTotals();calculateDailyTotals();}">
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周六</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">分拣机台数</span>
+                        <input type="number" class="input-number" id="night-sat-mobile" value="0" min="0"
+                            style="width: 60px;"
+                            onchange="var d=document.getElementById('night-sat');if(d){d.value=this.value;calculateTotals();calculateDailyTotals();}">
+                    </div>
+                </div>
+                <div class="day-card">
+                    <div class="day-card-header"><span class="day-name">周日</span></div>
+                    <div class="day-card-content">
+                        <span class="day-label">分拣机台数</span>
+                        <input type="number" class="input-number" id="night-sun-mobile" value="0" min="0"
+                            style="width: 60px;"
+                            onchange="var d=document.getElementById('night-sun');if(d){d.value=this.value;calculateTotals();calculateDailyTotals();}">
+                    </div>
+                </div>
+                <!-- 统一保存按钮 -->
+                <button class="mobile-save-btn" onclick="saveMobileSchedule('night')"
+                    style="grid-column: 1 / -1; margin-top: 8px; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                    💾 保存大夜班配置
+                </button>
+            </div>
+        </div>
+
+        <!-- 全局保存按钮 -->
+        <div class="legacy-action-block" style="text-align: center; margin: 30px 0;">
+            <button onclick="saveAllSchedules()"
+                style="padding: 15px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); transition: all 0.3s ease;">
+                ✅ 保存所有配置
+            </button>
+        </div>
+
+        <!-- 权限配置按钮 -->
+        <button id="permissionBtn" class="permission-btn" title="权限配置">
+            ⚙️
+        </button>
+
+        <!-- 权限配置模态框 -->
+        <div id="modalOverlay" class="modal-overlay">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>用户权限配置</h2>
+                </div>
+                <div class="modal-body">
+                    <div id="userList" class="user-list">
+                        <!-- 用户列表将通过JS动态加载 -->
+                        <div style="text-align: center; color: #718096; padding: 20px;">正在加载用户列表...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="closeModalBtn"
+                        style="padding: 8px 20px; font-size: 0.9rem; margin-right: 10px;">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日分拣力汇总 -->
+        <div class="summary-card legacy-summary-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <h2 style="text-align: center; margin-bottom: 10px;">📅 日分拣力汇总</h2>
+            <div style="text-align: center; margin-bottom: 15px; opacity: 0.9;">
+                <select id="day-selector"
+                    title="与上方「人工分拣台 → 编辑星期」联动，选同一天即可改排班并看当日产能"
+                    style="padding: 8px 16px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.5); background: white; color: #2d3748; font-size: 1rem; font-weight: 600; cursor: pointer;">
+                    <option value="mon">周一</option>
+                    <option value="tue">周二</option>
+                    <option value="wed">周三</option>
+                    <option value="thu">周四</option>
+                    <option value="fri">周五</option>
+                    <option value="sat">周六</option>
+                    <option value="sun">周日</option>
+                </select>
+                <p style="margin-top: 8px; font-size: 0.82rem; opacity: 0.95; max-width: 420px; margin-left: auto; margin-right: auto; line-height: 1.4;">与上方「编辑星期」同步；任选一处选周一～周日，即可直接改当日班次。</p>
+            </div>
+            <div class="summary-grid" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="summary-item">
+                    <h3>人工分拣产能</h3>
+                    <div class="number" id="daily-manual">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem;">件/日</p>
+                </div>
+                <div class="summary-item">
+                    <h3>分拣机轨道产能</h3>
+                    <div class="number" id="daily-machine">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem;">件/日</p>
+                </div>
+                <div class="summary-item" style="display: none;">
+                    <h3>大夜班产能</h3>
+                    <div class="number" id="daily-night">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem;">件/日</p>
+                </div>
+                <div class="summary-item"
+                    style="background: rgba(255, 255, 255, 0.25); border: 2px solid rgba(255, 255, 255, 0.4); transform: scale(1.05);">
+                    <h3 style="font-weight: 800; color: #fff;">⚡ 每小时综合产能</h3>
+                    <div class="number" id="daily-hourly-total"
+                        style="font-size: 2.2rem; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem; font-weight: 600;">件/小时</p>
+                </div>
+                <div class="summary-item">
+                    <h3>日总分拣力</h3>
+                    <div class="number" id="daily-total">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem;">件/日</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 周分拣力汇总 -->
+        <div class="summary-card legacy-summary-card">
+            <h2 style="text-align: center; margin-bottom: 10px;">📊 周分拣力汇总</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <h3>人工分拣总产能</h3>
+                    <div class="number" id="manual-total">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem;">件/周</p>
+                </div>
+                <div class="summary-item">
+                    <h3>分拣机轨道总产能</h3>
+                    <div class="number" id="machine-total">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem;">件/周</p>
+                </div>
+                <div class="summary-item" style="display: none;">
+                    <h3>大夜班总产能</h3>
+                    <div class="number" id="night-total">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem;">件/周</p>
+                </div>
+                <div class="summary-item">
+                    <h3>周总分拣力</h3>
+                    <div class="number" id="week-total">0</div>
+                    <p style="margin-top: 5px; font-size: 0.9rem;">件/周</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="action-buttons legacy-action-block">
+            <button class="btn btn-secondary" onclick="resetDefaults()">🔄 恢复默认值</button>
+            <button class="btn btn-primary" onclick="submitSchedule()">✅ 提交排班数据</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">
+        <span id="toast-message"></span>
+    </div>
+
+    <script>
+        // 默认配置
+        const MANUAL_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        const MANUAL_WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+
+        function cloneShiftsDeep(shifts) {
+            if (!shifts || !shifts.length) return [];
+            return shifts.map(s => ({
+                start: parseFloat(s.start),
+                hours: parseFloat(s.hours),
+                people: parseInt(s.people, 10) || 0
+            }));
+        }
+
+        function refreshManualCopyUi() {
+            const sel = document.getElementById('manual-shift-day-select');
+            const lbl = document.getElementById('manual-copy-source-label');
+            if (sel && lbl) {
+                const opt = sel.options[sel.selectedIndex];
+                lbl.textContent = opt ? opt.textContent : '';
+            }
+            const src = sel ? sel.value : '';
+            document.querySelectorAll('#manual-copy-targets input[type="checkbox"][data-day]').forEach(cb => {
+                const d = cb.getAttribute('data-day');
+                const isSrc = d === src;
+                cb.disabled = isSrc;
+                if (isSrc) cb.checked = false;
+            });
+        }
+
+        function applyManualCopy() {
+            const src = document.getElementById('manual-shift-day-select').value;
+            const source = shiftsByDay[src] || [];
+            let n = 0;
+            document.querySelectorAll('#manual-copy-targets input[type="checkbox"][data-day]:checked').forEach(cb => {
+                const t = cb.getAttribute('data-day');
+                if (t === src) return;
+                shiftsByDay[t] = cloneShiftsDeep(source);
+                n += 1;
+            });
+            renderManualShiftsEditor();
+            calculateTotals();
+            calculateDailyTotals();
+            showToast(n ? `已复制到 ${n} 天，可切换「编辑星期」逐日微调` : '请勾选要覆盖的目标星期');
+        }
+
+        function presetManualCopyCheckboxes(mode) {
+            const src = document.getElementById('manual-shift-day-select').value;
+            document.querySelectorAll('#manual-copy-targets input[type="checkbox"][data-day]').forEach(cb => {
+                const d = cb.getAttribute('data-day');
+                if (d === src) {
+                    cb.checked = false;
+                    return;
+                }
+                if (mode === 'clear') cb.checked = false;
+                else if (mode === 'weekdays') cb.checked = MANUAL_WEEKDAY_KEYS.includes(d);
+                else if (mode === 'rest') cb.checked = true;
+            });
+        }
+
+        /** 「编辑星期」与下方「日分拣力汇总」星期一致，任选一处即可查看并编辑当日排班 */
+        function syncWeekdaySelectors(dayKey) {
+            if (!MANUAL_DAY_KEYS.includes(dayKey)) return;
+            const msel = document.getElementById('manual-shift-day-select');
+            const dsel = document.getElementById('day-selector');
+            if (msel) msel.value = dayKey;
+            if (dsel) dsel.value = dayKey;
+            renderManualShiftsEditor();
+            refreshManualCopyUi();
+            calculateDailyTotals();
+        }
+
+        function cloneDefaultShiftsByDay() {
+            const o = {};
+            const people = [25, 25, 25, 20, 20, 20, 5];
+            MANUAL_DAY_KEYS.forEach((k, i) => {
+                const p = people[i] || 0;
+                o[k] = p > 0 ? [{ start: 17.5, hours: 9, people: p }] : [];
+            });
+            return o;
+        }
+
+        let shiftsByDay = cloneDefaultShiftsByDay();
+
+        const defaults = {
+            manual: {
+                piecesPerPersonPerHour: 600,
+                hoursPerShift: 9,
+                schedule: [25, 25, 25, 20, 20, 20, 5],
+                startTimes: [17.5, 17.5, 17.5, 17.5, 17.5, 17.5, 17.5]
+            },
+            machine: {
+                capacity: 4500,
+                hoursPerShift: 6, // 班次时长（小时）- 与大夜班共用
+                schedule: [4, 4, 4, 4, 4, 2, 2],
+                startTimes: [17.5, 17.5, 17.5, 17.5, 17.5, 17.5, 17.5] // 默认17:30开工
+            },
+            night: {
+                capacity: 4500, // 每小时件数
+                hoursPerShift: 6  // 班次时长（小时）- 与分拣机共用
+            }
+        };
+
+        function updateManualCapacityDisplay() {
+            const pppEl = document.getElementById('manual-pieces-per-person');
+            const dispEl = document.getElementById('manual-capacity-display');
+            if (!pppEl) return;
+            let ppp = parseFloat(pppEl.value);
+            if (isNaN(ppp) || ppp < 1) ppp = defaults.manual.piecesPerPersonPerHour;
+            defaults.manual.piecesPerPersonPerHour = ppp;
+            if (dispEl) {
+                dispEl.textContent = `单人每小时${ppp}件 · 日/周产能按多班次重叠积分估算`;
+            }
+        }
+
+        function manualDayThroughputPieces(shifts, ppp) {
+            if (!shifts || !shifts.length) return 0;
+            const step = 5 / 60;
+            let total = 0;
+            for (let t = 0; t < 24 - 1e-9; t += step) {
+                let cap = 0;
+                for (const s of shifts) {
+                    const st = parseFloat(s.start);
+                    const h = parseFloat(s.hours);
+                    const p = parseInt(s.people, 10) || 0;
+                    if (h > 0 && t >= st - 1e-9 && t < st + h - 1e-9) cap += p * ppp;
+                }
+                total += cap * step;
+            }
+            return Math.round(total);
+        }
+
+        function manualPeakHourlyCapacity(shifts, ppp) {
+            if (!shifts || !shifts.length) return 0;
+            let max = 0;
+            const step = 5 / 60;
+            for (let t = 0; t < 24 - 1e-9; t += step) {
+                let cap = 0;
+                for (const s of shifts) {
+                    const st = parseFloat(s.start);
+                    const h = parseFloat(s.hours);
+                    const p = parseInt(s.people, 10) || 0;
+                    if (h > 0 && t >= st - 1e-9 && t < st + h - 1e-9) cap += p * ppp;
+                }
+                if (cap > max) max = cap;
+            }
+            return Math.round(max);
+        }
+
+        function renderManualShiftsEditor() {
+            const sel = document.getElementById('manual-shift-day-select');
+            const tbody = document.getElementById('manual-shift-tbody');
+            if (!tbody || !sel) return;
+            const day = sel.value;
+            const rows = shiftsByDay[day] || [];
+            tbody.innerHTML = '';
+            rows.forEach((row, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${idx + 1}</td>
+                    <td><input type="number" class="input-number manual-shift-inp" data-field="start" data-idx="${idx}" min="0" max="30" step="0.25" value="${row.start}"></td>
+                    <td><input type="number" class="input-number manual-shift-inp" data-field="hours" data-idx="${idx}" min="0.25" max="24" step="0.25" value="${row.hours}"></td>
+                    <td><input type="number" class="input-number manual-shift-inp" data-field="people" data-idx="${idx}" min="0" step="1" value="${row.people}"></td>
+                    <td><button type="button" class="manual-shift-del" data-idx="${idx}">删除</button></td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function onManualShiftInput(e) {
+            const inp = e.target;
+            const field = inp.getAttribute('data-field');
+            const idx = parseInt(inp.getAttribute('data-idx'), 10);
+            const day = document.getElementById('manual-shift-day-select').value;
+            if (!shiftsByDay[day] || !shiftsByDay[day][idx]) return;
+            if (field === 'start') shiftsByDay[day][idx].start = parseFloat(inp.value) || 0;
+            else if (field === 'hours') shiftsByDay[day][idx].hours = parseFloat(inp.value) || 0;
+            else if (field === 'people') shiftsByDay[day][idx].people = parseInt(inp.value, 10) || 0;
+            calculateTotals();
+            calculateDailyTotals();
+        }
+
+        // 同步输入
+        function syncInputs(id, value) {
+            // 更新桌面版
+            const desktopEl = document.getElementById(id);
+            if (desktopEl) desktopEl.value = value;
+
+            // 更新移动版
+            const mobileEl = document.getElementById(id + '-mobile');
+            if (mobileEl) mobileEl.value = value;
+        }
+
+        // 切换编辑状态
+        function toggleEdit(id) {
+            const input = document.getElementById(id);
+            if (!input) {
+                console.error('Input not found:', id);
+                return;
+            }
+
+            // 查找按钮 - 兼容表格和移动端卡片两种布局
+            let btn;
+            const parent = input.parentElement;
+
+            // 在父容器中查找按钮
+            btn = parent.querySelector('.toggle-btn');
+
+            if (!btn) {
+                console.error('Button not found for:', id);
+                return;
+            }
+
+            if (input.disabled) {
+                input.disabled = false;
+                input.focus();
+                btn.textContent = '保存';
+                btn.classList.add('active');
+            } else {
+                input.disabled = true;
+                btn.textContent = '编辑';
+                btn.classList.remove('active');
+
+                // 如果是分拣机班次时长，同步更新大夜班显示
+                if (id === 'machine-shift-hours') {
+                    const displayEl = document.getElementById('night-shift-hours-display');
+                    if (displayEl) {
+                        displayEl.textContent = input.value;
+                    }
+                }
+
+                if (id === 'machine-capacity-input') {
+                    const displayEl = document.getElementById('machine-capacity-display');
+                    if (displayEl) displayEl.textContent = `每小时${input.value}件分拣力`;
+                }
+
+                calculateTotals();
+                calculateDailyTotals();
+            }
+        }
+
+        // 计算总计
+        function calculateTotals() {
+            const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+            const machineHours = parseInt(document.getElementById('machine-shift-hours').value) || defaults.machine.hoursPerShift;
+            let ppp = parseFloat(document.getElementById('manual-pieces-per-person').value);
+            if (isNaN(ppp) || ppp < 1) ppp = defaults.manual.piecesPerPersonPerHour;
+            const machineCapacity = parseInt(document.getElementById('machine-capacity-input').value) || defaults.machine.capacity;
+
+            let manualTotal = 0;
+            MANUAL_DAY_KEYS.forEach(d => {
+                manualTotal += manualDayThroughputPieces(shiftsByDay[d] || [], ppp);
+            });
+
+            // 分拣机轨道总产能
+            let machineTotal = 0;
+            days.forEach(day => {
+                const count = parseInt(document.getElementById(`machine-${day}`).value) || 0;
+                machineTotal += count * machineCapacity * machineHours;
+            });
+
+            // 大夜班总产能 (Module hidden, defaulting to 0)
+            let nightTotal = 0;
+            /*
+            days.forEach(day => {
+                const count = parseInt(document.getElementById(`night-${day}`).value) || 0;
+                nightTotal += count * machineCapacity * machineHours;
+            });
+            */
+
+            // 更新显示
+            document.getElementById('manual-total').textContent = manualTotal.toLocaleString();
+            document.getElementById('machine-total').textContent = machineTotal.toLocaleString();
+            document.getElementById('night-total').textContent = nightTotal.toLocaleString();
+            document.getElementById('week-total').textContent = (manualTotal + machineTotal + nightTotal).toLocaleString();
+        }
+
+        // 恢复默认值
+        function resetDefaults() {
+            const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+            shiftsByDay = cloneDefaultShiftsByDay();
+            const defH = document.getElementById('manual-default-shift-hours');
+            if (defH) defH.value = 3;
+            renderManualShiftsEditor();
+            refreshManualCopyUi();
+
+            days.forEach((day, index) => {
+                document.getElementById(`machine-${day}`).value = defaults.machine.schedule[index];
+                document.getElementById(`machine-startTime-${day}`).value = defaults.machine.startTimes[index];
+                const machineMobileStartTime = document.getElementById(`machine-startTime-${day}-mobile`);
+                if (machineMobileStartTime) machineMobileStartTime.value = defaults.machine.startTimes[index];
+
+                document.getElementById(`night-${day}`).value = 0;
+                const nightMobile = document.getElementById(`night-${day}-mobile`);
+                if (nightMobile) nightMobile.value = 0;
+            });
+
+            document.getElementById('machine-shift-hours').value = defaults.machine.hoursPerShift;
+            defaults.manual.piecesPerPersonPerHour = 600;
+            document.getElementById('manual-pieces-per-person').value = 600;
+            updateManualCapacityDisplay();
+            document.getElementById('machine-capacity-input').value = defaults.machine.capacity;
+
+            document.getElementById('machine-capacity-display').textContent = `每小时${defaults.machine.capacity}件分拣力`;
+            document.getElementById('night-shift-hours-display').textContent = defaults.night.hoursPerShift;
+
+            calculateTotals();
+            calculateDailyTotals();
+            showToast('已恢复默认值');
+        }
+
+        // 保存移动端配置
+        function saveMobileSchedule(type) {
+            // 触发计算更新
+            calculateTotals();
+            calculateDailyTotals();
+
+            // 提交到服务器
+            submitSchedule();
+
+            // 显示保存成功提示
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✅ 已保存';
+            btn.style.background = 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)';
+
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            }, 2000);
+        }
+
+        // 全局保存所有配置
+        function saveAllSchedules() {
+            // 触发计算更新
+            calculateTotals();
+            calculateDailyTotals();
+
+            // 提交到服务器
+            submitSchedule();
+        }
+
+        // 加载排班数据
+        async function loadSchedule() {
+            try {
+                const response = await fetch('/api/sorting-schedule?t=' + new Date().getTime());
+                const savedConfig = await response.json();
+
+                // 如果没有保存的配置，使用默认值 (already set by default HTML values, but good to reset)
+                // Actually defaults are hardcoded in HTML? No, they are set via JS or HTML values.
+                // Let's assume HTML has some values, but we want to overwrite with savedConfig or defaults if no savedConfig.
+                // If savedConfig is empty object, we stick to what's on page or defaults.
+
+                const config = (savedConfig && Object.keys(savedConfig).length > 0) ? savedConfig : defaults;
+                const dayMap = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+                if (config.manual && config.manual.piecesPerPersonPerHour != null) {
+                    defaults.manual.piecesPerPersonPerHour = config.manual.piecesPerPersonPerHour;
+                }
+                if (config.machine && config.machine.capacity) defaults.machine.capacity = config.machine.capacity;
+                if (config.night && config.night.capacity) defaults.night.capacity = config.night.capacity;
+
+                if (config.manual) {
+                    const pps = config.manual.peoplePerStation;
+                    const pppIn = config.manual.piecesPerPersonPerHour;
+                    if (pppIn != null) {
+                        document.getElementById('manual-pieces-per-person').value = pppIn;
+                    } else if (config.manual.capacity != null) {
+                        const c = parseFloat(config.manual.capacity);
+                        const basePpp = defaults.manual.piecesPerPersonPerHour || 600;
+                        if (pps != null && parseFloat(pps) > 0) {
+                            document.getElementById('manual-pieces-per-person').value = c / parseFloat(pps);
+                        } else {
+                            document.getElementById('manual-pieces-per-person').value = basePpp;
+                        }
+                    }
+                    updateManualCapacityDisplay();
+                    if (config.manual.defaultShiftHours != null) {
+                        const el = document.getElementById('manual-default-shift-hours');
+                        if (el) el.value = config.manual.defaultShiftHours;
+                    }
+                    if (Array.isArray(config.manual.shiftsByDay) && config.manual.shiftsByDay.length === 7) {
+                        MANUAL_DAY_KEYS.forEach((k, i) => {
+                            const raw = config.manual.shiftsByDay[i];
+                            if (!Array.isArray(raw) || raw.length === 0) {
+                                shiftsByDay[k] = [];
+                                return;
+                            }
+                            shiftsByDay[k] = raw.map(s => ({
+                                start: parseFloat(s.start), hours: parseFloat(s.hours),
+                                people: parseInt(s.people, 10) || 0
+                            })).filter(s => s.hours > 0 && s.people >= 0);
+                        });
+                    } else {
+                        let sched = defaults.manual.schedule.slice();
+                        if (config.manual.schedule && config.manual.schedule.length) {
+                            config.manual.schedule.forEach((v, i) => { if (i < 7) sched[i] = v; });
+                        }
+                        const hadStationTimes = Array.isArray(config.manual.stationStartTimes) && config.manual.stationStartTimes.length >= 7;
+                        if (hadStationTimes && pps != null && !isNaN(parseFloat(pps)) && parseFloat(pps) > 0) {
+                            const m = parseFloat(pps);
+                            sched = sched.map(s => Math.round(parseInt(s, 10) * m));
+                        }
+                        let st = defaults.manual.startTimes.slice();
+                        if (config.manual.startTimes && config.manual.startTimes.length) {
+                            config.manual.startTimes.forEach((v, i) => { if (i < 7) st[i] = v; });
+                        }
+                        const hps = parseFloat(config.manual.hoursPerShift) || defaults.manual.hoursPerShift;
+                        MANUAL_DAY_KEYS.forEach((k, i) => {
+                            const pe = parseInt(sched[i], 10) || 0;
+                            const start = parseFloat(st[i]) || 17.5;
+                            shiftsByDay[k] = pe > 0 ? [{ start, hours: hps, people: pe }] : [];
+                        });
+                    }
+                    renderManualShiftsEditor();
+                    refreshManualCopyUi();
+                }
+
+
+                // Restore Machine settings
+                if (config.machine) {
+                    if (config.machine.capacity) {
+                        document.getElementById('machine-capacity-input').value = config.machine.capacity;
+                        document.getElementById('machine-capacity-display').textContent = `每小时${config.machine.capacity}件分拣力`;
+                    }
+                    if (config.machine.hoursPerShift) document.getElementById('machine-shift-hours').value = config.machine.hoursPerShift;
+                    if (config.machine.schedule) {
+                        config.machine.schedule.forEach((val, idx) => {
+                            const el = document.getElementById(`machine-${dayMap[idx]}`);
+                            if (el) el.value = val;
+                        });
+                    }
+                    if (config.machine.startTimes) {
+                        config.machine.startTimes.forEach((val, idx) => {
+                            syncInputs(`machine-startTime-${dayMap[idx]}`, val);
+                        });
+                    } else {
+                        // 使用默认值
+                        defaults.machine.startTimes.forEach((val, idx) => {
+                            syncInputs(`machine-startTime-${dayMap[idx]}`, val);
+                        });
+                    }
+                }
+
+                // Restore Night settings
+                if (config.night) {
+                    // Start of night shift hours handling (if added later)
+                    // if (config.night.hoursPerShift) ... 
+                    if (config.night.schedule) {
+                        config.night.schedule.forEach((val, idx) => {
+                            const el = document.getElementById(`night-${dayMap[idx]}`);
+                            if (el) el.value = val;
+                            // Also sync mobile input
+                            const elMobile = document.getElementById(`night-${dayMap[idx]}-mobile`);
+                            if (elMobile) elMobile.value = val;
+                        });
+                    }
+                }
+
+                if (!config.manual) {
+                    const pppEl = document.getElementById('manual-pieces-per-person');
+                    if (pppEl) pppEl.value = defaults.manual.piecesPerPersonPerHour;
+                    updateManualCapacityDisplay();
+                    shiftsByDay = cloneDefaultShiftsByDay();
+                    renderManualShiftsEditor();
+                    refreshManualCopyUi();
+                }
+
+                calculateTotals();
+                const msAfterLoad = document.getElementById('manual-shift-day-select');
+                if (msAfterLoad) syncWeekdaySelectors(msAfterLoad.value);
+
+            } catch (error) {
+                console.error('Failed to load schedule:', error);
+                showToast('加载排班配置失败');
+            }
+        }
+
+        // 提交排班数据
+        async function submitSchedule() {
+            const dayMap = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+            updateManualCapacityDisplay();
+            const ppp = parseFloat(document.getElementById('manual-pieces-per-person').value) || defaults.manual.piecesPerPersonPerHour;
+            const defShiftH = parseFloat(document.getElementById('manual-default-shift-hours').value) || 3;
+
+            const data = {
+                manual: {
+                    piecesPerPersonPerHour: ppp,
+                    scheduleRepresentsPeople: true,
+                    capacity: ppp,
+                    defaultShiftHours: defShiftH,
+                    shiftsByDay: MANUAL_DAY_KEYS.map(k => shiftsByDay[k] || []),
+                    hoursPerShift: defaults.manual.hoursPerShift,
+                    schedule: MANUAL_DAY_KEYS.map(k => {
+                        const arr = shiftsByDay[k] || [];
+                        if (!arr.length) return 0;
+                        return Math.max(...arr.map(s => parseInt(s.people, 10) || 0));
+                    }),
+                    startTimes: MANUAL_DAY_KEYS.map(k => {
+                        const arr = shiftsByDay[k] || [];
+                        return (arr[0] && arr[0].start != null) ? +arr[0].start : 17.5;
+                    })
+                },
+                machine: {
+                    capacity: parseInt(document.getElementById('machine-capacity-input').value) || defaults.machine.capacity,
+                    hoursPerShift: parseInt(document.getElementById('machine-shift-hours').value) || defaults.machine.hoursPerShift,
+                    schedule: dayMap.map(day => parseInt(document.getElementById(`machine-${day}`).value) || 0),
+                    startTimes: dayMap.map(day => {
+                        const el = document.getElementById(`machine-startTime-${day}`);
+                        return el ? (parseFloat(el.value) || 17.5) : 17.5;
+                    })
+                },
+                night: {
+                    capacity: defaults.night.capacity,
+                    // hoursPerShift: ... (currently shared with machine or fixed)
+                    schedule: [0, 0, 0, 0, 0, 0, 0] // Reset to 0 as module is hidden
+                },
+                timestamp: new Date().toISOString()
+            };
+
+            console.log('提交的排班数据:', data);
+
+            try {
+                const response = await fetch('/api/sorting-schedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('排班数据已提交成功！');
+                } else {
+                    showToast('提交失败: ' + (result.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Submit error:', error);
+                showToast('提交出错: ' + error.message);
+            }
+        }
+
+        // 显示提示消息
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            toastMessage.textContent = message;
+            toast.classList.add('show', 'success');
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // 计算日分拣力
+        function calculateDailyTotals() {
+            const selectedDay = document.getElementById('day-selector').value;
+
+            const machineHours = parseInt(document.getElementById('machine-shift-hours').value) || defaults.machine.hoursPerShift;
+            let ppp = parseFloat(document.getElementById('manual-pieces-per-person').value);
+            if (isNaN(ppp) || ppp < 1) ppp = defaults.manual.piecesPerPersonPerHour;
+            const machineCapacity = parseInt(document.getElementById('machine-capacity-input').value) || defaults.machine.capacity;
+
+            const manualShifts = shiftsByDay[selectedDay] || [];
+            const machineCount = parseInt(document.getElementById(`machine-${selectedDay}`).value) || 0;
+            const nightCount = 0;
+
+            const dailyManual = manualDayThroughputPieces(manualShifts, ppp);
+            const dailyMachine = machineCount * machineCapacity * machineHours;
+            const dailyNight = nightCount * machineCapacity * machineHours;
+            const dailyTotal = dailyManual + dailyMachine + dailyNight;
+
+            const hourlyManualTotal = manualPeakHourlyCapacity(manualShifts, ppp);
+            const hourlyMachineTotal = machineCount * machineCapacity;
+            const hourlyNightTotal = nightCount * machineCapacity;
+            const combinedHourly = hourlyManualTotal + hourlyMachineTotal + hourlyNightTotal; // 简单的累加每小时产能
+
+            // 更新显示
+            document.getElementById('daily-manual').textContent = dailyManual.toLocaleString();
+            document.getElementById('daily-machine').textContent = dailyMachine.toLocaleString();
+            document.getElementById('daily-night').textContent = dailyNight.toLocaleString();
+            document.getElementById('daily-hourly-total').textContent = combinedHourly.toLocaleString();
+            document.getElementById('daily-total').textContent = dailyTotal.toLocaleString();
+        }
+
+        // 监听输入变化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSchedule(); // 加载保存的排班
+
+            // 「日分拣力」与「编辑星期」统一为当天（JS getDay：0=周日 … 6=周六）
+            const today = new Date().getDay();
+            const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+            const todayKey = dayMap[today];
+            const daySel = document.getElementById('day-selector');
+            const manualDaySel = document.getElementById('manual-shift-day-select');
+            if (daySel) daySel.value = todayKey;
+            if (manualDaySel) manualDaySel.value = todayKey;
+
+            const inputs = document.querySelectorAll('.input-number');
+            inputs.forEach(input => {
+                input.addEventListener('input', () => {
+                    if (input.id === 'manual-pieces-per-person') {
+                        updateManualCapacityDisplay();
+                    }
+                    calculateTotals();
+                    calculateDailyTotals();
+                });
+            });
+
+            const mdef = document.getElementById('manual-default-shift-hours');
+            if (mdef) {
+                mdef.addEventListener('input', () => { calculateTotals(); calculateDailyTotals(); });
+            }
+
+            const mtbody = document.getElementById('manual-shift-tbody');
+            if (mtbody) {
+                mtbody.addEventListener('input', (e) => {
+                    if (e.target.classList && e.target.classList.contains('manual-shift-inp')) onManualShiftInput(e);
+                });
+                mtbody.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.manual-shift-del');
+                    if (!btn) return;
+                    const ix = parseInt(btn.getAttribute('data-idx'), 10);
+                    const d = document.getElementById('manual-shift-day-select').value;
+                    if (shiftsByDay[d] && shiftsByDay[d].length > ix) {
+                        shiftsByDay[d].splice(ix, 1);
+                        renderManualShiftsEditor();
+                        calculateTotals();
+                        calculateDailyTotals();
+                    }
+                });
+            }
+
+            const madd = document.getElementById('manual-shift-add');
+            if (madd) {
+                madd.addEventListener('click', () => {
+                    const day = document.getElementById('manual-shift-day-select').value;
+                    const defH = parseFloat(document.getElementById('manual-default-shift-hours').value) || 3;
+                    if (!shiftsByDay[day]) shiftsByDay[day] = [];
+                    const last = shiftsByDay[day][shiftsByDay[day].length - 1];
+                    const start = last ? (parseFloat(last.start) + parseFloat(last.hours)) : 17.5;
+                    const people = last ? parseInt(last.people, 10) || 0 : 10;
+                    shiftsByDay[day].push({ start: Math.min(start, 23.75), hours: defH, people });
+                    renderManualShiftsEditor();
+                    calculateTotals();
+                    calculateDailyTotals();
+                });
+            }
+            const msel = document.getElementById('manual-shift-day-select');
+            if (msel) msel.addEventListener('change', () => syncWeekdaySelectors(msel.value));
+
+            const mcopyApply = document.getElementById('manual-copy-apply');
+            if (mcopyApply) mcopyApply.addEventListener('click', applyManualCopy);
+            const mcopyWd = document.getElementById('manual-copy-weekdays');
+            if (mcopyWd) mcopyWd.addEventListener('click', () => presetManualCopyCheckboxes('weekdays'));
+            const mcopyAll = document.getElementById('manual-copy-all');
+            if (mcopyAll) mcopyAll.addEventListener('click', () => presetManualCopyCheckboxes('rest'));
+            const mcopyClr = document.getElementById('manual-copy-clear');
+            if (mcopyClr) mcopyClr.addEventListener('click', () => presetManualCopyCheckboxes('clear'));
+
+            updateManualCapacityDisplay();
+            syncWeekdaySelectors(document.getElementById('manual-shift-day-select').value);
+
+            // 监听日期选择器变化（与编辑星期双向同步）
+            const daySelForListener = document.getElementById('day-selector');
+            if (daySelForListener) daySelForListener.addEventListener('change', () => syncWeekdaySelectors(daySelForListener.value));
+
+            // 初始周汇总（日汇总已在 syncWeekdaySelectors 中计算）
+            calculateTotals();
+
+            // 检查用户权限并初始化
+            checkUserRole();
+            checkEditPermission();
+            setupPermissionModal();
+        });
+
+        // 检查用户角色显示权限按钮
+        async function checkUserRole() {
+            try {
+                const response = await fetch('/api/users');
+                if (response.ok) {
+                    // 如果能获取到用户列表，说明是管理员
+                    document.getElementById('permissionBtn').style.display = 'flex';
+                }
+            } catch (error) {
+                console.error('Failed to check user role:', error);
+            }
+        }
+
+        // 检查编辑权限
+        async function checkEditPermission() {
+            try {
+                const response = await fetch('/api/user_permissions');
+                const permissions = await response.json();
+
+                // 如果没有 'sorting-schedule' 的 can_edit 权限，禁用所有输入框和提交按钮
+                const pagePerm = permissions['sorting-schedule'];
+                if (pagePerm && !pagePerm.can_edit) {
+                    document.querySelectorAll('input').forEach(el => el.disabled = true);
+                    document.querySelectorAll('button:not(#permissionBtn):not(#closeModalBtn)').forEach(el => el.style.display = 'none');
+                    // 还可以添加一个提示
+                    const actionDiv = document.querySelector('.action-buttons');
+                    if (actionDiv) {
+                        actionDiv.innerHTML = '<div style="color: #718096; text-align: center; width: 100%;">您只有查看权限</div>';
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check edit permission:', error);
+            }
+        }
+
+        // 设置权限模态框交互
+        function setupPermissionModal() {
+            const btn = document.getElementById('permissionBtn');
+            const modal = document.getElementById('modalOverlay');
+            const closeBtn = document.getElementById('closeModalBtn');
+
+            btn.onclick = () => {
+                modal.style.display = 'flex';
+                loadUserList();
+            };
+
+            closeBtn.onclick = () => modal.style.display = 'none';
+
+            modal.onclick = (e) => {
+                if (e.target === modal) modal.style.display = 'none';
+            };
+        }
+
+        // 加载用户列表
+        async function loadUserList() {
+            const container = document.getElementById('userList');
+            container.innerHTML = '<div style="text-align: center; color: #718096; padding: 20px;">正在加载...</div>';
+
+            try {
+                const response = await fetch('/api/users');
+                const users = await response.json();
+
+                if (users.error) throw new Error(users.error);
+
+                container.innerHTML = users.map(user => `
+                    <div class="user-item">
+                        <div class="user-info">
+                            <span class="name">${user.username}</span>
+                            <span class="role-badge role-${user.role}">${getRoleName(user.role)}</span>
+                        </div>
+                        <select class="role-select" onchange="updateUserRole(${user.id}, this.value)">
+                            <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>管理员</option>
+                            <option value="user" ${user.role === 'user' ? 'selected' : ''}>普通用户</option>
+                            <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>仅查看</option>
+                        </select>
+                    </div>
+                `).join('');
+            } catch (error) {
+                container.innerHTML = `<div style="text-align: center; color: #e53e3e; padding: 20px;">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        // 获取角色名称
+        function getRoleName(role) {
+            const map = {
+                'admin': '管理员',
+                'user': '普通用户',
+                'viewer': '仅查看'
+            };
+            return map[role] || role;
+        }
+
+        // 更新用户角色
+        async function updateUserRole(userId, newRole) {
+            try {
+                const response = await fetch('/api/users/role', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, role: newRole })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    showToast('角色权限更新成功');
+                    loadUserList(); // 刷新列表状态
+                } else {
+                    alert('更新失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('更新出错: ' + error.message);
+            }
+        }
+    </script>
+
+    <script>
+        // 隐藏/显示成本核算按钮
+        document.addEventListener('DOMContentLoaded', function () {
+            fetch('/api/user_permissions')
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.cost_accounting && data.cost_accounting.can_view) {
+                        document.querySelectorAll('.cost-accounting-only').forEach(function (el) {
+                            el.style.display = 'inline-block';
+                        });
+                    }
+                })
+                .catch(err => console.error('获取成本核算权限失败:', err));
+        });
+    </script>
+
+    <script>
+        (function () {
+            const STORAGE_KEY = 'sortingSchedulePlannerV2';
+            const STORAGE_START_KEY = 'sortingSchedulePlannerV2Starts';
+            const DEFAULT_SHIFT_H_FOR_TOTAL = 8;
+            const DEFAULT_COMPANIES = ["AAS", "Storx", "A-share", "J&S", "DirectJob", "GF", "HRES", "Reliant"];
+            const LINE_NAMES = ['生产线 A', '生产线 B', '生产线 C', '生产线 D', '摆轮 01'];
+            const STATION_NAMES = Array.from({ length: 9 }, (_, i) => `分拣台 ${i + 1}`);
+            const EQ_CAPACITY = 3100;
+            const MAN_CAPACITY_PER_PERSON = 310;
+
+            function loadStartDefaults() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_START_KEY);
+                    if (!raw) return {};
+                    const o = JSON.parse(raw);
+                    return typeof o === 'object' && o !== null ? o : {};
+                } catch (e) {
+                    return {};
+                }
+            }
+
+            function persistStartDefault(id, decimal) {
+                const o = loadStartDefaults();
+                o[id] = Number(decimal);
+                localStorage.setItem(STORAGE_START_KEY, JSON.stringify(o));
+            }
+
+            function clearStartDefaults() {
+                localStorage.removeItem(STORAGE_START_KEY);
+            }
+
+            function decimalToTime(d) {
+                const n = Number(d);
+                if (!Number.isFinite(n)) return '17:30';
+                let h = Math.floor(n);
+                let m = Math.round((n - h) * 60);
+                if (m >= 60) { h += 1; m -= 60; }
+                if (h >= 24) h = 23;
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            }
+
+            function timeToDecimal(v) {
+                if (v === undefined || v === null || v === '') return 17.5;
+                const s = String(v).trim();
+                if (!s.includes(':')) {
+                    const x = Number(s);
+                    return Number.isFinite(x) && x >= 0 ? x : 17.5;
+                }
+                const parts = s.split(':');
+                const hh = parseInt(parts[0], 10);
+                const mm = parseInt(parts[1] || '0', 10);
+                if (!Number.isFinite(hh)) return 17.5;
+                return Math.max(0, hh + (Number.isFinite(mm) ? mm / 60 : 0));
+            }
+
+            function escapeHtml(s) {
+                return String(s || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function mkRes(id, name, type, startDefaults) {
+                const sd = startDefaults || loadStartDefaults();
+                const st = sd[id];
+                const startTime = (typeof st === 'number' && Number.isFinite(st)) ? st : 17.5;
+                return {
+                    id,
+                    name,
+                    type,
+                    company: '',
+                    headcount: type === 'line' ? 0 : 8,
+                    startTime
+                };
+            }
+
+            function createDefaultState() {
+                const resources = [];
+                const sd = loadStartDefaults();
+                LINE_NAMES.forEach((n, i) => resources.push(mkRes(`line-${i + 1}`, n, 'line', sd)));
+                STATION_NAMES.forEach((n, i) => resources.push(mkRes(`station-${i + 1}`, n, 'station', sd)));
+                return { resources };
+            }
+
+            let companies = DEFAULT_COMPANIES.slice();
+            let state = createDefaultState();
+
+            /**
+             * 默认排班日期：洛杉矶日历的「次日」，与后端 _default_v2_plan_date_la() 一致，
+             * 避免浏览器本地时区与仓库运营日不一致时首屏排班日期不是「第二天」。
+             */
+            function defaultPlanYmd() {
+                const parts = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'America/Los_Angeles',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                }).formatToParts(new Date());
+                const y = Number(parts.find((p) => p.type === 'year').value);
+                const m = Number(parts.find((p) => p.type === 'month').value);
+                const d = Number(parts.find((p) => p.type === 'day').value);
+                const next = new Date(Date.UTC(y, m - 1, d + 1));
+                const yy = next.getUTCFullYear();
+                const mm = String(next.getUTCMonth() + 1).padStart(2, '0');
+                const dd = String(next.getUTCDate()).padStart(2, '0');
+                return `${yy}-${mm}-${dd}`;
+            }
+
+            function getScheduleDateYmd() {
+                const el = document.getElementById('v2-schedule-date');
+                return (el && el.value) ? el.value : defaultPlanYmd();
+            }
+
+            function getQueryDateYmd() {
+                const el = document.getElementById('v2-query-date');
+                return (el && el.value) ? el.value : defaultPlanYmd();
+            }
+
+            function toNum(v, d = 0) {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : d;
+            }
+
+            function loadState() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (!raw) return;
+                    const data = JSON.parse(raw);
+                    if (Array.isArray(data.companies) && data.companies.length) {
+                        companies = data.companies
+                            .map(x => String(x || '').trim())
+                            .filter(Boolean);
+                    }
+                    if (data.plan && Array.isArray(data.plan.resources)) {
+                        const map = new Map(data.plan.resources.map(r => [r.id, r]));
+                        state.resources = state.resources.map(r => {
+                            const found = map.get(r.id);
+                            if (!found) return r;
+                            const hc = r.type === 'line'
+                                ? Math.max(0, Math.floor(toNum(found.headcount, 0)))
+                                : Math.max(0, Math.floor(toNum(found.headcount, 8)));
+                            const nm = r.type === 'station' && String(found.name || '').trim()
+                                ? String(found.name || '').trim()
+                                : r.name;
+                            let st = toNum(found.startTime, r.startTime);
+                            if (!Number.isFinite(st)) st = r.startTime;
+                            return {
+                                ...r,
+                                name: nm,
+                                company: String(found.company || '').trim(),
+                                headcount: hc,
+                                startTime: st
+                            };
+                        });
+                    }
+                } catch (e) {
+                    console.error('v2 load failed', e);
+                }
+            }
+
+            function saveState() {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    companies,
+                    plan: state
+                }));
+            }
+
+            function planPayload() {
+                return {
+                    defaultShiftHours: DEFAULT_SHIFT_H_FOR_TOTAL,
+                    resources: state.resources.map(r => ({
+                        id: r.id,
+                        name: r.name,
+                        type: r.type,
+                        company: String(r.company || '').trim(),
+                        headcount: Math.max(0, Math.floor(toNum(r.headcount, 0))),
+                        startTime: Math.max(0, toNum(r.startTime, 17.5))
+                    })),
+                    companies: companies.slice()
+                };
+            }
+
+            function hydrateFromPlan(plan) {
+                if (!plan || typeof plan !== 'object') return;
+                if (Array.isArray(plan.companies) && plan.companies.length) {
+                    companies = plan.companies.map(x => String(x || '').trim()).filter(Boolean);
+                }
+                const map = new Map((Array.isArray(plan.resources) ? plan.resources : []).map(r => [r.id, r]));
+                state.resources = state.resources.map(r => {
+                    const f = map.get(r.id);
+                    if (!f) return r;
+                    const hc = r.type === 'line'
+                        ? Math.max(0, Math.floor(toNum(f.headcount, 0)))
+                        : Math.max(0, Math.floor(toNum(f.headcount, 8)));
+                    const nm = r.type === 'station' && String(f.name || '').trim()
+                        ? String(f.name || '').trim()
+                        : r.name;
+                    let st = toNum(f.startTime, r.startTime);
+                    if (!Number.isFinite(st)) st = r.startTime;
+                    return {
+                        ...r,
+                        name: nm,
+                        company: String(f.company || '').trim(),
+                        headcount: hc,
+                        startTime: st
+                    };
+                });
+            }
+
+            function ensureCompanyResourceConsistency() {
+                const set = new Set(companies);
+                state.resources.forEach(r => {
+                    if (r.company && !set.has(r.company)) r.company = '';
+                });
+            }
+
+            function companyOptionsHtml(selected) {
+                const opts = ['<option value="">-- 未激活 --</option>'];
+                companies.forEach(c => {
+                    const sel = c === selected ? ' selected' : '';
+                    opts.push(`<option value="${c}"${sel}>${c}</option>`);
+                });
+                return opts.join('');
+            }
+
+            function renderCompanyTags() {
+                const wrap = document.getElementById('v2-company-tags');
+                if (!wrap) return;
+                if (!companies.length) {
+                    wrap.innerHTML = '<span class="company-tag">暂无公司</span>';
+                    return;
+                }
+                wrap.innerHTML = companies.map(c => (
+                    `<span class="company-tag">${c}<button type="button" data-company-del="${c}">Del</button></span>`
+                )).join('');
+            }
+
+            function renderResourceCards() {
+                const lineWrap = document.getElementById('v2-line-grid');
+                const stWrap = document.getElementById('v2-station-grid');
+                if (!lineWrap || !stWrap) return;
+                lineWrap.innerHTML = '';
+                stWrap.innerHTML = '';
+
+                state.resources.forEach((r) => {
+                    const active = !!String(r.company || '').trim();
+                    const wrap = document.createElement('div');
+                    wrap.className = `resource-card${active ? ' active' : ''}`;
+                    const capText = r.type === 'line'
+                        ? `${EQ_CAPACITY.toLocaleString()} 件/小时（固定）`
+                        : `${Math.max(0, toNum(r.headcount, 0) * MAN_CAPACITY_PER_PERSON).toLocaleString()} 件/小时`;
+                    const titleHtml = r.type === 'station'
+                        ? `<input type="text" class="v2-name-input" data-v2-name="${r.id}" value="${escapeHtml(r.name)}" maxlength="40" placeholder="分拣台名称" autocomplete="off">`
+                        : escapeHtml(r.name);
+
+                    wrap.innerHTML = `
+                        <div class="resource-title">${titleHtml}</div>
+                        <div class="resource-meta">
+                            <div>
+                                <label>开工时间</label>
+                                <input type="time" step="60" data-v2-start="${r.id}" value="${decimalToTime(r.startTime)}">
+                            </div>
+                            <div>
+                                <label>劳务公司</label>
+                                <select data-v2-company="${r.id}">
+                                    ${companyOptionsHtml(r.company)}
+                                </select>
+                            </div>
+                            <div>
+                                <label>投入人数</label>
+                                <input data-v2-headcount="${r.id}" type="number" min="0" step="1" value="${r.headcount}">
+                            </div>
+                            <div class="resource-cap-hint">产能：${capText}</div>
+                        </div>
+                    `;
+                    if (r.type === 'line') lineWrap.appendChild(wrap);
+                    else stWrap.appendChild(wrap);
+                });
+            }
+
+            function updateResourceCardCapacityHint(resourceId) {
+                const inputEl = document.querySelector(`[data-v2-headcount="${resourceId}"]`);
+                if (!inputEl) return;
+                const card = inputEl.closest('.resource-card');
+                if (!card) return;
+                const hint = card.querySelector('.resource-cap-hint');
+                if (!hint) return;
+                const res = state.resources.find(x => x.id === resourceId);
+                if (!res) return;
+                if (res.type === 'line') {
+                    hint.textContent = `产能：${EQ_CAPACITY.toLocaleString()} 件/小时（固定）`;
+                } else {
+                    const hc = Math.max(0, Math.floor(toNum(res.headcount, 0)));
+                    hint.textContent = `产能：${(hc * MAN_CAPACITY_PER_PERSON).toLocaleString()} 件/小时`;
+                }
+            }
+
+            function computeSummary() {
+                let totalHeadcount = 0;
+                let activeLines = 0;
+                let activeStations = 0;
+                let hourly = 0;
+                const reportMap = new Map();
+
+                state.resources.forEach((r) => {
+                    const company = String(r.company || '').trim();
+                    if (!company) return; // 未激活
+                    let hrCap = 0;
+                    let hc = 0;
+                    if (r.type === 'line') {
+                        activeLines += 1;
+                        hrCap = EQ_CAPACITY;
+                        hc = Math.max(0, Math.floor(toNum(r.headcount, 0)));
+                    } else {
+                        activeStations += 1;
+                        hc = Math.max(0, Math.floor(toNum(r.headcount, 0)));
+                        hrCap = hc * MAN_CAPACITY_PER_PERSON;
+                    }
+                    totalHeadcount += hc;
+                    hourly += hrCap;
+
+                    const prev = reportMap.get(company) || { company, points: 0, headcount: 0, hourly: 0 };
+                    prev.points += 1;
+                    prev.headcount += hc;
+                    prev.hourly += hrCap;
+                    reportMap.set(company, prev);
+                });
+
+                return {
+                    totalHeadcount,
+                    activeLines,
+                    activeStations,
+                    hourly,
+                    total: hourly * DEFAULT_SHIFT_H_FOR_TOTAL,
+                    report: Array.from(reportMap.values()).sort((a, b) => b.hourly - a.hourly)
+                };
+            }
+
+            function renderReport(rows) {
+                const tbody = document.getElementById('v2-report-tbody');
+                if (!tbody) return;
+                if (!rows.length) {
+                    tbody.innerHTML = `<tr><td colspan="4">暂无激活劳务数据（未选劳务公司的点位不计入）</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = rows.map(r => `
+                    <tr>
+                        <td>${r.company}</td>
+                        <td>${r.points}</td>
+                        <td>${r.headcount}</td>
+                        <td>${r.hourly.toLocaleString()}</td>
+                    </tr>
+                `).join('');
+            }
+
+            function buildLocalReportText() {
+                const dateText = getScheduleDateYmd();
+                const linesOut = [];
+                const stationsOut = [];
+                const companySet = new Set();
+                const companyStarts = {};
+                let totalHeadcount = 0;
+                let hourlyTotal = 0;
+                let activeLines = 0;
+                let activeStations = 0;
+
+                state.resources.forEach((r) => {
+                    const company = String(r.company || '').trim();
+                    const tstr = decimalToTime(r.startTime);
+                    const name = String(r.name || '').trim() || r.id;
+                    const hc = Math.max(0, Math.floor(toNum(r.headcount, 0)));
+                    if (!company) {
+                        return;
+                    }
+                    if (!companyStarts[company]) companyStarts[company] = new Set();
+                    companyStarts[company].add(tstr);
+                    companySet.add(company);
+                    if (r.type === 'line') {
+                        activeLines += 1;
+                        hourlyTotal += EQ_CAPACITY;
+                        totalHeadcount += hc;
+                        linesOut.push(`  ${name}  开工 ${tstr}  ${company}  人数 ${hc}`);
+                    } else {
+                        activeStations += 1;
+                        const hrCap = hc * MAN_CAPACITY_PER_PERSON;
+                        hourlyTotal += hrCap;
+                        totalHeadcount += hc;
+                        stationsOut.push(`  ${name}  开工 ${tstr}  ${company}  人数 ${hc}`);
+                    }
+                });
+
+                const totalCap = Math.round(hourlyTotal * DEFAULT_SHIFT_H_FOR_TOTAL);
+                const linesSection = linesOut.length ? linesOut.join('\n') : '  （本段无激活点位）';
+                const stationsSection = stationsOut.length ? stationsOut.join('\n') : '  （本段无激活点位）';
+                const companyTimeLines = Object.keys(companyStarts).sort().map((c) => {
+                    const times = Array.from(companyStarts[c]).sort();
+                    return `  ${c}：${times.join('、')}`;
+                });
+                const companyTimesSection = companyTimeLines.length ? companyTimeLines.join('\n') : '  （无激活劳务公司）';
+                let summaryExtra = '';
+                if (companySet.size === 0) {
+                    summaryExtra = '\n提示：当前无任何点位选择劳务公司，汇总产能为 0；请在卡片中选择劳务公司以激活排班。';
+                }
+
+                return (
+                    '【分拣中心产能排班】\n' +
+                    `排班日期：${dateText}\n` +
+                    `估算：预计班次总产能按每单元 ${DEFAULT_SHIFT_H_FOR_TOTAL} 小时折算。\n` +
+                    '\n—— 设备分拣线 ——\n' +
+                    `${linesSection}\n` +
+                    '\n—— 人工分拣台 ——\n' +
+                    `${stationsSection}\n` +
+                    '\n—— 各公司开工时间 ——\n' +
+                    `${companyTimesSection}\n` +
+                    '\n—— 汇总 ——\n' +
+                    `劳务公司个数：${companySet.size}\n` +
+                    `启用生产线 / 分拣台：${activeLines} / ${activeStations}\n` +
+                    `总人数（产线+分拣台）：${totalHeadcount}\n` +
+                    `预计班次总产能：${totalCap.toLocaleString()} 件\n` +
+                    summaryExtra
+                ).replace(/\n+$/, '');
+            }
+
+            function renderPlanSnapshot() {
+                const tbody = document.getElementById('v2-snapshot-tbody');
+                if (!tbody) return;
+                const rows = [];
+                state.resources.forEach((r) => {
+                    const company = String(r.company || '').trim();
+                    const active = !!company;
+                    const tstr = decimalToTime(r.startTime);
+                    const hc = Math.max(0, Math.floor(toNum(r.headcount, 0)));
+                    let hrCap = 0;
+                    if (r.type === 'line') hrCap = EQ_CAPACITY;
+                    else hrCap = hc * MAN_CAPACITY_PER_PERSON;
+                    const typeLabel = r.type === 'line' ? '生产线' : '分拣台';
+                    const name = escapeHtml(String(r.name || '').trim() || r.id);
+                    rows.push(`
+                        <tr class="${active ? '' : 'v2-snapshot-inactive'}">
+                            <td>${typeLabel}</td>
+                            <td>${name}</td>
+                            <td>${tstr}</td>
+                            <td>${active ? escapeHtml(company) : '—'}</td>
+                            <td>${hc}</td>
+                            <td>${hrCap.toLocaleString()}</td>
+                            <td>${active ? '已激活' : '未激活'}</td>
+                        </tr>
+                    `);
+                });
+                tbody.innerHTML = rows.join('');
+            }
+
+            function renderStats() {
+                const s = computeSummary();
+                const hc = document.getElementById('v2-stat-headcount');
+                const ac = document.getElementById('v2-stat-active');
+                const hr = document.getElementById('v2-stat-hourly');
+                const tt = document.getElementById('v2-stat-total');
+                if (hc) hc.textContent = s.totalHeadcount.toLocaleString();
+                if (ac) ac.textContent = `${s.activeLines} / ${s.activeStations}`;
+                if (hr) hr.textContent = s.hourly.toLocaleString();
+                if (tt) tt.textContent = s.total.toLocaleString();
+                renderReport(s.report);
+                renderPlanSnapshot();
+            }
+
+            function rerenderAll() {
+                ensureCompanyResourceConsistency();
+                renderCompanyTags();
+                renderResourceCards();
+                renderStats();
+            }
+
+            async function saveDailyPlanToDb() {
+                const reportEl = document.getElementById('v2-report-text');
+                const planDate = getScheduleDateYmd();
+                const payload = {
+                    date: planDate,
+                    plan: planPayload(),
+                    report_text: reportEl ? String(reportEl.value || '').trim() : ''
+                };
+                const res = await fetch('/api/sorting-schedule/v2/daily', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.status === 401) {
+                    window.location.href = '/login';
+                    throw new Error('登录已过期，请重新登录');
+                }
+                const out = await res.json();
+                if (!res.ok || out.error) throw new Error(out.error || '保存失败');
+                if (reportEl) {
+                    const manual = !!out.manual_report_used;
+                    const gen = String(out.generated_report_text || '').trim();
+                    const rt = String(out.report_text || '').trim();
+                    // 未使用手动全文时优先展示服务端生成稿，保证「排班日期」与保存的排班日期一致
+                    if (manual) {
+                        reportEl.value = rt || buildLocalReportText();
+                    } else {
+                        reportEl.value = gen || rt || buildLocalReportText();
+                    }
+                }
+                return out;
+            }
+
+            async function queryDailyPlanFromDb() {
+                const reportEl = document.getElementById('v2-report-text');
+                const planDate = getQueryDateYmd();
+                const res = await fetch(`/api/sorting-schedule/v2/daily?date=${encodeURIComponent(planDate)}`, {
+                    credentials: 'same-origin'
+                });
+                if (res.status === 401) {
+                    window.location.href = '/login';
+                    throw new Error('登录已过期，请重新登录');
+                }
+                const out = await res.json();
+                if (!res.ok || out.error) throw new Error(out.error || '查询失败');
+                const scheduleEl = document.getElementById('v2-schedule-date');
+                if (out.date && scheduleEl) {
+                    scheduleEl.value = String(out.date);
+                }
+                if (out.data) {
+                    hydrateFromPlan(out.data);
+                    state.resources.forEach((r) => persistStartDefault(r.id, r.startTime));
+                    rerenderAll();
+                    saveState();
+                }
+                if (reportEl) {
+                    const rt = String(out.report_text || '').trim();
+                    reportEl.value = rt || buildLocalReportText();
+                }
+                return out;
+            }
+
+            function exportReportTextFile() {
+                const rte = document.getElementById('v2-report-text');
+                const body = String(rte && rte.value ? rte.value : '').trim() || buildLocalReportText();
+                const d = getScheduleDateYmd();
+                const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `分拣中心产能排班_${d}.txt`;
+                a.rel = 'noopener';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(a.href);
+                if (typeof showToast === 'function') showToast('已导出文本报告');
+            }
+
+            function getReportTextBody() {
+                const rte = document.getElementById('v2-report-text');
+                return String(rte && rte.value ? rte.value : '').trim() || buildLocalReportText();
+            }
+
+            function copyReportTextToClipboard() {
+                const body = getReportTextBody();
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    return navigator.clipboard.writeText(body).then(() => {
+                        if (typeof showToast === 'function') showToast('已复制到剪贴板');
+                    });
+                }
+                return new Promise((resolve, reject) => {
+                    try {
+                        const ta = document.createElement('textarea');
+                        ta.value = body;
+                        ta.setAttribute('readonly', '');
+                        ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+                        document.body.appendChild(ta);
+                        ta.focus();
+                        ta.select();
+                        ta.setSelectionRange(0, body.length);
+                        const ok = document.execCommand('copy');
+                        document.body.removeChild(ta);
+                        if (!ok) throw new Error('浏览器拒绝复制');
+                        if (typeof showToast === 'function') showToast('已复制到剪贴板');
+                        resolve();
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }
+
+            function bindEvents() {
+                const planner = document.getElementById('planner-v2');
+                if (planner) {
+                    planner.addEventListener('input', (e) => {
+                        const t = e.target;
+                        if (!(t instanceof HTMLElement)) return;
+                        const hid = t.getAttribute('data-v2-headcount');
+                        if (hid) {
+                            const res = state.resources.find(x => x.id === hid);
+                            if (!res) return;
+                            res.headcount = Math.max(0, Math.floor(toNum(t.value, 0)));
+                            updateResourceCardCapacityHint(hid);
+                            renderStats();
+                            return;
+                        }
+                        const nid = t.getAttribute('data-v2-name');
+                        if (nid) {
+                            const res = state.resources.find(x => x.id === nid);
+                            if (res && res.type === 'station') {
+                                res.name = String(t.value || '').trim() || res.name;
+                            }
+                        }
+                    });
+
+                    planner.addEventListener('change', (e) => {
+                        const t = e.target;
+                        if (!(t instanceof HTMLElement)) return;
+                        const sid = t.getAttribute('data-v2-start');
+                        if (sid) {
+                            const res = state.resources.find(x => x.id === sid);
+                            if (res) {
+                                res.startTime = timeToDecimal(t.value);
+                                persistStartDefault(sid, res.startTime);
+                                saveState();
+                                renderStats();
+                            }
+                            return;
+                        }
+                        const cid = t.getAttribute('data-v2-company');
+                        const hid = t.getAttribute('data-v2-headcount');
+                        if (cid) {
+                            const res = state.resources.find(x => x.id === cid);
+                            if (res) res.company = String(t.value || '').trim();
+                            rerenderAll();
+                            return;
+                        }
+                        if (hid) {
+                            const res = state.resources.find(x => x.id === hid);
+                            if (res) res.headcount = Math.max(0, Math.floor(toNum(t.value, 0)));
+                            updateResourceCardCapacityHint(hid);
+                            renderStats();
+                        }
+                    });
+
+                    planner.addEventListener('click', (e) => {
+                        const t = e.target;
+                        if (!(t instanceof HTMLElement)) return;
+                        const del = t.getAttribute('data-company-del');
+                        if (del) {
+                            companies = companies.filter(c => c !== del);
+                            rerenderAll();
+                        }
+                    });
+                }
+
+                const toggleCompany = document.getElementById('v2-toggle-company-btn');
+                if (toggleCompany) {
+                    toggleCompany.addEventListener('click', () => {
+                        const p = document.getElementById('v2-company-mgr');
+                        if (!p) return;
+                        p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                    });
+                }
+
+                const addBtn = document.getElementById('v2-company-add-btn');
+                if (addBtn) {
+                    addBtn.addEventListener('click', () => {
+                        const inp = document.getElementById('v2-company-input');
+                        if (!inp) return;
+                        const v = String(inp.value || '').trim();
+                        if (!v) return;
+                        if (!companies.includes(v)) companies.push(v);
+                        inp.value = '';
+                        rerenderAll();
+                    });
+                }
+
+                const saveBtn = document.getElementById('v2-save-plan-btn');
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', async () => {
+                        try {
+                            saveState();
+                            await saveDailyPlanToDb();
+                            if (typeof showToast === 'function') showToast('排班配置已保存并生成报告');
+                        } catch (err) {
+                            if (typeof showToast === 'function') showToast(`保存失败: ${err.message}`);
+                        }
+                    });
+                }
+
+                const queryBtn = document.getElementById('v2-query-plan-btn');
+                if (queryBtn) {
+                    queryBtn.addEventListener('click', async () => {
+                        try {
+                            const out = await queryDailyPlanFromDb();
+                            if (typeof showToast === 'function') {
+                                showToast(out && out.data ? '已加载该查询日期的排班数据' : '该查询日期暂无已保存数据');
+                            }
+                        } catch (err) {
+                            if (typeof showToast === 'function') showToast(`查询失败: ${err.message}`);
+                        }
+                    });
+                }
+
+                const resetBtn = document.getElementById('v2-reset-plan-btn');
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', () => {
+                        companies = DEFAULT_COMPANIES.slice();
+                        clearStartDefaults();
+                        state = createDefaultState();
+                        const qEl = document.getElementById('v2-query-date');
+                        const sEl = document.getElementById('v2-schedule-date');
+                        const def = defaultPlanYmd();
+                        if (qEl) qEl.value = def;
+                        if (sEl) sEl.value = def;
+                        rerenderAll();
+                        saveState();
+                        const rte = document.getElementById('v2-report-text');
+                        if (rte) rte.value = buildLocalReportText();
+                        if (typeof showToast === 'function') showToast('排班已恢复默认（查询与排班日期已设为次日）');
+                    });
+                }
+
+                const refreshReportBtn = document.getElementById('v2-refresh-report-text-btn');
+                if (refreshReportBtn) {
+                    refreshReportBtn.addEventListener('click', () => {
+                        const rte = document.getElementById('v2-report-text');
+                        if (rte) rte.value = buildLocalReportText();
+                        if (typeof showToast === 'function') showToast('已根据当前排班生成文本');
+                    });
+                }
+
+                const exportReportBtn = document.getElementById('v2-export-report-btn');
+                if (exportReportBtn) {
+                    exportReportBtn.addEventListener('click', () => {
+                        try {
+                            exportReportTextFile();
+                        } catch (err) {
+                            if (typeof showToast === 'function') showToast(`导出失败: ${err.message}`);
+                        }
+                    });
+                }
+
+                const copyReportBtn = document.getElementById('v2-copy-report-btn');
+                if (copyReportBtn) {
+                    copyReportBtn.addEventListener('click', () => {
+                        copyReportTextToClipboard().catch((err) => {
+                            if (typeof showToast === 'function') showToast(`复制失败: ${err && err.message ? err.message : err}`);
+                        });
+                    });
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                loadState();
+                const def = defaultPlanYmd();
+                const qEl = document.getElementById('v2-query-date');
+                const sEl = document.getElementById('v2-schedule-date');
+                if (qEl) qEl.value = def;
+                if (sEl) sEl.value = def;
+                rerenderAll();
+                bindEvents();
+                queryDailyPlanFromDb()
+                    .catch(() => { })
+                    .finally(() => {
+                        const rte = document.getElementById('v2-report-text');
+                        if (rte && !String(rte.value || '').trim()) {
+                            rte.value = buildLocalReportText();
+                        }
+                    });
+            });
+        })();
+    </script>
+</body>
+
+</html>

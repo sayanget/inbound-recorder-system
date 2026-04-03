@@ -1,0 +1,22 @@
+# =============================================================================
+# 本地开发默认依赖（无 DATABASE_URL 时使用 SQLite）
+# 安装: pip install -r requirements.txt
+#
+# 若本地要连接 Neon/PostgreSQL，请改用:
+#   pip install -r requirements-prod.txt
+# 或仅补充: pip install psycopg2-binary
+# =============================================================================
+
+Flask==2.3.3
+openpyxl==3.1.2
+pytz==2023.3
+schedule==1.2.0
+python-dotenv==1.0.0
+requests>=2.31.0,<3
+
+# 与 single_app 同进程加载的 calc_outsource_finance 需要
+pandas>=2.0.0,<3
+
+# --- 以下为生产/连 Postgres 时再装（与 requirements-prod.txt 重复，避免本地强依赖编译）---
+# psycopg2-binary==2.9.9
+# gunicorn==22.0.0

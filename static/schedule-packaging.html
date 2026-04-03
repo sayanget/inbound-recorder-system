@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="schedule_packaging_title">排班 vs 集包</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <script src="/static/js/vendor/chart.min.js"></script>
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/nav_component.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--body-bg);
+            color: var(--text-color);
+            line-height: 1.6;
+            font-size: var(--font-size-base);
+        }
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+        }
+        h2 {
+            font-size: var(--font-size-xl);
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+        .sub {
+            text-align: center;
+            color: var(--text-muted, #666);
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 1.25rem;
+        }
+        .toolbar label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.85rem; }
+        .toolbar input[type="date"] {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--card-bg);
+            color: var(--text-color);
+        }
+        .btn-load {
+            padding: 8px 20px;
+            background: #4CAF50;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-load:hover { filter: brightness(1.05); }
+        .chart-wrap {
+            position: relative;
+            height: 420px;
+            margin-top: 8px;
+        }
+        .err { color: #c62828; padding: 12px; background: #ffebee; border-radius: 8px; display: none; }
+        .hint {
+            font-size: 0.85rem;
+            color: var(--text-muted, #666);
+            margin-top: 1rem;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="nav-container"></div>
+        <h2 data-lang="schedule_packaging_title">排班 vs 集包</h2>
+        <p class="sub" data-lang="schedule_packaging_sub">最新产能计划按星期套用理论日产能；集包为运营日 06:00–次日 06:00（LA）聚合</p>
+        <div id="err" class="err"></div>
+        <div class="toolbar">
+            <div>
+                <label for="startDate" data-lang="start_date">开始日期</label>
+                <input type="date" id="startDate">
+            </div>
+            <div>
+                <label for="endDate" data-lang="end_date">结束日期</label>
+                <input type="date" id="endDate">
+            </div>
+            <div>
+                <button type="button" class="btn-load" id="btnLoad" data-lang="load_chart">加载图表</button>
+            </div>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="chart"></canvas>
+        </div>
+        <p class="hint" data-lang="schedule_packaging_hint">
+            理论：人工（多班次积分）、分拣机为按日道数×班次×产能的日件数；实际：Gofo 分拣记录中人工/设备件数与总件数。
+        </p>
+    </div>
+    <script>
+        const translations = {
+            zh: {
+                schedule_packaging_title: "排班 vs 集包",
+                schedule_packaging_sub: "最新产能计划按星期套用理论日产能；集包为运营日 06:00–次日 06:00（LA）聚合",
+                start_date: "开始日期",
+                end_date: "结束日期",
+                load_chart: "加载图表",
+                schedule_packaging_hint: "理论：人工（多班次积分）、分拣机为按日道数×班次×产能的日件数；实际：Gofo 分拣记录中人工/设备件数与总件数。"
+            },
+            en: {
+                schedule_packaging_title: "Schedule vs Packaging",
+                schedule_packaging_sub: "Plan uses latest capacity config by weekday; actuals use business day 06:00–06:00 (LA)",
+                start_date: "Start",
+                end_date: "End",
+                load_chart: "Load",
+                schedule_packaging_hint: "Theoretical: manual (integrated shifts) and sorter lanes × hours × rate; actual: Gofo manual/device/total pieces."
+            }
+        };
+        function applyLang(code) {
+            const t = translations[code] || translations.zh;
+            document.querySelectorAll('[data-lang]').forEach(el => {
+                const k = el.getAttribute('data-lang');
+                if (t[k]) el.textContent = t[k];
+            });
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('preferred_language') || 'zh';
+            applyLang(saved);
+        });
+
+        let chart;
+        function defaultRange() {
+            const end = new Date();
+            const start = new Date(end);
+            start.setDate(start.getDate() - 13);
+            return {
+                start: start.toISOString().slice(0, 10),
+                end: end.toISOString().slice(0, 10)
+            };
+        }
+        const r = defaultRange();
+        document.getElementById('startDate').value = r.start;
+        document.getElementById('endDate').value = r.end;
+
+        function showErr(msg) {
+            const el = document.getElementById('err');
+            el.style.display = msg ? 'block' : 'none';
+            el.textContent = msg || '';
+        }
+
+        async function loadData() {
+            showErr('');
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            const res = await fetch(`/api/analytics/schedule-vs-packaging?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`);
+            const text = await res.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                showErr('服务器返回异常（HTTP ' + res.status + '），非 JSON 响应');
+                return;
+            }
+            if (!res.ok) {
+                showErr(data.error || '加载失败');
+                return;
+            }
+            const labels = data.dates;
+            const s = data.series;
+            const ctx = document.getElementById('chart').getContext('2d');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { order: 2, label: '排班·人工理论', data: s.schedule_manual, backgroundColor: 'rgba(54, 162, 235, 0.75)', borderColor: 'rgba(54, 162, 235, 1)', borderWidth: 1 },
+                        { order: 2, label: '排班·分拣机理论', data: s.schedule_machine, backgroundColor: 'rgba(75, 192, 192, 0.75)', borderColor: 'rgba(75, 192, 192, 1)', borderWidth: 1 },
+                        { order: 2, label: '实际·人工集包', data: s.actual_manual, backgroundColor: 'rgba(255, 159, 64, 0.85)', borderColor: 'rgba(255, 159, 64, 1)', borderWidth: 1 },
+                        { order: 2, label: '实际·设备集包', data: s.actual_device, backgroundColor: 'rgba(255, 99, 132, 0.85)', borderColor: 'rgba(255, 99, 132, 1)', borderWidth: 1 },
+                        { order: 1, label: '实际·总件数', data: s.actual_pieces, type: 'line', fill: false, borderColor: 'rgba(100, 100, 100, 0.9)', backgroundColor: 'rgba(100, 100, 100, 0.2)', borderWidth: 2, pointRadius: 2, yAxisID: 'y' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { stacked: false, ticks: { maxRotation: 45, minRotation: 0 } },
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: '件/日' }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                footer: (items) => {
+                                    if (!items.length) return '';
+                                    const i = items[0].dataIndex;
+                                    const man = s.schedule_manual[i] || 0;
+                                    const actM = s.actual_manual[i] || 0;
+                                    if (man > 0) return `人工 实际/理论: ${(100 * actM / man).toFixed(1)}%`;
+                                    return '';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.getElementById('btnLoad').addEventListener('click', loadData);
+        loadData();
+    </script>
+</body>
+</html>

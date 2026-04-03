@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>托盘图表测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .chart-container {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            height: 400px;
+            position: relative;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .control-panel {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>托盘图表测试页面</h1>
+    
+    <div class="control-panel">
+        <button onclick="loadRealData()">加载真实数据</button>
+        <button onclick="loadTestData()">加载测试数据</button>
+        <button onclick="loadEmptyData()">加载空数据</button>
+        <button onclick="clearChart()">清除图表</button>
+        <button onclick="testError()">模拟错误</button>
+    </div>
+    
+    <h2>调试日志:</h2>
+    <div id="log"></div>
+    
+    <h2>托盘时段统计图表:</h2>
+    <div class="chart-container">
+        <canvas id="palletHourlyChart"></canvas>
+    </div>
+
+    <script>
+        // 日志记录函数
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        // 当前语言（简化处理）
+        const currentLang = 'zh';
+        
+        // 语言翻译（简化）
+        const translations = {
+            zh: {
+                no_data: "暂无时段对比数据",
+                pallet_pieces: "托盘件数",
+                pallet_count: "托盘车次",
+                time_slot: "时间段",
+                render_error: "渲染托盘时段图表出错"
+            }
+        };
+        
+        // 显示消息函数
+        function showMessage(text, type) {
+            log(`${type.toUpperCase()}: ${text}`);
+        }
+        
+        // 渲染托盘时段图表
+        function renderPalletHourlyChart(data) {
+            log(`开始渲染托盘图表，数据条数: ${data ? data.length : 'null'}`);
+            
+            try {
+                const ctx = document.getElementById('palletHourlyChart').getContext('2d');
+                log("获取canvas上下文成功");
+                
+                // 销毁现有的图表实例
+                if (window.palletHourlyChart) {
+                    log("销毁现有图表实例");
+                    window.palletHourlyChart.destroy();
+                }
+                
+                // 检查是否有数据
+                if (!data || !Array.isArray(data) || data.length === 0) {
+                    log("无数据，显示提示信息");
+                    // 如果没有数据，直接在canvas上显示提示信息
+                    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                    ctx.fillStyle = '#666';
+                    ctx.font = '16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(translations[currentLang].no_data || '暂无时段对比数据', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                    return;
+                }
+                
+                log(`处理${data.length}条数据记录`);
+                
+                // 验证数据格式
+                for (let i = 0; i < data.length; i++) {
+                    const item = data[i];
+                    if (!item.hasOwnProperty('time_slot') || !item.hasOwnProperty('total_pieces') || !item.hasOwnProperty('count')) {
+                        throw new Error(`数据格式错误: 第${i}条记录缺少必要字段`);
+                    }
+                }
+                
+                // 计算最大值用于设置y轴范围
+                const maxPieces = Math.max(...data.map(item => item.total_pieces));
+                const maxCount = Math.max(...data.map(item => item.count));
+                log(`最大件数: ${maxPieces}, 最大车次: ${maxCount}`);
+                
+                // 计算适当的y轴最大值和步长
+                const piecesYAxisMax = Math.ceil(maxPieces / 1000) * 1000;
+                const countYAxisMax = Math.ceil(maxCount / 10) * 10;
+                const piecesStepSize = Math.ceil(piecesYAxisMax / 5 / 1000) * 1000;
+                const countStepSize = Math.ceil(countYAxisMax / 5 / 10) * 10;
+                log(`Y轴设置 - 件数: max=${piecesYAxisMax}, step=${piecesStepSize}; 车次: max=${countYAxisMax}, step=${countStepSize}`);
+                
+                // 检测是否为移动设备
+                const isMobile = window.innerWidth < 768;
+                log(`设备类型: ${isMobile ? '移动设备' : '桌面设备'}`);
+                
+                // 创建新图表
+                log("开始创建新图表");
+                window.palletHourlyChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(item => item.time_slot),
+                        datasets: [
+                            {
+                                label: translations[currentLang].pallet_pieces || '托盘件数',
+                                data: data.map(item => item.total_pieces),
+                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: translations[currentLang].pallet_count || '托盘车次',
+                                data: data.map(item => item.count),
+                                backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                                borderColor: 'rgba(153, 102, 255, 1)',
+                                borderWidth: 1,
+                                yAxisID: 'y1'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: isMobile ? 'top' : 'top'
+                            },
+                            title: {
+                                display: true,
+                                text: '托盘件数与车次时段统计'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                min: 0,
+                                max: piecesYAxisMax > 0 ? piecesYAxisMax : undefined,
+                                ticks: {
+                                    stepSize: piecesStepSize > 0 ? piecesStepSize : undefined
+                                },
+                                title: {
+                                    display: true,
+                                    text: translations[currentLang].pallet_pieces || '托盘件数'
+                                }
+                            },
+                            y1: {
+                                beginAtZero: true,
+                                min: 0,
+                                max: countYAxisMax > 0 ? countYAxisMax : undefined,
+                                ticks: {
+                                    stepSize: countStepSize > 0 ? countStepSize : undefined
+                                },
+                                title: {
+                                    display: true,
+                                    text: translations[currentLang].pallet_count || '托盘车次'
+                                },
+                                position: 'right',
+                                grid: {
+                                    drawOnChartArea: false
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: translations[currentLang].time_slot || '时间段'
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                log("图表创建成功");
+            } catch (error) {
+                log(`渲染图表出错: ${error.message}`);
+                console.error('Error rendering pallet chart:', error);
+                
+                showMessage(translations[currentLang].render_error || '渲染托盘时段图表出错: ' + error.message, 'error');
+                
+                // 在canvas上显示错误信息
+                try {
+                    const canvas = document.getElementById('palletHourlyChart');
+                    if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.fillStyle = '#f72585';
+                        ctx.font = '16px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('图表渲染出错: ' + error.message, canvas.width / 2, canvas.height / 2);
+                    }
+                } catch (canvasError) {
+                    console.error('Error displaying error on canvas:', canvasError);
+                }
+            }
+        }
+        
+        // 加载真实数据
+        async function loadRealData() {
+            log("开始加载真实数据");
+            try {
+                const response = await fetch('/api/pallet_hourly');
+                log(`API响应状态: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                log(`获取到${data.length}条真实数据: ${JSON.stringify(data)}`);
+                renderPalletHourlyChart(data);
+            } catch (error) {
+                log(`加载真实数据出错: ${error.message}`);
+                console.error('Error loading real data:', error);
+                showMessage('加载数据出错: ' + error.message, 'error');
+            }
+        }
+        
+        // 加载测试数据
+        function loadTestData() {
+            log("加载测试数据");
+            const testData = [
+                {
+                    "count": 1,
+                    "time_slot": "未指定",
+                    "total_pieces": 4128
+                }
+            ];
+            log(`测试数据: ${JSON.stringify(testData)}`);
+            renderPalletHourlyChart(testData);
+        }
+        
+        // 加载空数据
+        function loadEmptyData() {
+            log("加载空数据");
+            renderPalletHourlyChart([]);
+        }
+        
+        // 清除图表
+        function clearChart() {
+            log("清除图表");
+            if (window.palletHourlyChart) {
+                window.palletHourlyChart.destroy();
+                delete window.palletHourlyChart;
+            }
+            const canvas = document.getElementById('palletHourlyChart');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // 模拟错误
+        function testError() {
+            log("模拟错误");
+            renderPalletHourlyChart([{invalid: "data"}]);
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            log("页面加载完成，初始化测试页面");
+            // 初始加载真实数据
+            loadRealData();
+        });
+    </script>
+</body>
+</html>

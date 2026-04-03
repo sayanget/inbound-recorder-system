@@ -1,0 +1,16 @@
+# =============================================================================
+# 离线/计划任务 / 本地监听同步（非 Web 进程必需）:
+#   scripts/sqlite_to_postgres.py
+#   scripts/nightly_neon_sync.py
+#   scripts/watch_sqlite_sync_neon.py  （本地 SQLite 变更 -> 防抖 -> Neon）
+# 安装: pip install -r requirements-neon-sync.txt
+#
+# 若已安装 requirements-prod.txt，通常已包含 pandas / psycopg2-binary，只需补:
+#   pip install "sqlalchemy>=2.0" watchdog
+# =============================================================================
+
+pandas>=2.0.0,<3
+sqlalchemy>=2.0.0,<3
+psycopg2-binary>=2.9.9,<3
+python-dotenv>=1.0.0
+watchdog>=3.0.0

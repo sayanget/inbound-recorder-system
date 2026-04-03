@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="consumables_title">生产成本管理系统</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="/static/js/nav_component.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--body-bg, #f4f6f9);
+            color: var(--text-color, #333);
+            line-height: 1.6;
+            font-size: var(--font-size-base);
+            -webkit-font-smoothing: antialiased;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+        }
+
+        .container {
+            background-color: var(--card-bg, #fff);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow, 0 4px 6px rgba(0, 0, 0, 0.1));
+            position: relative;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1.5rem 1rem;
+            }
+        }
+
+        h2 {
+            font-size: var(--font-size-xl);
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 2rem;
+            letter-spacing: -0.02em;
+        }
+
+
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 2.5rem;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .nav-btn {
+            padding: 12px 18px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            background-color: var(--table-header-bg, #e9ecef);
+            color: var(--text-color);
+            border: 1px solid var(--border-color, #ddd);
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .nav-btn:hover {
+            background-color: var(--border-color);
+            transform: translateY(-1px);
+        }
+
+        .nav-btn.active {
+            background-color: var(--primary-color, #206bc4);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section h3 {
+            margin-bottom: 15px;
+            border-bottom: 2px solid var(--primary-color, #206bc4);
+            padding-bottom: 10px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 8px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 4px;
+            background-color: var(--input-bg, #fff);
+            color: var(--text-color, #333);
+        }
+
+        button {
+            background-color: var(--primary-color, #206bc4);
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button.btn-secondary {
+            background-color: #6c757d;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg, #fff);
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            position: relative;
+            transition: transform 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card.warning {
+            border-color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.02);
+            box-shadow: 0 4px 6px rgba(220, 53, 69, 0.1);
+        }
+
+        .stat-card h4 {
+            margin-top: 0;
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary-color, #206bc4);
+            margin: 0.5rem 0;
+            letter-spacing: -0.02em;
+        }
+
+        .stat-card.warning .stat-value {
+            color: #dc3545;
+        }
+
+        .stat-footer {
+            font-size: 0.85rem;
+            color: #6c757d;
+            line-height: 1.4;
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-value {
+                font-size: 2.2rem;
+            }
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .alert-error {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Message Container -->
+    <div id="message" class="alert"></div>
+
+    <div id="nav-container"></div>
+    <div class="container">
+        <h2>生产成本管理系统</h2>
+
+        <!-- 当前库存概览 -->
+        <div class="section">
+            <h3>当前库存状态</h3>
+            <div id="stockGrid" class="stats-grid">
+                <div style="text-align:center; grid-column: 1/-1;">加载中...</div>
+            </div>
+            <button onclick="openConfigModal()" style="font-size: 12px; padding: 6px 12px;" class="btn-secondary">⚙️
+                新增/编辑耗材配置</button>
+        </div>
+
+        <!-- 录入进/销流水 -->
+        <div class="section">
+            <h3>记录流水</h3>
+            <div
+                style="padding: 15px; background: var(--card-bg); border-radius: 6px; border: 1px solid var(--border-color);">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>记录日期</label>
+                        <input type="date" id="entryDate">
+                    </div>
+                    <div class="form-group">
+                        <label>耗材类型</label>
+                        <select id="transConsumableId">
+                            <option value="">-- 请选择 --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>流转类型</label>
+                        <select id="transType" onchange="toggleVolumeField()">
+                            <option value="OUT">库存盘点 (OUT)</option>
+                            <option value="IN">采购入库 (IN)</option>
+                            <option value="RENT">租金 (RENT)</option>
+                            <option value="REPAIR">维修 (REPAIR)</option>
+                            <option value="ENERGY">能源消耗 (ENERGY)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label id="qtyLabel">数量</label>
+                        <input type="number" id="transQty" min="0.01" step="0.01" value="1">
+                        <small id="qtyHint"
+                            style="color: #666; font-size: 11px; display: block; margin-top: 4px;"></small>
+                    </div>
+                    <div class="form-group" id="volGroup">
+                        <label>关联仓库货量 (件)</label>
+                        <input type="number" id="transVol" min="1" step="1" placeholder="例如：本次打包对应的发货件数">
+                    </div>
+                </div>
+                <button onclick="submitTransaction()">提交记录</button>
+            </div>
+        </div>
+
+        <!-- 交易流水查询 -->
+        <div class="section">
+            <h3>交易流水查询</h3>
+            <div
+                style="padding: 15px; background: var(--card-bg); border-radius: 6px; border: 1px solid var(--border-color);">
+                <div class="form-row" style="align-items: flex-end;">
+                    <div class="form-group">
+                        <label>开始日期</label>
+                        <input type="date" id="startDate">
+                    </div>
+                    <div class="form-group">
+                        <label>结束日期</label>
+                        <input type="date" id="endDate">
+                    </div>
+                    <div class="form-group" style="flex-direction: row; gap: 10px;">
+                        <button onclick="fetchTransactions()"><i class="fas fa-search"></i> 查询</button>
+                        <button onclick="exportTransactions()" class="btn-secondary"><i class="fas fa-file-export"></i>
+                            导出</button>
+                    </div>
+                </div>
+
+                <div style="overflow-x: auto; margin-top: 15px;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead>
+                            <tr
+                                style="background-color: var(--table-header-bg, #f8f9fa); border-bottom: 2px solid var(--border-color, #dee2e6);">
+                                <th style="padding: 12px; border: 1px solid var(--border-color, #dee2e6);">记录时间</th>
+                                <th style="padding: 12px; border: 1px solid var(--border-color, #dee2e6);">耗材名称</th>
+                                <th style="padding: 12px; border: 1px solid var(--border-color, #dee2e6);">类型</th>
+                                <th style="padding: 12px; border: 1px solid var(--border-color, #dee2e6);">数量 (增减量)</th>
+                                <th style="padding: 12px; border: 1px solid var(--border-color, #dee2e6);">成本</th>
+                                <th style="padding: 12px; border: 1px solid var(--border-color, #dee2e6);">关联货量</th>
+                                <th style="padding: 12px; border: 1px solid var(--border-color, #dee2e6);">操作员</th>
+                                <th style="padding: 12px; border: 1px solid var(--border-color, #dee2e6);">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsBody">
+                            <tr>
+                                <td colspan="8" style="text-align: center; padding: 15px;">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Transaction Modal -->
+        <div id="editTransactionModal" class="modal"
+            style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+            <div class="modal-content"
+                style="background: var(--card-bg); width: 400px; padding: 20px; border-radius: 8px; margin: 10% auto; position: relative;">
+                <span class="close-btn" onclick="closeEditTransactionModal()"
+                    style="position: absolute; right: 20px; top: 15px; cursor: pointer; font-size: 20px;">&times;</span>
+                <h3 style="margin-top: 0;">编辑流水记录</h3>
+
+                <input type="hidden" id="editTransId">
+                <div class="form-group" style="margin-bottom: 15px; display: block;">
+                    <label style="display: block; margin-bottom: 5px;">耗材名称</label>
+                    <input type="text" id="editTransName" readonly style="background-color: #f0f0f0; width: 100%;">
+                </div>
+                <div class="form-group" style="margin-bottom: 15px; display: block;">
+                    <label style="display: block; margin-bottom: 5px;">流水类型</label>
+                    <input type="text" id="editTransType" readonly style="background-color: #f0f0f0; width: 100%;">
+                </div>
+                <div class="form-group" style="margin-bottom: 15px; display: block;">
+                    <label style="display: block; margin-bottom: 5px;">记录日期 <span style="color:red">*</span></label>
+                    <input type="date" id="editTransDate" required style="width: 100%;">
+                </div>
+                <div class="form-group" style="margin-bottom: 15px; display: block;">
+                    <label style="display: block; margin-bottom: 5px;" id="editQtyLabel">数量 (净增减量) <span
+                            style="color:red">*</span></label>
+                    <input type="number" id="editTransQty" min="0.01" step="0.01" required style="width: 100%;">
+                    <small
+                        style="color: #666; font-size: 11px; display: block; margin-top: 4px;">注：如果是库存盘点，此处修改的是<b>消耗量</b>，而不是库存总数！修改后会自动增减库存总数。</small>
+                </div>
+                <div class="form-group" style="margin-bottom: 20px; display: block;">
+                    <label style="display: block; margin-bottom: 5px;">关联仓库货量</label>
+                    <input type="number" id="editTransVol" min="1" step="1" style="width: 100%;">
+                </div>
+
+                <div style="text-align: right; margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button onclick="closeEditTransactionModal()" class="btn-secondary">取消</button>
+                    <button onclick="saveTransactionEdit()">保存修改</button>
+                </div>
+            </div>
+        </div>
+
+        <style>
+            @media (max-width: 768px) {
+                .modal-content {
+                    width: 95% !important;
+                    margin: 20% auto !important;
+                    padding: 1.5rem !important;
+                }
+            }
+        </style>
+
+        <!-- 智能采购预测 -->
+        <div class="section" style="display: none;">
+            <h3>智能采购预测 (Analytics)</h3>
+            <div
+                style="padding: 15px; background: var(--card-bg); border-radius: 6px; border: 1px solid var(--border-color);">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>目标耗材</label>
+                        <select id="analyticsConsumableId">
+                            <option value="">-- 请选择 --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>预测下期吞吐量 (件)</label>
+                        <input type="number" id="targetVolume" min="1" step="1" value="5000">
+                    </div>
+                    <div class="form-group" style="justify-content: flex-end;">
+                        <button onclick="runAnalytics()" style="width: 100%;"><i class="fas fa-calculator"></i>
+                            测算</button>
+                    </div>
+                </div>
+
+                <div id="analyticsResult"
+                    style="display: none; margin-top: 15px; padding: 15px; background: #eef2f5; border-radius: 4px; color: #333;">
+                    <p style="margin:5px 0;"><strong>近期消耗系数:</strong> <span id="resCoef">0</span></p>
+                    <p style="margin:5px 0;"><strong>预测消耗量:</strong> <span id="resDemand"
+                            style="font-weight:bold; color:#f59f00;">0</span></p>
+                    <hr style="border: 0; border-top: 1px solid #ccc; margin: 10px 0;">
+                    <p style="margin:5px 0; font-size: 1.1em;"><strong>建议采购量:</strong> <span id="resPurchase"
+                            style="font-weight:bold; color:#d6336c; font-size: 1.2em;">0</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 耗材配置弹窗 -->
+    <div id="configModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index: 2000; align-items:center; justify-content:center;">
+        <div style="background:var(--card-bg); padding:20px; border-radius:8px; width:400px; max-width:90%;">
+            <h3 style="margin-top:0;">新增/编辑耗材</h3>
+            <input type="hidden" id="confId">
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label>耗材名称</label>
+                <select id="confName">
+                    <option value="">加载中...</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label>单位</label>
+                <input type="text" id="confUnit" placeholder="如：卷">
+            </div>
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label>安全库存</label>
+                <input type="number" id="confSafety" min="0" step="0.1" value="10">
+            </div>
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label>采购提前期 (天)</label>
+                <input type="number" id="confLead" min="0" step="1" value="3">
+            </div>
+            <div class="form-group" style="margin-bottom: 15px;" id="confStockGroup">
+                <label>初始库存</label>
+                <input type="number" id="confStock" min="0" step="0.1" value="0">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn-secondary" onclick="closeConfigModal()">取消</button>
+                <button onclick="saveConsumableConfig()">保存</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        let consumablesList = [];
+        let masterListOptions = [];
+
+        function showMessage(msg, type = 'success') {
+            const el = document.getElementById('message');
+            el.textContent = msg;
+            el.className = 'alert ' + (type === 'success' ? 'alert-success' : 'alert-error');
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 4000);
+        }
+
+        async function fetchConsumablesMasterList() {
+            try {
+                const res = await fetch(`/api/consumables/master_list?t=${new Date().getTime()}`);
+                const json = await res.json();
+                if (json.success) {
+                    masterListOptions = json.data;
+                    const select = document.getElementById('confName');
+                    select.innerHTML = '<option value="">-- 请选择 --</option>';
+                    masterListOptions.forEach(opt => {
+                        const option = document.createElement('option');
+                        option.value = opt.name;
+                        option.textContent = opt.name;
+                        option.dataset.unit = opt.unit || '';
+                        select.appendChild(option);
+                    });
+                    updateSelectDropdowns();
+                }
+            } catch (err) {
+                console.error('Failed to fetch master list:', err);
+            }
+        }
+
+        async function fetchConsumables() {
+            try {
+                const res = await fetch(`/api/consumables?t=${new Date().getTime()}`);
+                const json = await res.json();
+                if (json.success) {
+                    consumablesList = json.data;
+                    renderStockGrid();
+                    updateSelectDropdowns();
+                }
+            } catch (err) {
+                console.error(err);
+                showMessage('获取耗材数据失败', 'error');
+            }
+        }
+
+        function renderStockGrid() {
+            const grid = document.getElementById('stockGrid');
+            grid.innerHTML = '';
+            if (consumablesList.length === 0) {
+                grid.innerHTML = '<div style="text-align:center; grid-column: 1/-1;">暂无耗材数据</div>';
+                return;
+            }
+
+            consumablesList.forEach(item => {
+                const isWarn = item.current_stock <= item.safety_stock;
+                const card = document.createElement('div');
+                card.className = 'stat-card' + (isWarn ? ' warning' : '');
+
+                let warnIcon = isWarn ? '⚠️ ' : '';
+
+                const priceVal = parseFloat(item.price);
+                const hasPrice = !isNaN(priceVal);
+                const unitPriceStr = hasPrice ? `$${priceVal.toFixed(2)}` : '<span style="color:#999;">未配置单价</span>';
+                const totalValueStr = hasPrice ? `$${(priceVal * item.current_stock).toFixed(2)}` : '-';
+                const batchStr = item.batch ? ` | 批次: ${item.batch}` : '';
+
+                card.innerHTML = `
+                    <h4>${warnIcon}${item.name}</h4>
+                    <div class="stat-value">${item.current_stock}</div>
+                    <div class="stat-footer">
+                        <div>单位: ${item.unit}</div>
+                        <div>安全库存: ${item.safety_stock} | 提前期: ${item.lead_time_days}天</div>
+                        <div style="margin-top:5px; padding-top:5px; border-top:1px dashed #ddd;">
+                            单价: ${unitPriceStr}${batchStr}<br>
+                            总价值: <strong style="color:var(--primary-color)">${totalValueStr}</strong>
+                        </div>
+                    </div>
+                    <div style="position:absolute; top:10px; right:10px; cursor:pointer; color:#6c757d;" onclick='editConfig(${JSON.stringify(item).replace(/'/g, "&#39;")})'>
+                        <i class="fas fa-edit"></i>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function updateSelectDropdowns() {
+            const selTrans = document.getElementById('transConsumableId');
+            const selAnal = document.getElementById('analyticsConsumableId');
+
+            const currentTransVal = selTrans.value;
+            const currentAnalVal = selAnal.value;
+
+            selTrans.innerHTML = '<option value="">-- 请选择 --</option>';
+            selAnal.innerHTML = '<option value="">-- 请选择 --</option>';
+
+            masterListOptions.forEach(opt => {
+                const isSelected = currentTransVal === opt.name ? 'selected' : '';
+                selTrans.innerHTML += `<option value="${opt.name}" ${isSelected}>${opt.name}</option>`;
+            });
+
+            consumablesList.forEach(item => {
+                const isSelected = parseInt(currentAnalVal) === item.id ? 'selected' : '';
+                selAnal.innerHTML += `<option value="${item.id}" ${isSelected}>${item.name}</option>`;
+            });
+        }
+
+        function toggleVolumeField() {
+            const type = document.getElementById('transType').value;
+            const volGroup = document.getElementById('volGroup');
+            const qtyLabel = document.getElementById('qtyLabel');
+            const qtyHint = document.getElementById('qtyHint');
+
+            if (type === 'OUT') {
+                volGroup.style.display = 'flex';
+                if (qtyLabel) qtyLabel.innerText = '盘点后实际库存';
+                if (qtyHint) qtyHint.innerText = '系统将自动计算消耗量 = 原库存 - 此库存';
+            } else if (type === 'RENT' || type === 'REPAIR' || type === 'ENERGY') {
+                volGroup.style.display = 'none';
+                if (qtyLabel) qtyLabel.innerText = '金额 ($)';
+                const hintMap = { 'RENT': '记录租金费用，不影响库存数量', 'REPAIR': '记录维修费用，不影响库存数量', 'ENERGY': '记录能源消耗费用，不影响库存数量' };
+                if (qtyHint) qtyHint.innerText = hintMap[type];
+            } else {
+                volGroup.style.display = 'none';
+                if (qtyLabel) qtyLabel.innerText = '入库数量';
+                if (qtyHint) qtyHint.innerText = '';
+            }
+        }
+
+        async function submitTransaction() {
+            const cname = document.getElementById('transConsumableId').value;
+            const type = document.getElementById('transType').value;
+            const qty = parseFloat(document.getElementById('transQty').value);
+            const entryDate = document.getElementById('entryDate').value;
+            const vol = type === 'OUT' ? (document.getElementById('transVol').value ? parseInt(document.getElementById('transVol').value) : null) : null;
+
+            if (!cname || !qty || qty <= 0 || !entryDate) {
+                showMessage('请填写完整日期、耗材和数量信息', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/consumables/transaction', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        consumable_name: cname, type: type, quantity: qty, related_warehouse_volume: vol, entry_date: entryDate
+                    })
+                });
+                const json = await res.json();
+
+                if (json.success) {
+                    if (json.warning) {
+                        showMessage(json.warning, 'error'); // Show warning in red despite success
+                    } else {
+                        showMessage(`记录成功，当前结余: ${json.new_stock}`);
+                    }
+                    // Reset fields
+                    document.getElementById('transQty').value = 1;
+                    if (type === 'OUT') document.getElementById('transVol').value = '';
+                    fetchConsumables(); // Reload state
+                } else {
+                    showMessage(json.error || '记录失败', 'error');
+                }
+            } catch (err) {
+                showMessage('请求失败', 'error');
+            }
+        }
+
+        async function runAnalytics() {
+            const cid = document.getElementById('analyticsConsumableId').value;
+            const targetVol = document.getElementById('targetVolume').value;
+
+            if (!cid || !targetVol || targetVol <= 0) {
+                showMessage('请选择耗材并输入合法的目标货量', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/consumables/analytics?consumable_id=${cid}&target_volume=${targetVol}&t=${new Date().getTime()}`);
+                const json = await res.json();
+                if (json.success) {
+                    const data = json.data;
+                    document.getElementById('analyticsResult').style.display = 'block';
+                    document.getElementById('resCoef').textContent =
+                        data.note ? data.note : `${parseFloat(data.coefficient).toFixed(4)} (每单位货量消耗)`;
+                    document.getElementById('resDemand').textContent = data.predicted_demand;
+                    document.getElementById('resPurchase').textContent = data.suggested_purchase;
+                } else {
+                    showMessage(json.error || '测算失败', 'error');
+                }
+            } catch (err) {
+                showMessage('测算请求失败', 'error');
+            }
+        }
+
+        // ================= Configuration Modal =================
+        function openConfigModal() {
+            document.getElementById('confId').value = '';
+            document.getElementById('confName').value = '';
+            document.getElementById('confUnit').value = '';
+            document.getElementById('confSafety').value = '10';
+            document.getElementById('confLead').value = '3';
+            document.getElementById('confStock').value = '0';
+            document.getElementById('confStockGroup').style.display = 'flex'; // show for new
+            document.getElementById('configModal').style.display = 'flex';
+        }
+
+        function editConfig(item) {
+            document.getElementById('confId').value = item.id;
+            document.getElementById('confName').value = item.name;
+            document.getElementById('confUnit').value = item.unit;
+            document.getElementById('confSafety').value = item.safety_stock;
+            document.getElementById('confLead').value = item.lead_time_days;
+            document.getElementById('confStockGroup').style.display = 'none'; // hide stock field for edits
+            document.getElementById('configModal').style.display = 'flex';
+        }
+
+        function closeConfigModal() {
+            document.getElementById('configModal').style.display = 'none';
+        }
+
+        async function saveConsumableConfig() {
+            const id = document.getElementById('confId').value;
+            const data = {
+                id: id ? parseInt(id) : null,
+                name: document.getElementById('confName').value,
+                unit: document.getElementById('confUnit').value,
+                safety_stock: parseFloat(document.getElementById('confSafety').value),
+                lead_time_days: parseInt(document.getElementById('confLead').value),
+                current_stock: parseFloat(document.getElementById('confStock').value)
+            };
+
+            const res = await fetch('/api/consumables/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const json = await res.json();
+            if (json.success) {
+                showMessage('保存配置成功');
+                closeConfigModal();
+                fetchConsumables();
+            } else {
+                showMessage(json.error || '保存失败', 'error');
+            }
+        }
+
+        async function fetchDailyCorrectedTotal(dateStr) {
+            try {
+                // If the user isn't doing an OUT transaction, we might not strictly "need" to fetch it,
+                // but it's simpler to just fetch and prepopulate it always, so it's ready if they switch.
+                const url = '/api/stats' + (dateStr ? `?date=${encodeURIComponent(dateStr)}&t=${new Date().getTime()}` : `?t=${new Date().getTime()}`);
+                const res = await fetch(url);
+                if (!res.ok) return;
+
+                const data = await res.json();
+                const totalPieces = data.total_pieces || 0;
+                // 与统计页一致：实到件数（/api/stats 已含 0.76 口径）；优先 correctedTotal（成本表）
+                const correctedTotal = Math.round(Number(
+                    data.correctedTotal != null ? data.correctedTotal : totalPieces
+                ));
+
+                // Only auto-fill if the user hasn't typed something else in manually recently,
+                // or just aggressively overwrite when date changes to be safe. We'll overwrite.
+                const transVolInput = document.getElementById('transVol');
+                if (transVolInput) {
+                    transVolInput.value = correctedTotal;
+                }
+            } catch (err) {
+                console.error('Failed to fetch daily stats for volume auto-fill', err);
+            }
+        }
+
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            // Get username for display
+            fetch('/api/check_login').then(r => r.json()).then(data => {
+                if (data.logged_in && data.user && data.user.username) {
+                    document.getElementById('usernameDisplay').textContent = '用户: ' + data.user.username;
+                } else {
+                    document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+                }
+            }).catch(() => {
+                document.getElementById('usernameDisplay').textContent = '用户: 未登录';
+            });
+
+            // Set Default Date
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            const defaultDateStr = `${year}-${month}-${day}`;
+            document.getElementById('entryDate').value = defaultDateStr;
+
+            // Set default date range for history (last 7 days)
+            document.getElementById('endDate').value = defaultDateStr;
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(today.getDate() - 7);
+            const startYear = sevenDaysAgo.getFullYear();
+            const startMonth = String(sevenDaysAgo.getMonth() + 1).padStart(2, '0');
+            const startDay = String(sevenDaysAgo.getDate()).padStart(2, '0');
+            document.getElementById('startDate').value = `${startYear}-${startMonth}-${startDay}`;
+
+            // Add event listener for date change
+            document.getElementById('entryDate').addEventListener('change', (e) => {
+                fetchDailyCorrectedTotal(e.target.value);
+            });
+
+            // Add event listener for consumable name change to auto-fill unit
+            document.getElementById('confName').addEventListener('change', (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                if (selectedOption && selectedOption.dataset.unit) {
+                    document.getElementById('confUnit').value = selectedOption.dataset.unit;
+                }
+            });
+
+            toggleVolumeField(); // Set initial form labels
+            fetchConsumablesMasterList();
+            fetchConsumables();
+            fetchTransactions();
+
+            // Auto-fill volume for today initially
+            fetchDailyCorrectedTotal(defaultDateStr);
+        });
+
+        async function fetchTransactions() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const tbody = document.getElementById('transactionsBody');
+
+            if (!startDate || !endDate) {
+                showMessage('请选择开始和结束日期', 'error');
+                return;
+            }
+
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 15px;">加载中...</td></tr>';
+
+            try {
+                const res = await fetch(`/api/consumables/transactions/list?start_date=${startDate}&end_date=${endDate}&t=${new Date().getTime()}`);
+                const json = await res.json();
+
+                if (json.success) {
+                    tbody.innerHTML = '';
+                    if (json.data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 15px; color: #666;">暂无记录</td></tr>';
+                        return;
+                    }
+
+                    json.data.forEach(record => {
+                        const tr = document.createElement('tr');
+                        tr.style.borderBottom = '1px solid var(--border-color, #dee2e6)';
+
+                        const typeLabelMap = {
+                            'IN': '<span style="color: #28a745; font-weight: bold;">采购入库 (IN)</span>',
+                            'OUT': '<span style="color: #dc3545; font-weight: bold;">库存盘点 (OUT)</span>',
+                            'RENT': '<span style="color: #f59f00; font-weight: bold;">租金 (RENT)</span>',
+                            'REPAIR': '<span style="color: #7950f2; font-weight: bold;">维修 (REPAIR)</span>',
+                            'ENERGY': '<span style="color: #e67700; font-weight: bold;">能源 (ENERGY)</span>'
+                        };
+                        const typeLabel = typeLabelMap[record.type] || record.type;
+
+                        const qtySign = record.type === 'IN' ? '+' : (record.type === 'RENT' || record.type === 'REPAIR') ? '$' : '-';
+                        const qtyColor = record.type === 'IN' ? '#28a745' : record.type === 'RENT' ? '#f59f00' : record.type === 'REPAIR' ? '#7950f2' : '#dc3545';
+
+                        const unitPrice = record.unit_price || 0;
+                        const costValue = Math.abs(record.quantity) * unitPrice;
+                        const costSign = record.type === 'IN' ? '+' : '-';
+                        const costDisplay = unitPrice > 0 ? `${costSign}$${costValue.toFixed(2)}` : '-';
+
+                        tr.innerHTML = `
+                            <td style="padding: 12px;">${record.created_at}</td>
+                            <td style="padding: 12px; font-weight: 500;">${record.consumable_name}</td>
+                            <td style="padding: 12px;">${typeLabel}</td>
+                            <td style="padding: 12px; color: ${qtyColor}; font-weight: bold;">${qtySign}${Math.abs(record.quantity)} ${record.unit}</td>
+                            <td style="padding: 12px; color: ${qtyColor}; font-weight: bold;">${costDisplay}</td>
+                            <td style="padding: 12px;">${record.related_warehouse_volume || '-'}</td>
+                            <td style="padding: 12px;">${record.operator}</td>
+                            <td style="padding: 12px;">
+                                <button onclick="openEditTransactionModal(${record.id}, '${record.consumable_name}', '${record.type}', '${record.created_at.split(' ')[0]}', ${record.quantity}, ${record.related_warehouse_volume || null})" style="padding: 4px 8px; font-size: 11px; margin-right: 4px;">编辑</button>
+                                <button onclick="deleteTransaction(${record.id})" class="btn-secondary" style="background:#dc3545; color:white; border:none; padding: 4px 8px; font-size: 11px;">删除</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: red; padding: 15px;">${json.error}</td></tr>`;
+                    showMessage(json.error || '获取流水失败', 'error');
+                }
+            } catch (err) {
+                console.error('Fetch transaction error', err);
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: red; padding: 15px;">请求失败</td></tr>';
+                showMessage('获取流水失败', 'error');
+            }
+        }
+
+        function openEditTransactionModal(id, name, type, dateStr, qty, vol) {
+            document.getElementById('editTransId').value = id;
+            document.getElementById('editTransName').value = name;
+            document.getElementById('editTransType').value = type === 'IN' ? '采购入库 (IN)' : '库存盘点 (OUT)';
+            document.getElementById('editTransDate').value = dateStr;
+            document.getElementById('editTransQty').value = qty;
+            document.getElementById('editTransVol').value = vol !== null ? vol : '';
+
+            document.getElementById('editTransactionModal').style.display = 'block';
+        }
+
+        function closeEditTransactionModal() {
+            document.getElementById('editTransactionModal').style.display = 'none';
+        }
+
+        async function saveTransactionEdit() {
+            const id = document.getElementById('editTransId').value;
+            const dateStr = document.getElementById('editTransDate').value;
+            const qty = document.getElementById('editTransQty').value;
+            const vol = document.getElementById('editTransVol').value;
+
+            if (!dateStr || !qty || parseFloat(qty) <= 0) {
+                showMessage('请填写正确的日期和数量', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/consumables/transactions/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: parseInt(id),
+                        entry_date: dateStr,
+                        quantity: parseFloat(qty),
+                        related_warehouse_volume: vol ? parseInt(vol) : null
+                    })
+                });
+                const json = await res.json();
+                if (json.success) {
+                    showMessage('修改流水成功');
+                    closeEditTransactionModal();
+                    fetchConsumables();
+                    fetchTransactions();
+                } else {
+                    showMessage(json.error || '修改失败', 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                showMessage('请求异常', 'error');
+            }
+        }
+
+        async function deleteTransaction(id) {
+            if (!confirm('确定要删除此条流水记录吗？这将会自动回退相应的库存数量！此操作不可恢复。')) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/consumables/transactions/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                const json = await res.json();
+                if (json.success) {
+                    showMessage('删除流水并回退库存成功');
+                    fetchConsumables();
+                    fetchTransactions();
+                } else {
+                    showMessage(json.error || '删除失败', 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                showMessage('请求异常', 'error');
+            }
+        }
+
+        function exportTransactions() {
+            const tbody = document.getElementById('transactionsBody');
+            if (tbody.rows.length === 0 || tbody.innerText.includes('暂无记录') || tbody.innerText.includes('加载中')) {
+                showMessage('没有可导出的数据', 'error');
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // Add BOM for Excel UTF-8 display
+            csvContent += "记录时间,耗材名称,类型,数量,单位,成本,关联货量,操作员\r\n";
+
+            for (let i = 0; i < tbody.rows.length; i++) {
+                const row = tbody.rows[i];
+                if (row.cells.length < 7) continue;
+
+                const date = row.cells[0].innerText;
+                const name = row.cells[1].innerText;
+                const rawTypeStr = row.cells[2].innerText;
+                const type = rawTypeStr.includes('ENERGY') ? 'ENERGY' : rawTypeStr.includes('RENT') ? 'RENT' : rawTypeStr.includes('REPAIR') ? 'REPAIR' : rawTypeStr.includes('IN') ? 'IN' : 'OUT';
+
+                // Extract quantity and unit
+                const rawQtyStr = row.cells[3].innerText.trim();
+                const qtyMatch = rawQtyStr.match(/^[+\-$]?([\d.]+)\s*(.*)$/);
+                const quantity = qtyMatch ? qtyMatch[1] : '';
+                const unit = qtyMatch ? qtyMatch[2] : '';
+
+                const cost = row.cells[4].innerText.trim();
+                const vol = row.cells[5].innerText === '-' ? '' : row.cells[5].innerText;
+                const operator = row.cells[6].innerText;
+
+                csvContent += `${date},${name},${type},${quantity},${unit},${cost},${vol},${operator}\r\n`;
+            }
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            link.setAttribute("download", `生产成本流水_${startDate}_至_${endDate}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+    </script>
+
+    <script>
+        // 隐藏/显示成本核算按钮
+        document.addEventListener('DOMContentLoaded', function () {
+            fetch('/api/user_permissions')
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.cost_accounting && data.cost_accounting.can_view) {
+                        document.querySelectorAll('.cost-accounting-only').forEach(function (el) {
+                            el.style.display = 'inline-block';
+                        });
+                    }
+                })
+                .catch(err => console.error('获取成本核算权限失败:', err));
+        });
+    </script>
+</body>
+
+</html>

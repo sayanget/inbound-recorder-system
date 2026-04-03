@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成本核算系统</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/nav_component.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        /* ===== 统一表格风格 ===== */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        table thead tr {
+            background-color: var(--table-header-bg, #e9ecef);
+        }
+
+        table th {
+            text-align: center;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color, #ddd);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        table td {
+            text-align: center;
+            padding: 6px 10px;
+            border: 1px solid var(--border-color, #ddd);
+            white-space: nowrap;
+        }
+
+        table tbody tr:nth-child(even) {
+            background-color: var(--table-stripe, rgba(0, 0, 0, 0.025));
+        }
+
+        table tbody tr:hover {
+            background-color: var(--table-hover, rgba(32, 107, 196, 0.06));
+        }
+
+        /* 数字列右对齐 */
+        table td.num,
+        table th.num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 文本列左对齐 */
+        table td.txt,
+        table th.txt {
+            text-align: left;
+        }
+
+        /* ========================= */
+
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--body-bg);
+            color: var(--text-color);
+            line-height: 1.6;
+            font-size: var(--font-size-base);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1.5rem 1rem;
+            }
+        }
+
+        h2 {
+            font-size: var(--font-size-xl);
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 2rem;
+            letter-spacing: -0.02em;
+        }
+
+
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+        }
+
+        .nav-btn {
+            padding: 12px 18px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            background-color: var(--table-header-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .nav-btn:hover {
+            background-color: var(--border-color);
+            transform: translateY(-1px);
+        }
+
+        .nav-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        /* Tabs styling */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tabs {
+            margin-bottom: 25px;
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            overflow-x: auto;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            font-size: 16px;
+            padding: 10px 15px;
+            cursor: pointer;
+            color: var(--text-color);
+            font-weight: bold;
+            border-radius: 4px;
+        }
+
+        .tab-btn.active {
+            background-color: var(--primary-color, #206bc4);
+            color: white;
+        }
+
+        /* Layouts */
+        .three-column {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .three-column {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .column-card {
+            background: var(--card-bg, #f8f9fa);
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        /* ── Dark mode page-specific overrides ── */
+        [data-theme="dark"] .column-card table thead th {
+            background: #2a4a7f;
+        }
+
+        [data-theme="dark"] .column-card table tbody tr:nth-child(odd) {
+            background: #1e293b;
+        }
+
+        [data-theme="dark"] .column-card table tbody tr:nth-child(even) {
+            background: #263345;
+        }
+
+        [data-theme="dark"] .column-card table tfoot tr {
+            background: #1e3a5f;
+        }
+
+        [data-theme="dark"] .container {
+            background: var(--card-bg);
+        }
+
+        [data-theme="dark"] .chart-container {
+            background: var(--card-bg);
+            border-color: var(--border-color);
+        }
+
+        [data-theme="dark"] .column-card h3 {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        [data-theme="dark"] .tab-btn.active {
+            background: rgba(96, 165, 250, 0.15);
+            color: var(--primary-color);
+        }
+
+        /* ─────────────────────────────────────── */
+
+        .column-card h3 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--primary-color, #206bc4);
+            padding-bottom: 10px;
+            text-align: center;
+            color: var(--primary-color, #206bc4);
+            font-size: 14px;
+        }
+
+        /* ─── 预览卡片表格增强 ─── */
+        .column-card table thead th {
+            background: var(--primary-color, #206bc4);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.2);
+            font-size: 12px;
+            padding: 7px 8px;
+        }
+
+        .column-card table tbody tr:nth-child(odd) {
+            background: #fff;
+        }
+
+        .column-card table tbody tr:nth-child(even) {
+            background: rgba(32, 107, 196, 0.06);
+        }
+
+        .column-card table tbody tr:hover {
+            background: rgba(32, 107, 196, 0.14) !important;
+        }
+
+        .column-card table tbody td {
+            font-size: 12px;
+            padding: 6px 8px;
+            border-color: #e8ecf0;
+        }
+
+        .column-card table tfoot tr {
+            background: #eef3fb;
+            font-weight: bold;
+            border-top: 2px solid var(--primary-color, #206bc4);
+        }
+
+        .column-card table tfoot td {
+            font-size: 13px;
+            padding: 7px 8px;
+        }
+
+        /* ─────────────────────── */
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 4px;
+            background-color: var(--input-bg, #fff);
+            color: var(--text-color, #333);
+        }
+
+        .form-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            margin-bottom: 20px;
+        }
+
+        .form-row .form-group {
+            margin-bottom: 0;
+            flex: 1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border-color, #ddd);
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: var(--table-header-bg, #e9ecef);
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .action-btn {
+            background-color: var(--primary-color, #206bc4);
+            color: #fff;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+        }
+
+        .chart-container {
+            height: 400px;
+            width: 100%;
+            margin-bottom: 30px;
+        }
+
+        .summary-row {
+            font-weight: bold;
+            background-color: #e9ecef !important;
+        }
+
+        input[type="number"].inline-input {
+            width: 80px;
+            padding: 4px;
+            text-align: right;
+        }
+
+        #message {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .calc-result-box {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 5px solid #206bc4;
+            margin-top: 20px;
+        }
+
+        .calc-result-box h3 {
+            margin-top: 0;
+            color: #206bc4;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="message"></div>
+
+    <div class="container">
+        <div id="nav-container"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('dashboard')"><i class="fas fa-chart-line"></i>
+                成本看板</button>
+            <button class="tab-btn" onclick="switchTab('calculator')"><i class="fas fa-plus-circle"></i>
+                数据采集与核算</button>
+            <button class="tab-btn" onclick="switchTab('report')"><i class="fas fa-file-invoice-dollar"></i>
+                核算报表明细</button>
+        </div>
+
+        <!-- 标签页1：成本看板 -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div class="chart-container" id="dailyVolumeChart" style="height:350px;"></div>
+                <div class="chart-container" id="volumeConsumableChart" style="height:350px;"></div>
+            </div>
+            <div class="chart-container" id="unitCostImpactChart" style="height:350px; margin-bottom: 20px;"></div>
+            <div class="chart-container" id="costTrendChart" style="height:420px; margin-bottom: 20px;"></div>
+            <div class="chart-container" id="weeklyLaborChart" style="height:420px; margin-bottom: 20px;"></div>
+            <div class="three-column" style="margin-top: 20px;">
+                <div class="chart-container" id="costBreakdownChart" style="height: 300px;"></div>
+                <div class="chart-container" id="directionCostChart" style="height: 300px; grid-column: span 2;"></div>
+            </div>
+        </div>
+
+        <!-- 标签页2：数据采集与核算 -->
+        <div id="tab-calculator" class="tab-content">
+            <!-- ─── 操作面板 ─── -->
+            <div
+                style="display:flex; gap:16px; align-items:stretch; background:var(--card-bg,#fff); border:1px solid var(--border-color,#ddd); border-radius:10px; padding:16px; margin-bottom:16px; flex-wrap:wrap;">
+
+                <!-- Step 1: 外部数据同步配置 -->
+                <div
+                    style="flex:3; min-width:600px; display:flex; flex-direction:column; gap:12px; padding-right:16px; border-right:2px solid var(--border-color,#e9ecef);">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <span
+                            style="background:var(--primary-color,#206bc4); color:#fff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0;">1</span>
+                        <span style="font-weight:700; font-size:15px; color:var(--text-color);">外部数据同步配置</span>
+                    </div>
+
+                    <!-- 子配置：周期选择 -->
+                    <div
+                        style="background: rgba(32,107,196,0.03); padding: 12px; border-radius: 8px; border: 1px dashed rgba(32,107,196,0.2);">
+                        <div
+                            style="font-size: 11px; font-weight: 600; color: #206bc4; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            周期设置 (Accounting Period)</div>
+                        <div style="font-size:10px; color:#888; margin-bottom:8px;">默认打开页为<strong>今天所在自然周</strong>（周一至周日，可改）</div>
+                        <div style="display:flex; gap:16px;">
+                            <div class="form-group" style="margin:0; flex:1;">
+                                <label style="font-size:11px; color:#666;">核算周期(开始)</label>
+                                <input type="date" id="calcStartDate" style="width:100%;">
+                            </div>
+                            <div class="form-group" style="margin:0; flex:1;">
+                                <label style="font-size:11px; color:#666;">核算周期(截止)</label>
+                                <input type="date" id="calcEndDate" style="width:100%;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 子配置：链路同步 -->
+                    <div style="display: flex; gap: 16px;">
+                        <!-- 左侧：物流 -->
+                        <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+                            <div
+                                style="font-size: 11px; font-weight: 600; color: var(--primary-color); margin-bottom: 2px;">
+                                物流数据链路 (Transport)</div>
+                            <input type="text" id="feishuSheetLink"
+                                value="https://acnjh1thgeif.feishu.cn/sheets/SvBYstNvyhvh8ptbq29cMc7Ln8c?sheet=24dfdb"
+                                style="width:100%; font-size:11px; padding: 6px;" placeholder="粘贴飞书物流表格链接">
+                            <button class="action-btn" onclick="syncFeishuData()" id="btnSyncFeishu"
+                                style="background:var(--primary-color); color:#fff; padding:6px 14px; font-size:12px; border:none; border-radius:4px;">
+                                <i class="fas fa-truck-loading"></i> 同步物流货量 (仅限 CNO.H)
+                            </button>
+                            <span style="font-size: 10px; color: #666; margin-top: -4px;">* 同步飞书中的票数与箱数</span>
+                        </div>
+                        <!-- 右侧：人工 -->
+                        <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+                            <div style="font-size: 11px; font-weight: 600; color: #e67e22; margin-bottom: 2px;">生产人工链路
+                                (Labor)</div>
+                            <input type="text" id="laborSheetLink"
+                                value="https://acnjh1thgeif.feishu.cn/sheets/FYWYsrb70ho1xEtq9unceocwnSf?sheet=zSD4Ye"
+                                style="width:100%; font-size:11px; padding: 6px;" placeholder="粘贴飞书人工表格链接">
+                            <button class="action-btn" onclick="syncLaborData()" id="btnSyncLabor"
+                                style="background:#e67e22; color:#fff; padding:6px 14px; font-size:12px; border:none; border-radius:4px;">
+                                <i class="fas fa-users-cog"></i> 同步人工
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 子配置：卡车约车同步 (NEW) -->
+                    <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; background: rgba(46, 204, 113, 0.05); padding: 10px; border-radius: 8px; border: 1px dashed rgba(46, 204, 113, 0.3);">
+                        <div style="font-size: 11px; font-weight: 600; color: #27ae60; margin-bottom: 2px;">
+                            卡车约车数据同步 (Truck Booking - Google Sheet)</div>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <input type="text" id="truckSheetLink" 
+                                value="https://docs.google.com/spreadsheets/d/1sEjOb1Yy7ap_B6LpHNHxIgF21vzDCvD1uSqSBIY9oTA/edit#gid=0"
+                                style="flex: 1; min-width: 200px; font-size: 11px; padding: 6px;" placeholder="粘贴Google约车表格链接">
+                            <button class="action-btn" onclick="syncTruckData()" id="btnSyncTruck"
+                                style="background:#27ae60; color:#fff; padding:6px 14px; font-size:12px; border:none; border-radius:4px; min-width: 100px;">
+                                <i class="fas fa-sync"></i> 同步约车
+                            </button>
+                        </div>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #c0392b; cursor: pointer; user-select: none;">
+                            <input type="checkbox" id="truckClearBeforeSync" style="margin: 0;" checked>
+                            方式一：先清空 outbound / truck_bookings，再按表格全量导入（不可撤销）
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Step 2: 核算 -->
+                <div
+                    style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:0 20px; gap:10px; min-width:160px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span
+                            style="background:var(--primary-color,#206bc4); color:#fff; border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0;">2</span>
+                        <span style="font-weight:600; font-size:13px; color:var(--text-color);">开始核算</span>
+                    </div>
+                    <button class="action-btn" onclick="fetchPreviewData()"
+                        style="padding:12px 28px; font-size:15px; font-weight:700; letter-spacing:0.5px; white-space:nowrap; box-shadow:0 4px 12px rgba(32,107,196,0.3);">
+                        <i class="fas fa-calculator"></i> 提取核算数据
+                    </button>
+                    <span style="font-size:11px; color:var(--text-muted,#888); text-align:center;">同步完成后点击</span>
+                </div>
+
+            </div>
+
+
+            <!-- 飞书同步数据展示区 -->
+            <div id="feishuDataArea" style="display: none; margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="margin: 0;"><i class="fas fa-table"></i> 飞书运单数据源 (<span id="feishuDateRange"></span>)
+                    </h3>
+                    <button class="action-btn" onclick="exportFeishuData()" style="padding: 5px 15px;"><i
+                            class="fas fa-file-export"></i> 导出源数据</button>
+                </div>
+                <!-- 内部使用固定高度并可滚动的容器 -->
+                <div
+                    style="max-height: 400px; overflow-y: auto; overflow-x: auto; border: 1px solid #ddd; border-radius: 4px;">
+                    <table id="feishuTable" style="margin: 0; min-width: 100%; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #ccc;">
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 飞书人工同步数据展示区 (NEW) -->
+            <div id="laborDataArea" style="display: none; margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="margin: 0;"><i class="fas fa-id-card-alt"></i> 飞书生产人工源数据 (<span
+                            id="laborDateRange"></span>)
+                    </h3>
+                    <button class="action-btn" onclick="exportLaborData()"
+                        style="padding: 5px 15px; background-color: #e67e22;"><i class="fas fa-file-export"></i>
+                        导出人工费用</button>
+                </div>
+                <!-- 内部使用固定高度并可滚动的容器 -->
+                <div
+                    style="max-height: 400px; overflow-y: auto; overflow-x: auto; border: 1px solid #ddd; border-radius: 4px;">
+                    <table id="laborSourceTable" style="margin: 0; min-width: 100%; border-collapse: collapse;">
+                        <thead
+                            style="position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #ccc; background: #f8f9fa;">
+                            <tr>
+                                <th>记录日期</th>
+                                <th>代理商/公司</th>
+                                <th class="num">计时费(USD)</th>
+                                <th class="num">计件费(USD)</th>
+                                <th class="num">总费用(USD)</th>
+                                <th class="num">人头数</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="previewArea" style="display: none; margin-top: 30px;">
+                <h3 style="margin-bottom: 15px;"><i class="fas fa-file-invoice-dollar"></i> 成本核算预览</h3>
+                <div class="three-column">
+                    <!-- 左列：运输成本 -->
+                    <div class="column-card">
+                        <h3><i class="fas fa-truck"></i> 1. 运输数据</h3>
+                        <table id="transportTable">
+                            <thead>
+                                <tr>
+                                    <th>流向</th>
+                                    <th>预估票数</th>
+                                    <th>总运费($)</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                            <tfoot>
+                                <tr class="summary-row">
+                                    <td>合计</td>
+                                    <td id="totalPieces">0</td>
+                                    <td id="totalTransportCost">$0.00</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- 中列：人工成本 -->
+                    <div class="column-card">
+                        <h3><i class="fas fa-users"></i> 2. 生产人工</h3>
+                        <table id="laborTable">
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>计费额($)</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                            <tfoot>
+                                <tr class="summary-row">
+                                    <td>合计</td>
+                                    <td id="totalLaborCost">$0.00</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- 右列：耗材与杂项 -->
+                    <div class="column-card">
+                        <h3><i class="fas fa-box-open"></i> 3. 耗材明细</h3>
+                        <table id="consumableTable" style="margin-bottom: 15px;">
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>消耗量 (名称)</th>
+                                    <th>总金额($)</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                            <tfoot>
+                                <tr class="summary-row">
+                                    <td colspan="2">合计</td>
+                                    <td id="totalConsumableCost">$0.00</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                    </div>
+                </div>
+
+                <div class="calc-result-box">
+                    <h3>核算结果汇总预览</h3>
+                    <table id="finalCalcTable">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>总票数</th>
+                                <th>运输费用</th>
+                                <th>人工费用(计时)</th>
+                                <th>人工费用(计件)</th>
+                                <th>耗材费用</th>
+                                <th>总成本($)</th>
+                                <th>综合单票成本($/票)</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                        <tfoot>
+                            <tr class="summary-row">
+                                <td>总计</td>
+                                <td id="grandTotalPieces">0</td>
+                                <td id="grandTransportCost">$0.00</td>
+                                <td id="grandTimeLaborCost">$0.00</td>
+                                <td id="grandPieceLaborCost">$0.00</td>
+                                <td id="grandConsumableCost">$0.00</td>
+                                <td id="grandTotalCost">$0.00</td>
+                                <td id="grandAvgUnitCost">-</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <div style="margin-top: 20px; text-align: right;">
+                        <button class="action-btn btn-success" onclick="submitCostAccounting()"><i
+                                class="fas fa-check-circle"></i> 确认并保存核算结果</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 标签页3：核算报表明细 -->
+        <div id="tab-report" class="tab-content">
+            <!-- 时间区间汇总筛选 -->
+            <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px;">
+                <div style="display:flex; gap:15px; align-items:flex-end; flex-wrap:wrap;">
+                    <div>
+                        <label style="font-size:13px; color:#555; font-weight:600;">汇总起始日期:</label>
+                        <input type="date" id="summaryStartDate"
+                            style="padding:6px 10px; border:1px solid #dee2e6; border-radius:5px;">
+                    </div>
+                    <div>
+                        <label style="font-size:13px; color:#555; font-weight:600;">汇总截止日期:</label>
+                        <input type="date" id="summaryEndDate"
+                            style="padding:6px 10px; border:1px solid #dee2e6; border-radius:5px;">
+                    </div>
+                    <button class="action-btn btn-search" onclick="loadHistoryWithSummary()" style="padding:6px 16px;">
+                        <i class="fas fa-filter"></i> 筛选并汇总
+                    </button>
+                    <button class="action-btn btn-reset" onclick="clearSummaryFilter()"
+                        style="padding:6px 16px; background:#6c757d; color:white;">
+                        <i class="fas fa-times"></i> 清除筛选
+                    </button>
+                    <button class="action-btn btn-success" onclick="exportReport()"
+                        style="padding:6px 16px; margin-left:auto;">
+                        <i class="fas fa-file-excel"></i> 导出报表
+                    </button>
+                </div>
+
+                <!-- 汇总区 (包含区间汇总卡片和分流向日均表格) -->
+                <div id="summaryCards"
+                    style="display:none; margin-top:15px; background:white; padding:15px; border-radius:12px; border:1px solid #eee;">
+                    <div style="font-size:13px; color:#555; margin-bottom:8px; font-weight:600;">
+                        <i class="fas fa-chart-bar"></i> 区间汇总 (<span id="summaryRangeLabel"></span>)
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px;">
+                        <div
+                            style="background:white; border-radius:8px; padding:12px; border-left:3px solid #4361ee; box-shadow:0 2px 4px rgba(0,0,0,0.06);">
+                            <div style="font-size:11px; color:#888;">总票数</div>
+                            <div id="sumPieces" style="font-size:20px; font-weight:700; color:#4361ee;">-</div>
+                        </div>
+                        <div
+                            style="background:white; border-radius:8px; padding:12px; border-left:3px solid #17a2b8; box-shadow:0 2px 4px rgba(0,0,0,0.06);">
+                            <div style="font-size:11px; color:#888;">运输成本</div>
+                            <div id="sumTransport" style="font-size:20px; font-weight:700; color:#17a2b8;">-</div>
+                        </div>
+                        <div
+                            style="background:white; border-radius:8px; padding:12px; border-left:3px solid #6f42c1; box-shadow:0 2px 4px rgba(0,0,0,0.06);">
+                            <div style="font-size:11px; color:#888;">计时人工</div>
+                            <div id="sumTimeLabor" style="font-size:20px; font-weight:700; color:#6f42c1;">-</div>
+                        </div>
+                        <div
+                            style="background:white; border-radius:8px; padding:12px; border-left:3px solid #fd7e14; box-shadow:0 2px 4px rgba(0,0,0,0.06);">
+                            <div style="font-size:11px; color:#888;">计件人工</div>
+                            <div id="sumPieceLabor" style="font-size:20px; font-weight:700; color:#fd7e14;">-</div>
+                        </div>
+                        <div
+                            style="background:white; border-radius:8px; padding:12px; border-left:3px solid #28a745; box-shadow:0 2px 4px rgba(0,0,0,0.06);">
+                            <div style="font-size:11px; color:#888;">耗材成本</div>
+                            <div id="sumConsumable" style="font-size:20px; font-weight:700; color:#28a745;">-</div>
+                        </div>
+                        <div
+                            style="background:white; border-radius:8px; padding:12px; border-left:3px solid #dc3545; box-shadow:0 2px 4px rgba(0,0,0,0.06);">
+                            <div style="font-size:11px; color:#888;">总结算成本</div>
+                            <div id="sumTotal" style="font-size:20px; font-weight:700; color:#dc3545;">-</div>
+                        </div>
+                        <div
+                            style="background:white; border-radius:8px; padding:12px; border-left:3px solid #206bc4; box-shadow:0 2px 4px rgba(0,0,0,0.06);">
+                            <div style="font-size:11px; color:#888;">平均单票成本</div>
+                            <div id="sumUnitCost" style="font-size:20px; font-weight:700; color:#206bc4;">-</div>
+                        </div>
+                    </div>
+
+                    <!-- 新增：分流向平均值展现 -->
+                    <div style="margin-top:20px;">
+                        <div style="font-size:13px; color:#555; margin-bottom:8px; font-weight:600;">
+                            <i class="fas fa-list-ol"></i> 各流向日均汇总 (基于核算天数)
+                        </div>
+                        <table id="summaryByDirTable">
+                            <thead>
+                                <tr>
+                                    <th>流向</th>
+                                    <th class="text-right">核算天数</th>
+                                    <th class="text-right">日均票数</th>
+                                    <th class="text-right">日均运输成本</th>
+                                    <th class="text-right">日均计时人工</th>
+                                    <th class="text-right">日均计件人工</th>
+                                    <th class="text-right">日均耗材成本</th>
+                                    <th class="text-right" style="color:#dc3545;">日均总成本</th>
+                                    <th class="text-right" style="color:#206bc4;">平均单票成本</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th>核算日期</th>
+                        <th>流向</th>
+                        <th class="text-right">总票数</th>
+                        <th class="text-right">运输成本</th>
+                        <th class="text-right">计时成本</th>
+                        <th class="text-right">计件成本</th>
+                        <th class="text-right">耗材成本</th>
+                        <th class="text-right" style="color:#dc3545;">总结算成本</th>
+                        <th class="text-right" style="color:#206bc4;">单票成本</th>
+                        <th>记录创建时间</th>
+                        <th class="text-center">操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+    </div>
+
+    </div>
+
+    <script>
+        // ===== 全局数字格式化工具 =====
+        // 千分符整数: fmtNum(12345) → "12,345"
+        function fmtNum(v, decimals = 0) {
+            const n = parseFloat(v);
+            if (isNaN(n)) return v ?? '-';
+            return n.toLocaleString('en-US', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+        // 美元格式: fmtDollar(1234.5) → "$1,234.50"
+        function fmtDollar(v) {
+            const n = parseFloat(v);
+            if (isNaN(n)) return '-';
+            return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        // 给 <td> 加 num class 的快捷
+        function numTd(v, fmt) { return `<td class="num">${fmt ? fmt(v) : fmtNum(v)}</td>`; }
+        function txtTd(v) { return `<td class="txt">${v ?? ''}</td>`; }
+        // ================================
+
+        // Store preview data
+        let currentPreviewData = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initUserData();
+            initDates();
+            loadHistory();
+            initCharts();
+
+            // 自动加载本地备用的飞书数据
+            fetchFeishuData();
+
+            // 日期改变时自动刷新飞书数据表
+            document.getElementById('calcStartDate').addEventListener('change', fetchFeishuData);
+            document.getElementById('calcEndDate').addEventListener('change', fetchFeishuData);
+        });
+
+        function showMessage(msg, type = 'success') {
+            const el = document.getElementById('message');
+            el.textContent = msg;
+            el.className = `alert alert-${type}`;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
+        }
+
+        function initUserData() {
+            fetch('/api/check_login')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.logged_in && data.user) {
+                        document.getElementById('usernameDisplay').textContent = `欢迎, ${data.user.username}`;
+                        if (data.user.role === 'admin' || data.user.role === 'boss') {
+                            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'inline-block');
+                        }
+                    } else {
+                        window.location.href = '/login';
+                    }
+                })
+                .catch(err => console.error('Error fetching user data:', err));
+        }
+
+        function formatDate(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function initDates() {
+            // 默认：当前日期所在自然周（周一至周日，本地日历）
+            const today = new Date();
+            const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const dow = d.getDay(); // 0=周日 … 6=周六
+            const daysSinceMonday = (dow + 6) % 7; // 周一=0 … 周日=6
+            const start = new Date(d);
+            start.setDate(d.getDate() - daysSinceMonday);
+            const end = new Date(start);
+            end.setDate(start.getDate() + 6);
+            document.getElementById('calcStartDate').value = formatDate(start);
+            document.getElementById('calcEndDate').value = formatDate(end);
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+
+            if (tabId === 'dashboard') initCharts();
+            if (tabId === 'report') loadHistory();
+        }
+
+        // ======================= 数据提取与核算逻辑 =======================
+        function syncFeishuData() {
+            const btn = document.getElementById('btnSyncFeishu');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+            btn.disabled = true;
+
+            const link = (document.getElementById('feishuSheetLink')?.value || '').trim();
+            fetch('/api/admin/feishu/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ link: link })
+            })
+                .then(r => r.json())
+                .then(res => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    if (res.success) {
+                        showMessage(res.message || '飞书数据同步成功', 'success');
+                        // 同步后无论日期是否填写都强制刷新全量预览
+                        fetchFeishuData(true);
+                    } else {
+                        showMessage(res.error || '同步失败', 'error');
+                    }
+                }).catch(err => {
+                    console.error('Feishu sync error:', err);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    showMessage('网络错误，无法同步', 'error');
+                });
+        }
+
+        function syncLaborData() {
+            const btn = document.getElementById('btnSyncLabor');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+            btn.disabled = true;
+
+            const link = (document.getElementById('laborSheetLink')?.value || '').trim();
+            fetch('/api/admin/labor/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ link: link })
+            })
+                .then(r => r.json())
+                .then(res => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    if (res.success) {
+                        showMessage(res.message || '人工数据同步成功', 'success');
+                        fetchLaborData(true);
+                    } else {
+                        showMessage(res.error || '人工数据同步失败', 'error');
+                    }
+                }).catch(err => {
+                    console.error('Labor sync error:', err);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    showMessage('网络错误，无法同步', 'error');
+                });
+        }
+
+        function syncTruckData() {
+            const url = document.getElementById('truckSheetLink').value.trim();
+            if (!url) {
+                if (typeof showMessage === 'function') showMessage('请输入卡车约车表格链接', 'error');
+                else alert('请输入卡车约车表格链接');
+                return;
+            }
+
+            const clearBefore = document.getElementById('truckClearBeforeSync')?.checked;
+            if (clearBefore) {
+                const ok = confirm('将先删除数据库中全部 outbound_records 与 truck_bookings，再按当前表格全量导入。\n\n此操作不可撤销，确定继续？');
+                if (!ok) return;
+            }
+
+            const btn = document.getElementById('btnSyncTruck');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+            btn.disabled = true;
+
+            fetch('/api/admin/truck_bookings/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ url: url, clear_before_sync: !!clearBefore })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    const n = data.count != null ? data.count : (data.synced_count != null ? data.synced_count : '?');
+                    const extra = data.clear_before_sync ? '（已清空后全量导入）' : '';
+                    if (typeof showMessage === 'function') showMessage('同步成功！表格行约 ' + n + ' 条' + extra, 'success');
+                    else alert('同步成功！表格行约 ' + n + ' 条' + extra);
+                } else {
+                    if (typeof showMessage === 'function') showMessage('同步失败: ' + (data.error || '未知错误'), 'error');
+                    else alert('同步失败: ' + (data.error || '未知错误'));
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                if (typeof showMessage === 'function') showMessage('同步请求出错，请检查网络或后端日志', 'error');
+                else alert('同步请求出错，请检查网络或后端日志');
+            })
+            .finally(() => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            });
+        }
+
+        let currentFeishuData = [];
+        let currentLaborData = []; // NEW
+
+        function fetchFeishuData(allData = false) {
+            const startStr = document.getElementById('calcStartDate').value;
+            const endStr = document.getElementById('calcEndDate').value;
+
+            // Build URL: if allData or no dates, load everything
+            let url = '/api/admin/feishu/data';
+            if (!allData && startStr && endStr) {
+                url += `?start_date=${startStr}&end_date=${endStr}`;
+            }
+
+            fetch(url)
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        let data = res.data || [];
+                        currentFeishuData = data;
+                        // Use actual date range from data if inputs are empty
+                        const s = startStr || (data.length ? data[data.length - 1].record_date : '-');
+                        const e = endStr || (data.length ? data[0].record_date : '-');
+                        renderFeishuTable(data, s, e);
+                    }
+                }).catch(err => console.error('Error fetching feishu data:', err));
+        }
+
+        function renderFeishuTable(data, start, end) {
+            document.getElementById('feishuDateRange').textContent = `${start} 至 ${end}`;
+            document.getElementById('feishuDataArea').style.display = 'block';
+
+            const table = document.getElementById('feishuTable');
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+
+            if (data.length === 0) {
+                thead.innerHTML = '<tr><th>查无数据</th></tr>';
+                tbody.innerHTML = '<tr><td class="text-center" style="color:#999; padding: 20px;">查无数据，可尝试先同步飞书数据</td></tr>';
+                return;
+            }
+
+            // 获取所有独特的目的地并排序
+            const destinations = [...new Set(data.map(d => d.destination))].sort();
+
+            // 按日期分组数据
+            const dataByDate = {};
+            data.forEach(row => {
+                if (!dataByDate[row.record_date]) {
+                    dataByDate[row.record_date] = {};
+                }
+                dataByDate[row.record_date][row.destination] = {
+                    boxes: row.boxes_count || 0,
+                    tickets: row.tickets_count || 0
+                };
+            });
+
+            let theadHtml = `
+                <tr>
+                    <th rowspan="2" style="vertical-align:middle;">发车日期</th>
+                    ${destinations.map(d => `<th colspan="2">${d}</th>`).join('')}
+                    <th colspan="2" style="color:#206bc4;">汇总</th>
+                </tr>
+                <tr>
+                    ${destinations.map(() => `
+                        <th class="num" style="font-weight:normal;color:#666;">箱数</th>
+                        <th class="num" style="font-weight:normal;color:#666;">票数</th>
+                    `).join('')}
+                    <th class="num" style="color:#206bc4;">总箱数</th>
+                    <th class="num" style="color:#206bc4;">总票数</th>
+                </tr>
+            `;
+            thead.innerHTML = theadHtml;
+
+            // 构造表内容
+            const dates = Object.keys(dataByDate).sort((a, b) => b.localeCompare(a)); // 倒序排列日期
+            let tbodyHtml = '';
+
+            dates.forEach(date => {
+                let dailyTotalBoxes = 0;
+                let dailyTotalTickets = 0;
+
+                tbodyHtml += `<tr><td><strong>${date}</strong></td>`;
+
+                destinations.forEach(dest => {
+                    const cellData = dataByDate[date][dest];
+                    if (cellData) {
+                        dailyTotalBoxes += cellData.boxes;
+                        dailyTotalTickets += cellData.tickets;
+                        tbodyHtml += `
+                            <td class="num">${cellData.boxes > 0 ? fmtNum(cellData.boxes) : '-'}</td>
+                            <td class="num" style="color:#206bc4;">${cellData.tickets > 0 ? fmtNum(cellData.tickets) : '-'}</td>
+                        `;
+                    } else {
+                        tbodyHtml += `
+                            <td class="num" style="color:#ccc;">-</td>
+                            <td class="num" style="color:#ccc;">-</td>
+                        `;
+                    }
+                });
+
+                tbodyHtml += `
+                    <td class="num"><strong>${fmtNum(dailyTotalBoxes)}</strong></td>
+                    <td class="num" style="color:#206bc4;"><strong>${fmtNum(dailyTotalTickets)}</strong></td>
+                </tr>`;
+            });
+
+            tbody.innerHTML = tbodyHtml;
+        }
+
+        function exportFeishuData() {
+            if (!currentFeishuData || currentFeishuData.length === 0) {
+                showMessage('没有可导出的飞书源数据', 'error');
+                return;
+            }
+            let csv = '\uFEFF'; // BOM
+            csv += '发车日期,目的地,装车箱数-合并,装车总票数-合并,装载率,箱数装载率\n';
+            currentFeishuData.forEach(row => {
+                csv += `${row.record_date},${row.destination},${row.boxes_count},${row.tickets_count},${row.volume_load_rate || ''},${row.box_load_rate || ''}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `feishu_transport_data_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function fetchLaborData(allData = false) {
+            const startStr = document.getElementById('calcStartDate').value;
+            const endStr = document.getElementById('calcEndDate').value;
+
+            let url = '/api/admin/labor/data';
+            if (!allData && startStr && endStr) {
+                url += `?start_date=${startStr}&end_date=${endStr}`;
+            }
+
+            fetch(url)
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        let data = res.data || [];
+                        currentLaborData = data;
+                        const s = startStr || (data.length ? data[data.length - 1].Record_Date : '-');
+                        const e = endStr || (data.length ? data[0].Record_Date : '-');
+                        renderLaborTable(data, s, e);
+                    }
+                }).catch(err => console.error('Error fetching labor data:', err));
+        }
+
+        function renderLaborTable(data, start, end) {
+            document.getElementById('laborDateRange').textContent = `${start} 至 ${end}`;
+            document.getElementById('laborDataArea').style.display = 'block';
+
+            const tbody = document.querySelector('#laborSourceTable tbody');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="color:#999; padding: 20px;">查无数据，可尝试先同步人工费用数据</td></tr>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(row => {
+                const total = (row.Hourly_Cost_USD || 0) + (row.Piece_Cost_USD || 0);
+                const isTotalRow = row.Agency_Name === '【当日总计】';
+                html += `<tr style="${isTotalRow ? 'background:#f0f7ff; font-weight:bold;' : ''}">
+                    <td>${row.Record_Date}</td>
+                    <td>${row.Agency_Name}</td>
+                    <td class="num">${fmtDollar(row.Hourly_Cost_USD)}</td>
+                    <td class="num">${fmtDollar(row.Piece_Cost_USD)}</td>
+                    <td class="num" style="color:#206bc4;">${fmtDollar(total)}</td>
+                    <td class="num">${row.Headcount || 0}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function exportLaborData() {
+            if (!currentLaborData || currentLaborData.length === 0) {
+                showMessage('没有可导出的生产人工源数据', 'error');
+                return;
+            }
+            let csv = '\uFEFF'; // BOM
+            csv += '日期,代理商/公司,计时费用(USD),计件费用(USD),总费用(USD),人头数\n';
+            currentLaborData.forEach(row => {
+                const total = (row.Hourly_Cost_USD || 0) + (row.Piece_Cost_USD || 0);
+                csv += `${row.Record_Date},${row.Agency_Name},${row.Hourly_Cost_USD},${row.Piece_Cost_USD},${total},${row.Headcount || 0}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `labor_cost_data_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function fetchPreviewData() {
+            fetchFeishuData(); // 刷新物流源数据
+            fetchLaborData();  // 刷新人工源数据 (NEW)
+
+            const startStr = document.getElementById('calcStartDate').value;
+            const endStr = document.getElementById('calcEndDate').value;
+
+            if (!startStr || !endStr) { showMessage('请选择完整日期范围', 'error'); return; }
+
+            fetch(`/api/admin/cost_accounting/preview?start_date=${startStr}&end_date=${endStr}`)
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.success) { showMessage(res.error, 'error'); return; }
+                    currentPreviewData = res.data;
+                    renderPreview();
+                    document.getElementById('previewArea').style.display = 'block';
+                }).catch(err => {
+                    console.error(err);
+                    showMessage('网络错误', 'error');
+                });
+        }
+
+        function renderPreview() {
+            const d = currentPreviewData;
+            const dirs = d.directions;
+
+            let htmlTrans = '', totPieces = 0, totTrans = 0;
+            let htmlLabor = '', totLabor = 0;
+            let htmlCons = '', totCons = 0;
+
+            dirs.forEach(dir => {
+                const pieces = d.pieces[dir] || 0;
+                const trCost = d.transport[dir] ? d.transport[dir].cost : 0;
+
+                // Transport table (remains directional)
+                htmlTrans += `<tr><td>${dir}</td><td class="text-right">${pieces}</td><td class="text-right">$${trCost.toFixed(2)}</td></tr>`;
+                totPieces += pieces;
+                totTrans += trCost;
+            });
+
+            // Labor table (Daily)
+            const laborDailyKeys = Object.keys(d.labor_daily || {}).sort((a, b) => b.localeCompare(a));
+            if (laborDailyKeys.length === 0) {
+                htmlLabor = `<tr><td colspan="2" class="text-center" style="color:#999;">暂无数据</td></tr>`;
+            } else {
+                laborDailyKeys.forEach(date => {
+                    let dailySubtotal = 0;
+
+                    d.labor_daily[date].forEach(item => {
+                        dailySubtotal += (item.subtotal || 0);
+                    });
+
+                    htmlLabor += `<tr>
+                        <td>${date}</td>
+                        <td class="text-right">$${dailySubtotal.toFixed(2)}</td>
+                    </tr>`;
+                    totLabor += dailySubtotal;
+                });
+            }
+
+            // Consumable table (Daily)
+            const consumableDailyKeys = Object.keys(d.consumables_daily || {}).sort((a, b) => b.localeCompare(a));
+            if (consumableDailyKeys.length === 0) {
+                htmlCons = `<tr><td colspan="3" class="text-center" style="color:#999;">无耗材分摊</td></tr>`;
+            } else {
+                consumableDailyKeys.forEach(date => {
+                    const dailyItems = d.consumables_daily[date];
+                    dailyItems.forEach(c => {
+                        htmlCons += `<tr><td>${date}</td><td class="text-right">${c.total_qty.toFixed(2)} (${c.name})</td><td class="text-right">$${c.total_amount.toFixed(2)}</td></tr>`;
+                        totCons += c.total_amount;
+                    });
+                });
+            }
+
+            // Assign table bodies
+            document.querySelector('#transportTable tbody').innerHTML = htmlTrans;
+            document.getElementById('totalPieces').textContent = totPieces;
+            document.getElementById('totalTransportCost').textContent = `$${totTrans.toFixed(2)}`;
+
+            document.querySelector('#laborTable tbody').innerHTML = htmlLabor;
+            document.getElementById('totalLaborCost').textContent = `$${totLabor.toFixed(2)}`;
+
+            document.querySelector('#consumableTable tbody').innerHTML = htmlCons;
+            document.getElementById('totalConsumableCost').textContent = `$${totCons.toFixed(2)}`;
+
+            updateFinalCalc();
+        }
+
+        function updateFinalCalc() {
+            if (!currentPreviewData) return;
+            const d = currentPreviewData;
+            let html = '';
+
+            let gP = 0, gT = 0, gL = 0, gC = 0, gTotal = 0;
+            window.gTimeLabor = 0;
+            window.gPieceLabor = 0;
+            window.gP_complete = 0;
+            window.gTotal_complete = 0;
+
+            const datesMatch = new Set([
+                ...Object.keys(d.pieces_daily || {}),
+                ...Object.keys(d.transport_daily || {}),
+                ...Object.keys(d.labor_daily || {}),
+                ...Object.keys(d.consumables_daily || {})
+            ]);
+
+            const dates = Array.from(datesMatch).sort((a, b) => b.localeCompare(a));
+
+            dates.forEach(date => {
+                const pieces = (d.pieces_daily && d.pieces_daily[date]) || 0;
+                const trCost = (d.transport_daily && d.transport_daily[date]) || 0;
+
+                const labList = (d.labor_daily && d.labor_daily[date]) || [];
+                const lCost = labList.reduce((sum, item) => sum + item.subtotal, 0);
+                const lTimeCost = labList.filter(i => i.is_hourly).reduce((sum, item) => sum + item.subtotal, 0);
+                const lPieceCost = labList.filter(i => !i.is_hourly).reduce((sum, item) => sum + item.subtotal, 0);
+
+                const conList = (d.consumables_daily && d.consumables_daily[date]) || [];
+                const cCost = conList.reduce((sum, item) => sum + item.total_amount, 0);
+
+                const total = trCost + lCost + cCost;
+                const unit = pieces > 0 ? (total / pieces) : 0;
+
+                const isComplete = pieces > 0 && trCost > 0 && lCost > 0 && cCost > 0;
+                const unitDisp = isComplete ? `$${unit.toFixed(2)}` : '<span style="color:#e67e22;font-size:0.85em;">参数待补全</span>';
+
+                gP += pieces; gT += trCost; gL += lCost; gC += cCost; gTotal += total;
+                if (isComplete) {
+                    window.gP_complete = (window.gP_complete || 0) + pieces;
+                    window.gTotal_complete = (window.gTotal_complete || 0) + total;
+                }
+                
+                window.gTimeLabor = (window.gTimeLabor || 0) + lTimeCost;
+                window.gPieceLabor = (window.gPieceLabor || 0) + lPieceCost;
+
+                html += `<tr>
+                    <td><b>${date}</b></td>
+                    <td class="text-right">${pieces}</td>
+                    <td class="text-right">$${trCost.toFixed(2)}</td>
+                    <td class="text-right">$${lTimeCost.toFixed(2)}</td>
+                    <td class="text-right">$${lPieceCost.toFixed(2)}</td>
+                    <td class="text-right">$${cCost.toFixed(2)}</td>
+                    <td class="text-right"><b>$${total.toFixed(2)}</b></td>
+                    <td class="text-right"><b style="color:#206bc4;">${unitDisp}</b></td>
+                </tr>`;
+            });
+
+            document.querySelector('#finalCalcTable tbody').innerHTML = html;
+            document.getElementById('grandTotalPieces').textContent = gP;
+            document.getElementById('grandTransportCost').textContent = `$${gT.toFixed(2)}`;
+            document.getElementById('grandTimeLaborCost').textContent = `$${(window.gTimeLabor || 0).toFixed(2)}`;
+            document.getElementById('grandPieceLaborCost').textContent = `$${(window.gPieceLabor || 0).toFixed(2)}`;
+            document.getElementById('grandConsumableCost').textContent = `$${gC.toFixed(2)}`;
+            document.getElementById('grandTotalCost').textContent = `$${gTotal.toFixed(2)}`;
+            const isGComplete = gP > 0 && gT > 0 && (window.gTimeLabor + window.gPieceLabor) > 0 && gC > 0;
+            const gAvgDisp = (window.gP_complete > 0) ? `$${(window.gTotal_complete / window.gP_complete).toFixed(2)}` : (isGComplete ? `$${(gTotal / gP).toFixed(2)}` : '<span style="color:#e67e22;font-size:0.9em;">参数待补全</span>');
+            document.getElementById('grandAvgUnitCost').innerHTML = gAvgDisp;
+        }
+
+        function submitCostAccounting() {
+            if (!currentPreviewData || !confirm('确定要将这些按天拆分的核算结果保存到系统中吗？保存后可用于更精准的分析。')) return;
+
+            const startStr = document.getElementById('calcStartDate').value;
+            const endStr = document.getElementById('calcEndDate').value;
+            const records = [];
+
+            const d = currentPreviewData;
+            // [REFINEMENT] Unified date selection: combine dates from all sources to ensure no gaps
+            const dateSet = new Set([
+                ...Object.keys(d.pieces_daily || {}),
+                ...Object.keys(d.transport_daily || {}),
+                ...Object.keys(d.labor_daily || {}),
+                ...Object.keys(d.consumables_daily || {})
+            ]);
+            const dateList = Array.from(dateSet).sort();
+
+            dateList.forEach(date => {
+                const dayPiecesMap = (d.pieces_detailed && d.pieces_detailed[date]) || {};
+                const dayTransportMap = (d.transport_detailed && d.transport_detailed[date]) || {};
+                
+                const dayTotalPieces = d.pieces_daily[date] || 0;
+                
+                // Get daily labor and consumables to prorate
+                const dayLaborItems = (d.labor_daily && d.labor_daily[date]) || [];
+                const dayTimeLabor = dayLaborItems.filter(i => i.is_hourly).reduce((s, i) => s + (i.subtotal || 0), 0);
+                const dayPieceLabor = dayLaborItems.filter(i => !i.is_hourly).reduce((s, i) => s + (i.subtotal || 0), 0);
+                const dayTotalLabor = dayTimeLabor + dayPieceLabor;
+
+                const dayConsumableItems = (d.consumables_daily && d.consumables_daily[date]) || [];
+                const dayTotalConsumable = dayConsumableItems.reduce((s, i) => s + (i.total_amount || 0), 0);
+
+                // For each direction on this specific day
+                d.directions.forEach(dir => {
+                    const pieces = dayPiecesMap[dir] || 0;
+                    const trCost = dayTransportMap[dir] || 0;
+
+                    // Only skip if there's absolutely no data for this direction on this day
+                    if (pieces === 0 && trCost === 0 && dayTotalLabor === 0 && dayTotalConsumable === 0) return;
+
+                    // Prorate daily labor/consumables by the direction's piece share FOR THIS DAY
+                    // If total pieces is 0 (e.g., Sunday), split equally across all directions
+                    const dayShare = dayTotalPieces > 0 ? (pieces / dayTotalPieces) : (1 / (d.directions.length || 1));
+                    const lCost = dayTotalLabor * dayShare;
+                    const tLabCost = dayTimeLabor * dayShare;
+                    const pLabCost = dayPieceLabor * dayShare;
+                    const cCost = dayTotalConsumable * dayShare;
+                    
+                    const total = trCost + lCost + cCost;
+
+                    records.push({
+                        period_start: date,
+                        period_end: date,
+                        direction: dir,
+                        total_pieces: pieces,
+                        transport_cost: trCost,
+                        labor_cost: lCost,
+                        time_labor_cost: tLabCost,
+                        piece_labor_cost: pLabCost,
+                        consumable_cost: cCost,
+                        other_cost: 0,
+                        total_cost: total,
+                        unit_cost: pieces > 0 ? (total / pieces) : 0
+                    });
+                });
+            });
+
+            if (records.length === 0) {
+                showMessage('该区间内无有效核算数据', 'error');
+                return;
+            }
+
+            const payload = {
+                period_start: startStr,
+                period_end: endStr,
+                records: records
+            };
+
+            fetch('/api/admin/cost_accounting/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(res => {
+                if (res.success) {
+                    showMessage('核算结果保存成功');
+                    loadHistory();
+                    initCharts();
+                    switchTab('report');
+                } else {
+                    showMessage(res.error || '保存失败', 'error');
+                }
+            });
+        }
+
+        // ======================= 历史报表加载 =======================
+        function loadHistory(startDate, endDate) {
+            let url = '/api/admin/cost_accounting/history';
+            const params = [];
+            if (startDate) params.push(`start_date=${startDate}`);
+            if (endDate) params.push(`end_date=${endDate}`);
+            if (params.length) url += '?' + params.join('&');
+
+            fetch(url)
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.success) return;
+                    let html = '';
+                    const dirMap = {};
+                    const grand = { pieces: 0, transport: 0, time_labor: 0, piece_labor: 0, consumable: 0, total: 0, dates: new Set() };
+                    const grand_complete = { pieces: 0, total: 0 };
+
+                    res.data.forEach(d => {
+                        const hasLabor = (d.total_time_labor_cost || 0) + (d.total_piece_labor_cost || 0) > 0;
+                        const isAllComplete = d.total_pieces > 0 && d.total_transport_cost > 0 && hasLabor && d.total_consumable_cost > 0;
+                        const unitDisp = isAllComplete ? fmtDollar(d.unit_cost) : '<span style="color:#e67e22;font-size:0.85em;">参数待补全</span>';
+
+                        if (isAllComplete) {
+                            grand_complete.pieces += d.total_pieces;
+                            grand_complete.total += d.total_cost;
+                        }
+
+                        html += `<tr>
+                            <td class="txt">${d.period_end}</td>
+                            <td class="txt">${d.direction}</td>
+                            <td class="num">${fmtNum(d.total_pieces)}</td>
+                            <td class="num">${fmtDollar(d.total_transport_cost)}</td>
+                            <td class="num">${fmtDollar(d.total_time_labor_cost || 0)}</td>
+                            <td class="num">${fmtDollar(d.total_piece_labor_cost || 0)}</td>
+                            <td class="num">${fmtDollar(d.total_consumable_cost)}</td>
+                            <td class="num" style="color:#dc3545;font-weight:bold;">${fmtDollar(d.total_cost)}</td>
+                            <td class="num" style="color:#206bc4;font-weight:bold;">${unitDisp}</td>
+                            <td class="txt">${d.created_at}</td>
+                            <td>
+                                <button class="btn btn-sm btn-danger" onclick="deleteCostRecord(${d.id})">删除</button>
+                            </td>
+                        </tr>`;
+
+                        // Grand Total aggregation
+                        grand.pieces += d.total_pieces;
+                        grand.transport += d.total_transport_cost;
+                        grand.time_labor += (d.total_time_labor_cost || 0);
+                        grand.piece_labor += (d.total_piece_labor_cost || 0);
+                        grand.consumable += d.total_consumable_cost;
+                        grand.total += d.total_cost;
+                        grand.dates.add(d.period_end);
+
+                        // Direction Distribution aggregation
+                        if (!dirMap[d.direction]) {
+                            dirMap[d.direction] = { days: 0, pieces: 0, transport: 0, time_labor: 0, piece_labor: 0, consumable: 0, total: 0, pieces_comp: 0, total_comp: 0 };
+                        }
+                        dirMap[d.direction].days += 1;
+                        dirMap[d.direction].pieces += d.total_pieces;
+                        dirMap[d.direction].transport += d.total_transport_cost;
+                        dirMap[d.direction].time_labor += (d.total_time_labor_cost || 0);
+                        dirMap[d.direction].piece_labor += (d.total_piece_labor_cost || 0);
+                        dirMap[d.direction].consumable += d.total_consumable_cost;
+                        dirMap[d.direction].total += d.total_cost;
+                        
+                        if (isAllComplete) {
+                            dirMap[d.direction].pieces_comp += d.total_pieces;
+                            dirMap[d.direction].total_comp += d.total_cost;
+                        }
+                    });
+                    document.querySelector('#historyTable tbody').innerHTML = html || '<tr><td colspan="11" class="text-center" style="color:#999; padding:20px;">暂无数据</td></tr>';
+
+                    if (res.data.length > 0) {
+                        // Update Grand Summary Cards
+                        const sortedDates = Array.from(grand.dates).sort();
+                        document.getElementById('summaryRangeLabel').textContent = startDate && endDate ? `${startDate} 至 ${endDate}` : `全部记录 (${sortedDates[0]} 至 ${sortedDates[sortedDates.length - 1]})`;
+                        document.getElementById('sumPieces').textContent = fmtNum(grand.pieces);
+                        document.getElementById('sumTransport').textContent = fmtDollar(grand.transport);
+                        document.getElementById('sumTimeLabor').textContent = fmtDollar(grand.time_labor);
+                        document.getElementById('sumPieceLabor').textContent = fmtDollar(grand.piece_labor);
+                        document.getElementById('sumConsumable').textContent = fmtDollar(grand.consumable);
+                        document.getElementById('sumTotal').textContent = fmtDollar(grand.total);
+                        const isSumComplete = grand_complete.pieces > 0;
+                        const sumUnitDisp = isSumComplete ? fmtDollar(grand_complete.total / grand_complete.pieces) : '<span style="color:#e67e22;font-size:0.9em;">参数待补全</span>';
+                        document.getElementById('sumUnitCost').innerHTML = sumUnitDisp;
+
+                        // Render Directional Averages table
+                        let dirHtml = '';
+                        for (const [dir, stats] of Object.entries(dirMap).sort((a, b) => a[0].localeCompare(b[0]))) {
+                            const days = stats.days;
+                            const isComplete = stats.pieces_comp > 0;
+                            const avgUnit = isComplete ? (stats.total_comp / stats.pieces_comp) : 0;
+                            const unitDisp = isComplete ? fmtDollar(avgUnit) : '<span style="color:#e67e22;font-size:0.85em;">参数待补全</span>';
+                            dirHtml += `<tr>
+                                <td class="txt">${dir}</td>
+                                <td class="num">${days}</td>
+                                <td class="num">${fmtNum(stats.pieces / days, 1)}</td>
+                                <td class="num">${fmtDollar(stats.transport / days)}</td>
+                                <td class="num">${fmtDollar(stats.time_labor / days)}</td>
+                                <td class="num">${fmtDollar(stats.piece_labor / days)}</td>
+                                <td class="num">${fmtDollar(stats.consumable / days)}</td>
+                                <td class="num" style="color:#dc3545;font-weight:bold;">${fmtDollar(stats.total / days)}</td>
+                                <td class="num" style="color:#206bc4;font-weight:bold;">${unitDisp}</td>
+                            </tr>`;
+                        }
+                        const summaryDirTable = document.querySelector('#summaryByDirTable tbody');
+                        if (summaryDirTable) summaryDirTable.innerHTML = dirHtml;
+                        document.getElementById('summaryCards').style.display = 'block';
+                    } else {
+                        document.getElementById('summaryCards').style.display = 'none';
+                    }
+                });
+        }
+
+        function loadHistoryWithSummary() {
+            const startDate = document.getElementById('summaryStartDate').value;
+            const endDate = document.getElementById('summaryEndDate').value;
+            if (!startDate || !endDate) {
+                showMessage('请同时选择起始和截止日期', 'error');
+                return;
+            }
+            loadHistory(startDate, endDate);
+        }
+
+        function clearSummaryFilter() {
+            document.getElementById('summaryStartDate').value = '';
+            document.getElementById('summaryEndDate').value = '';
+            document.getElementById('summaryCards').style.display = 'none';
+            loadHistory();
+        }
+
+        function deleteCostRecord(id) {
+            if (!confirm('确定要删除这条核算记录吗？此操作不可恢复。')) return;
+            fetch('/api/admin/cost_accounting/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id })
+            }).then(r => r.json()).then(res => {
+                if (res.success) {
+                    showMessage('删除成功');
+                    loadHistory();
+                    initCharts();
+                } else {
+                    showMessage(res.error || '删除失败', 'error');
+                }
+            });
+        }
+
+
+        function exportReport() {
+            // Check if there is data
+            const tbody = document.querySelector('#historyTable tbody');
+            if (tbody.children.length === 0) {
+                showMessage('暂无数据可导出', 'error');
+                return;
+            }
+
+            let csv = '\uFEFF'; // BOM
+            const headers = Array.from(document.querySelectorAll('#historyTable th'))
+                .filter(th => th.textContent.trim() !== '操作')
+                .map(th => `"${th.textContent}"`);
+            csv += headers.join(',') + '\n';
+
+            const rows = document.querySelectorAll('#historyTable tbody tr');
+            rows.forEach(row => {
+                const tds = Array.from(row.querySelectorAll('td'));
+                tds.pop(); // Remove the last '操作' column
+                const cols = tds.map(td => `"${td.textContent}"`);
+                csv += cols.join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `cost_accounting_report_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // ======================= 图表渲染 =======================
+        let costTrendChart = null;
+        let pChart = null;
+        let dirChart = null;
+        let volumeChart = null;
+        let corrChart = null;
+        let impactChart = null;
+        let weeklyLaborChart = null;
+        function initCharts() {
+            fetch('/api/admin/cost_accounting/history')
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.success) return;
+                    const data = res.data || [];
+
+                    // 1. Line Chart: Unit Cost Trend over time by direction (Aggregated by ISO Week)
+                    const weeklyTrends = {}; // { weekLabel: { dir: { pieces: 0, cost: 0 } } }
+                    const allDirs = new Set();
+
+                    // Helper for ISO Week: Monday to Sunday
+                    function getWeekRange(dateStr) {
+                        const d = new Date(dateStr + 'T12:00:00'); // Use mid-day to avoid TZ shifts
+                        const day = d.getDay(); // 0 (Sun) to 6 (Sat)
+                        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                        const monday = new Date(d.setDate(diff));
+                        const weekNum = Math.ceil((((monday - new Date(monday.getFullYear(), 0, 1)) / 86400000) + 1) / 7);
+                        const mm = String(monday.getMonth() + 1).padStart(2, '0');
+                        const dd = String(monday.getDate()).padStart(2, '0');
+                        return {
+                            monday: monday,
+                            label: `W${weekNum} (${mm}/${dd})`
+                        };
+                    }
+
+                    if (data.length > 0) {
+                        data.forEach(d => {
+                            const wr = getWeekRange(d.period_end || d.period_start);
+                            const label = wr.label;
+                            const dr = d.direction;
+                            
+                            allDirs.add(dr);
+                            if (!weeklyTrends[label]) {
+                                weeklyTrends[label] = { _monday: wr.monday };
+                            }
+                            if (!weeklyTrends[label][dr]) {
+                                weeklyTrends[label][dr] = { pieces: 0, cost: 0 };
+                            }
+                            
+                            weeklyTrends[label][dr].pieces += (d.total_pieces || 0);
+                            weeklyTrends[label][dr].cost += (d.total_cost || 0);
+                        });
+                    }
+
+                    const labels = Object.keys(weeklyTrends).sort((a, b) => {
+                        return weeklyTrends[a]._monday - weeklyTrends[b]._monday;
+                    });
+                    const dirs = Array.from(allDirs).sort();
+                    
+                    const lineSeries = dirs.map(dir => ({
+                        name: dir,
+                        type: 'line',
+                        data: labels.map(lbl => {
+                            const entry = weeklyTrends[lbl][dir];
+                            if (entry && entry.pieces > 0) {
+                                return parseFloat((entry.cost / entry.pieces).toFixed(2));
+                            }
+                            return null;
+                        }),
+                        smooth: true,
+                        connectNulls: true, // Use true for weekly viewing to bridge gaps
+                        symbol: 'circle',
+                        symbolSize: 6,
+                        lineStyle: { width: 2 }
+                    }));
+
+                    if (!costTrendChart) costTrendChart = echarts.init(document.getElementById('costTrendChart'));
+                    costTrendChart.setOption({
+                        title: { text: '各流向单票成本历史趋势 ($/件)', left: 'center', textStyle: { fontSize: 14 } },
+                        tooltip: {
+                            trigger: 'axis',
+                            formatter: params => {
+                                let s = `<b>${params[0].axisValue}</b><br/>`;
+                                params.forEach(p => {
+                                    if (p.value != null)
+                                        s += `${p.marker}${p.seriesName}: <b>$${p.value.toFixed(2)}</b><br/>`;
+                                });
+                                return s;
+                            }
+                        },
+                        legend: { data: dirs, bottom: 0, type: 'scroll' },
+                        grid: { left: 60, right: 20, top: 50, bottom: 80 },
+                        dataZoom: [
+                            { type: 'slider', bottom: 30, height: 18, start: 0, end: 100 },
+                            { type: 'inside' }
+                        ],
+                        xAxis: { type: 'category', data: labels, axisLabel: { rotate: 30, fontSize: 11 } },
+                        yAxis: { type: 'value', name: '单位: $', axisLabel: { formatter: v => '$' + v.toFixed(2) } },
+                        series: lineSeries
+                    });
+
+                    // 2. Pie Chart: Overall cost breakdown (sum of latest period)
+                    let latestBatchRecords = [];
+                    let latestRangeStr = '暂无数据';
+                    
+                    if (data.length > 0) {
+                        // Group by created_at to find the most recent "batch" save
+                        const batches = {};
+                        data.forEach(d => {
+                            if (!batches[d.created_at]) batches[d.created_at] = [];
+                            batches[d.created_at].push(d);
+                        });
+                        const sortedBatchTimes = Object.keys(batches).sort().reverse();
+                        const latestTime = sortedBatchTimes[0];
+                        latestBatchRecords = batches[latestTime];
+
+                        // Calculate date range for display
+                        const pStarts = latestBatchRecords.map(r => r.period_start);
+                        const pEnds = latestBatchRecords.map(r => r.period_end);
+                        const minStart = pStarts.sort()[0];
+                        const maxEnd = pEnds.sort().reverse()[0];
+                        latestRangeStr = (minStart === maxEnd) ? minStart : `${minStart} 至 ${maxEnd}`;
+                    }
+
+                    let sumT = 0, sumL = 0, sumC = 0, sumE = 0;
+                    latestBatchRecords.forEach(d => {
+                        sumT += d.total_transport_cost;
+                        sumL += d.total_labor_cost;
+                        sumC += d.total_consumable_cost;
+                        sumE += d.total_other_cost;
+                    });
+
+                    const pieData = [
+                        { value: parseFloat(sumT.toFixed(2)), name: '运输成本' },
+                        { value: parseFloat(sumL.toFixed(2)), name: '人工成本' },
+                        { value: parseFloat(sumC.toFixed(2)), name: '耗材及配置' }
+                    ];
+
+                    if (!pChart) pChart = echarts.init(document.getElementById('costBreakdownChart'));
+                    pChart.setOption({
+                        title: { text: `最近核算周期成本构成 (${latestRangeStr})`, left: 'center', textStyle: { fontSize: 14 } },
+                        tooltip: { trigger: 'item', formatter: '{b}: ${c} ({d}%)' },
+                        legend: { bottom: 0 },
+                        series: [{ type: 'pie', radius: '50%', data: pieData, emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.5)' } } }]
+                    });
+
+                    // 3. Bar Chart: Total cost by direction from latest period batch
+                    const dirTotals = {}; // { direction: total_cost }
+                    latestBatchRecords.forEach(d => {
+                        dirTotals[d.direction] = (dirTotals[d.direction] || 0) + d.total_cost;
+                    });
+                    
+                    const dirNames = Object.keys(dirTotals).sort();
+                    const dirCosts = dirNames.map(name => parseFloat(dirTotals[name].toFixed(2)));
+
+                    if (!dirChart) dirChart = echarts.init(document.getElementById('directionCostChart'));
+                    dirChart.setOption({
+                        title: { text: `最近周期各流向总核算成本 (${latestRangeStr})`, left: 'center', textStyle: { fontSize: 14 } },
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: dirNames },
+                        yAxis: { type: 'value', name: '总成本 ($)' },
+                        series: [{
+                            data: dirCosts,
+                            type: 'bar',
+                            itemStyle: { color: '#5470c6' },
+                            label: { show: true, position: 'top', formatter: '${c}' }
+                        }]
+                    });
+
+                    // 4. Line Chart: Total Daily Volume Trend
+                    const dailyVolume = {}; // { date: total_pieces }
+                    data.forEach(d => {
+                        const date = d.period_end;
+                        dailyVolume[date] = (dailyVolume[date] || 0) + d.total_pieces;
+                    });
+                    const volDates = Object.keys(dailyVolume).sort();
+                    const volData = volDates.map(dt => dailyVolume[dt]);
+
+                    if (!volumeChart) volumeChart = echarts.init(document.getElementById('dailyVolumeChart'));
+                    volumeChart.setOption({
+                        title: { text: '每日总货量趋势 (件)', left: 'center', textStyle: { fontSize: 14 } },
+                        tooltip: { trigger: 'axis', formatter: '{b}: <b>{c} 件</b>' },
+                        grid: { left: 60, right: 20, top: 40, bottom: 40 },
+                        xAxis: { type: 'category', data: volDates },
+                        yAxis: { type: 'value', name: '总票数' },
+                        series: [{
+                            data: volData,
+                            type: 'line',
+                            smooth: true,
+                            areaStyle: {
+                                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                    { offset: 0, color: 'rgba(67, 97, 238, 0.3)' },
+                                    { offset: 1, color: 'rgba(67, 97, 238, 0)' }
+                                ])
+                            },
+                            lineStyle: { color: '#4361ee', width: 3 },
+                            itemStyle: { color: '#4361ee' }
+                        }]
+                    });
+
+                    // 5. Dual Axis Chart: Volume vs Consumable Correlation + Anomaly Detection
+                    const dailyConsumable = {}; // { date: total_consumable_cost }
+                    data.forEach(d => {
+                        const date = d.period_end;
+                        dailyConsumable[date] = (dailyConsumable[date] || 0) + d.total_consumable_cost;
+                    });
+
+                    const corrDates = volDates; // Use same dates
+                    const volSeriesData = volData;
+                    const consSeriesData = corrDates.map(dt => dailyConsumable[dt] || 0);
+
+                    // Calculate average cost per ticket for the "Reasonable Zone"
+                    const allPieces = volSeriesData.reduce((a, b) => a + b, 0);
+                    const allConsumables = consSeriesData.reduce((a, b) => a + b, 0);
+                    const avgCostPerTicket = allPieces > 0 ? (allConsumables / allPieces) : 0;
+
+                    // Define reasonable zone: avg ± 15%
+                    const upperThresholdRatio = 0.15;
+                    const markings = []; // Detect anomalies
+                    corrDates.forEach((dt, idx) => {
+                        const p = volSeriesData[idx];
+                        const c = consSeriesData[idx];
+                        const actualRatio = p > 0 ? (c / p) : 0;
+                        if (actualRatio > avgCostPerTicket * (1 + upperThresholdRatio)) {
+                            markings.push({
+                                value: '异常偏高',
+                                xAxis: idx,
+                                yAxis: c,
+                                itemStyle: { color: '#dc3545' }
+                            });
+                        }
+                    });
+
+                    if (!corrChart) corrChart = echarts.init(document.getElementById('volumeConsumableChart'));
+                    corrChart.setOption({
+                        title: { text: '货量与耗材关联分析及异常预警', left: 'center', textStyle: { fontSize: 14 } },
+                        tooltip: {
+                            trigger: 'axis',
+                            formatter: params => {
+                                let s = `<b>${params[0].axisValue}</b><br/>`;
+                                const v = params.find(p => p.seriesName === '总货量')?.value || 0;
+                                const c = params.find(p => p.seriesName === '耗材成本')?.value || 0;
+                                const ratio = v > 0 ? (c / v).toFixed(3) : 0;
+                                s += `总货量: <b>${fmtNum(v)} 件</b><br/>`;
+                                s += `耗材成本: <b>$${c.toFixed(2)}</b><br/>`;
+                                s += `单票耗材比: <b>$${ratio}</b> (均值: $${avgCostPerTicket.toFixed(3)})`;
+                                if (ratio > avgCostPerTicket * (1.15)) s += `<br/><span style="color:#dc3545;">⚠️ 耗材使用效率异常偏低</span>`;
+                                return s;
+                            }
+                        },
+                        legend: { data: ['总货量', '耗材成本'], bottom: 0 },
+                        grid: { left: 60, right: 60, top: 40, bottom: 60 },
+                        xAxis: { type: 'category', data: corrDates },
+                        yAxis: [
+                            { type: 'value', name: '货量(件)', position: 'left' },
+                            { type: 'value', name: '耗材($)', position: 'right', splitLine: { show: false } }
+                        ],
+                        series: [
+                            {
+                                name: '总货量',
+                                type: 'bar',
+                                data: volSeriesData,
+                                itemStyle: { color: 'rgba(67, 97, 238, 0.2)', borderRadius: [4, 4, 0, 0] }
+                            },
+                            {
+                                name: '耗材成本',
+                                type: 'line',
+                                yAxisIndex: 1,
+                                data: consSeriesData,
+                                symbolSize: 8,
+                                lineStyle: { width: 3, color: '#e67e22' },
+                                itemStyle: { color: '#e67e22' },
+                                markPoint: {
+                                    data: markings,
+                                    label: { show: true, formatter: '!', position: 'top', color: '#fff', fontWeight: 'bold' }
+                                },
+                                markArea: {
+                                    silent: true,
+                                    itemStyle: { color: 'rgba(40, 167, 69, 0.05)' },
+                                    data: [[
+                                        { name: '合理耗费区间', yAxis: 0 },
+                                        { yAxis: 1000000 } // Dummy high value, logic handled in tooltip/markers
+                                    ]]
+                                }
+                            }
+                        ]
+                    });
+
+                    // 6. Stacked Area Chart: Unit Cost Impact Breakdown
+                    // We need to calculate daily unit cost contribution: Category_Cost_Sum / Daily_Pieces_Sum
+                    const categoryDaily = {}; // { date: { trans: 0, labor: 0, cons: 0, pieces: 0 } }
+                    data.forEach(d => {
+                        const date = d.period_end;
+                        if (!categoryDaily[date]) categoryDaily[date] = { trans: 0, labor: 0, cons: 0, pieces: 0 };
+                        categoryDaily[date].trans += d.total_transport_cost;
+                        categoryDaily[date].labor += d.total_labor_cost;
+                        categoryDaily[date].cons += d.total_consumable_cost;
+                        categoryDaily[date].pieces += d.total_pieces;
+                    });
+
+                    const impactDates = volDates;
+                    const transImpact = [], laborImpact = [], consImpact = [];
+
+                    impactDates.forEach(dt => {
+                        const v = categoryDaily[dt];
+                        if (v && v.pieces > 0) {
+                            transImpact.push((v.trans / v.pieces).toFixed(2));
+                            laborImpact.push((v.labor / v.pieces).toFixed(2));
+                            consImpact.push((v.cons / v.pieces).toFixed(2));
+                        } else {
+                            transImpact.push(0); laborImpact.push(0); consImpact.push(0);
+                        }
+                    });
+
+                    if (!impactChart) impactChart = echarts.init(document.getElementById('unitCostImpactChart'));
+                    impactChart.setOption({
+                        title: { text: '每日单票成本构成因素占比影响 (Impact Factor)', left: 'center', textStyle: { fontSize: 14 } },
+                        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                        legend: { data: ['运输占比影响', '人工占比影响', '耗材占比影响'], bottom: 0 },
+                        grid: { left: 60, right: 30, top: 50, bottom: 60 },
+                        xAxis: { type: 'category', boundaryGap: false, data: impactDates },
+                        yAxis: { type: 'value', name: '单票贡献($)', axisLabel: { formatter: '${value}' } },
+                        series: [
+                            {
+                                name: '运输占比影响',
+                                type: 'line',
+                                stack: 'Total',
+                                areaStyle: { opacity: 0.4 },
+                                emphasis: { focus: 'series' },
+                                data: transImpact,
+                                smooth: true,
+                                color: '#4361ee'
+                            },
+                            {
+                                name: '人工占比影响',
+                                type: 'line',
+                                stack: 'Total',
+                                areaStyle: { opacity: 0.4 },
+                                emphasis: { focus: 'series' },
+                                data: laborImpact,
+                                smooth: true,
+                                color: '#3f37c9'
+                            },
+                            {
+                                name: '耗材占比影响',
+                                type: 'line',
+                                stack: 'Total',
+                                areaStyle: { opacity: 0.4 },
+                                emphasis: { focus: 'series' },
+                                data: consImpact,
+                                smooth: true,
+                                color: '#e67e22'
+                            }
+                        ]
+                    });
+
+                    // 7. Weekly Labor Cost by Company Summary (NEW)
+                    fetch('/api/admin/labor/weekly-summary')
+                        .then(r => r.json())
+                        .then(res => {
+                            if (!res.success || !res.labels || res.labels.length === 0) return;
+                            
+                            if (!weeklyLaborChart) weeklyLaborChart = echarts.init(document.getElementById('weeklyLaborChart'));
+                            
+                            // Calculate totals for labels and WoW rates
+                            const totals = res.labels.map((_, i) => {
+                                let sum = 0;
+                                res.datasets.forEach(ds => { sum += ds.data[i] || 0; });
+                                return parseFloat(sum.toFixed(2));
+                            });
+                            const wowRates = totals.map((t, i) => {
+                                if (i === 0) return null;
+                                const prev = totals[i-1];
+                                if (!prev || prev === 0) return null;
+                                return parseFloat(((t - prev) / prev * 100).toFixed(2));
+                            });
+
+                            const option = {
+                                title: { 
+                                    text: '每周各公司生产人工费用汇总', 
+                                    left: 'center',
+                                    textStyle: { fontSize: 16, fontWeight: 'bold' }
+                                },
+                                tooltip: {
+                                    trigger: 'axis',
+                                    axisPointer: { type: 'shadow' },
+                                    formatter: function(params) {
+                                        // Skip the dummy total series in tooltip
+                                        const actualParams = params.filter(p => p.seriesName !== 'TotalLabel');
+                                        let relVal = '<b>' + (actualParams[0] ? actualParams[0].name : '') + '</b>';
+                                        
+                                        // Find WoW rate and total
+                                        const wowParam = params.find(p => p.seriesName === '环比 (WoW%)');
+                                        const totalVal = totals[params[0].dataIndex];
+                                        
+                                        relVal += '<br/>总计: <b>$' + totalVal.toLocaleString(undefined, {minimumFractionDigits: 2}) + '</b>';
+                                        if (wowParam && wowParam.value !== null) {
+                                            const color = wowParam.value >= 0 ? '#ff4d4f' : '#52c41a';
+                                            relVal += ` <span style="color:${color}; font-weight:bold;">(${wowParam.value >= 0 ? '+' : ''}${wowParam.value}%)</span>`;
+                                        }
+
+                                        actualParams.forEach(p => {
+                                            if (p.seriesName !== '环比 (WoW%)' && p.value) {
+                                                relVal += '<br/>' + p.marker + p.seriesName + ': <b>$' + p.value.toLocaleString(undefined, {minimumFractionDigits: 2}) + '</b>';
+                                            }
+                                        });
+                                        return relVal;
+                                    }
+                                },
+                                legend: { 
+                                    bottom: 0, 
+                                    type: 'scroll', 
+                                    data: [...res.datasets.map(d => d.name), '环比 (WoW%)'] 
+                                },
+                                grid: { left: '3%', right: '4%', bottom: '15%', top: '15%', containLabel: true },
+                                xAxis: {
+                                    type: 'category',
+                                    data: res.labels,
+                                    axisLabel: { interval: 0, rotate: 30 }
+                                },
+                                yAxis: [
+                                    {
+                                        type: 'value',
+                                        name: '费用 ($)',
+                                        axisLabel: { formatter: '${value}' }
+                                    },
+                                    {
+                                        type: 'value',
+                                        name: '环比 (%)',
+                                        splitLine: { show: false },
+                                        axisLabel: { formatter: '{value}%' }
+                                    }
+                                ],
+                                series: [
+                                    ...res.datasets,
+                                    {
+                                        name: 'TotalLabel',
+                                        type: 'bar',
+                                        barGap: '-100%',
+                                        label: {
+                                            show: true,
+                                            position: 'top',
+                                            formatter: (params) => params.value > 0 ? '$' + params.value.toLocaleString(undefined, {minimumFractionDigits: 2}) : '',
+                                            fontWeight: 'bold',
+                                            color: '#333'
+                                        },
+                                        itemStyle: { color: 'rgba(0,0,0,0)' },
+                                        data: totals,
+                                        tooltip: { show: false }
+                                    },
+                                    {
+                                        name: '环比 (WoW%)',
+                                        type: 'line',
+                                        yAxisIndex: 1,
+                                        smooth: true,
+                                        symbol: 'circle',
+                                        symbolSize: 8,
+                                        itemStyle: { color: '#ff7a45' },
+                                        lineStyle: { width: 3, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5 },
+                                        data: wowRates
+                                    }
+                                ]
+                            };
+                            weeklyLaborChart.setOption(option);
+                        });
+                });
+        }
+
+        window.addEventListener('resize', () => {
+            if (costTrendChart) costTrendChart.resize();
+            if (pChart) pChart.resize();
+            if (dirChart) dirChart.resize();
+            if (volumeChart) volumeChart.resize();
+            if (corrChart) corrChart.resize();
+            if (impactChart) impactChart.resize();
+            if (weeklyLaborChart) weeklyLaborChart.resize();
+        });
+    </script>
+</body>
+
+</html>

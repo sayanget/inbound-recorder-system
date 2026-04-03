@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="operation_log_title">操作日志查询</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/nav_component.js"></script>
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --danger-color: #f72585;
+            --warning-color: #f8961e;
+            --info-color: #4895ef;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --border-color: #dee2e6;
+            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fb;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin-bottom: 15px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            text-align: center;
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: var(--transition);
+            box-shadow: var(--card-shadow);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+
+        .btn-info {
+            background-color: var(--info-color);
+        }
+
+        .btn-warning {
+            background-color: var(--warning-color);
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: var(--card-shadow);
+        }
+
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-col {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+            font-size: 14px;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: var(--transition);
+            box-shadow: var(--card-shadow);
+        }
+
+        .btn-search {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-reset {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-export {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .page-btn {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            background-color: white;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: var(--transition);
+        }
+
+        .page-btn:hover {
+            background-color: #e9ecef;
+        }
+
+        .page-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .page-info {
+            margin: 0 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 16px;
+            color: #666;
+        }
+
+        .log-entry {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-left: 4px solid var(--primary-color);
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .log-timestamp {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .log-level {
+            margin-left: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .log-level-info {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .log-level-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .log-level-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .log-message {
+            margin-top: 5px;
+            font-size: 14px;
+        }
+
+        .export-section {
+            margin-top: 20px;
+        }
+
+        .export-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .export-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            header {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .nav-buttons {
+                gap: 8px;
+                flex-direction: column;
+            }
+
+            .btn {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+
+            .form-row {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .form-col {
+                min-width: 100%;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .pagination {
+                flex-direction: column;
+            }
+
+            .card {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div id="nav-container"></div>
+
+        <div class="card">
+            <h2><i class="fas fa-filter"></i> <span data-lang="search_filter">搜索筛选</span></h2>
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="dateFrom" data-lang="date_from">开始日期:</label>
+                        <input type="date" id="dateFrom" name="dateFrom">
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="dateTo" data-lang="date_to">结束日期:</label>
+                        <input type="date" id="dateTo" name="dateTo">
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="logLevel" data-lang="log_level">日志级别:</label>
+                        <select id="logLevel" name="logLevel">
+                            <option value="" data-lang="all">全部</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button id="searchBtn" class="action-btn btn-search">
+                    <i class="fas fa-search"></i> <span data-lang="search">搜索</span>
+                </button>
+                <button id="resetBtn" class="action-btn btn-reset">
+                    <i class="fas fa-redo"></i> <span data-lang="reset">重置</span>
+                </button>
+                <button id="exportLogsBtn" class="action-btn btn-export">
+                    <i class="fas fa-file-export"></i> <span data-lang="export_logs">导出日志</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2><i class="fas fa-list"></i> <span data-lang="log_list">日志列表</span></h2>
+            <div id="logsList"></div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <script>
+        // Language translations
+        const translations = {
+            zh: {
+                operation_log_title: "操作日志查询",
+                app_title: "仓库综合分析看板",
+                home: "首页",
+                sorting_entry: "分拣录入",
+                statistics_data: "统计数据",
+                history_query: "历史查询",
+                capacity_planning: "产能计划看板",
+                outbound_stats: "出库统计",
+                schedule_packaging: "排班 vs 集包",
+                consumables: "生产及耗材",
+                operation_logs: "操作日志",
+                admin_settings: "基础设置",
+                cost_accounting: "成本核算",
+                search_filter: "搜索筛选",
+                date_from: "开始日期",
+                date_to: "结束日期",
+                log_level: "日志级别",
+                all: "全部",
+                search: "搜索",
+                reset: "重置",
+                export_logs: "导出日志",
+                log_list: "日志列表",
+                logout: "登出"
+            },
+            en: {
+                operation_log_title: "Operation Log Query",
+                app_title: "Warehouse Dashboard",
+                home: "Home",
+                sorting_entry: "Sorting Entry",
+                statistics_data: "Statistics Data",
+                history_query: "History Query",
+                capacity_planning: "Capacity Planning",
+                outbound_stats: "Outbound Stats",
+                schedule_packaging: "Schedule vs Packaging",
+                consumables: "Production & Consumables",
+                operation_logs: "Operation Logs",
+                admin_settings: "Settings",
+                cost_accounting: "Cost Accounting",
+                search_filter: "Search Filter",
+                date_from: "Date From",
+                date_to: "Date To",
+                log_level: "Log Level",
+                all: "All",
+                search: "Search",
+                reset: "Reset",
+                export_logs: "Export Logs",
+                log_list: "Log List",
+                logout: "Logout"
+            },
+            es: {
+                operation_log_title: "Consulta de Registro de Operaciones",
+                app_title: "Panel del Almacén",
+                home: "Inicio",
+                sorting_entry: "Entrada de Clasificación",
+                statistics_data: "Datos Estadísticos",
+                history_query: "Consulta de Historial",
+                capacity_planning: "Planificación de Capacidad",
+                outbound_stats: "Estadísticas de Salida",
+                schedule_packaging: "Horario vs Empaque",
+                consumables: "Producción y Consumibles",
+                operation_logs: "Registros de Operación",
+                admin_settings: "Configuración",
+                cost_accounting: "Contabilidad de Costos",
+                search_filter: "Filtro de Búsqueda",
+                date_from: "Fecha Desde",
+                date_to: "Fecha Hasta",
+                log_level: "Nivel de Registro",
+                all: "Todo",
+                search: "Buscar",
+                reset: "Restablecer",
+                export_logs: "Exportar Registros",
+                log_list: "Lista de Registros",
+                logout: "Cerrar sesión"
+            }
+        };
+
+        // Current language
+        let currentLang = 'zh';
+
+        // Set language（nav_component 使用 #nav-currentLang；旧版 #currentLangText 可能不存在）
+        window.setLanguage = function(lang) {
+            currentLang = lang;
+
+            const langTexts = {
+                'zh': '中文',
+                'en': 'English',
+                'es': 'Español'
+            };
+            const currentLangTextEl = document.getElementById('currentLangText');
+            if (currentLangTextEl) currentLangTextEl.textContent = langTexts[lang] || '中文';
+            const navCurrentLang = document.getElementById('nav-currentLang');
+            if (navCurrentLang) navCurrentLang.textContent = (lang || 'zh').toUpperCase();
+
+            document.querySelectorAll('[data-lang]').forEach(element => {
+                const key = element.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    element.textContent = translations[lang][key];
+                }
+            });
+
+            const t = translations[lang];
+            document.title = (t && t.operation_log_title) ? t.operation_log_title : 'Operation Log Query';
+
+            document.querySelectorAll('option[data-lang]').forEach(option => {
+                const key = option.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    option.textContent = translations[lang][key];
+                }
+            });
+
+            localStorage.setItem('preferredLanguage', lang);
+            localStorage.setItem('preferred_language', lang);
+        }
+
+        function toggleLanguageDropdown() {
+            const el = document.getElementById('langDropdown');
+            if (el) el.classList.toggle('show');
+        }
+
+        // Close dropdown when clicking outside
+        window.onclick = function (event) {
+            if (!event.target.matches('.lang-selected') && !event.target.closest('.lang-dropdown')) {
+                const dropdowns = document.getElementsByClassName('lang-dropdown-content');
+                for (let i = 0; i < dropdowns.length; i++) {
+                    dropdowns[i].classList.remove('show');
+                }
+            }
+        }
+
+        function checkLoginStatus() {
+            return fetch('/api/check_login', { credentials: 'same-origin' })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.logged_in) {
+                        window.location.href = '/login';
+                        return false;
+                    }
+                    return true;
+                })
+                .catch(error => {
+                    console.error('Error checking login status:', error);
+                    return false;
+                });
+        }
+
+        function logout() {
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(() => { window.location.href = '/login'; })
+                .catch(() => { window.location.href = '/login'; });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const savedLang = localStorage.getItem('preferred_language') || localStorage.getItem('preferredLanguage');
+            if (savedLang && ['zh', 'en', 'es'].includes(savedLang)) {
+                setLanguage(savedLang);
+            }
+
+            const langSelectedEl = document.getElementById('langSelected');
+            if (langSelectedEl) langSelectedEl.addEventListener('click', toggleLanguageDropdown);
+
+            document.querySelectorAll('.lang-option').forEach(option => {
+                option.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const lang = this.getAttribute('data-lang');
+                    setLanguage(lang);
+                    const langDropdownEl = document.getElementById('langDropdown');
+                    if (langDropdownEl) langDropdownEl.classList.remove('show');
+                });
+            });
+
+            const logoutBtnEl = document.getElementById('logoutBtn');
+            if (logoutBtnEl) logoutBtnEl.addEventListener('click', logout);
+
+            checkLoginStatus().then(function (ok) {
+                if (ok) loadLogs();
+            });
+
+            // Bind search button
+            document.getElementById('searchBtn').addEventListener('click', loadLogs);
+
+            // Bind reset button
+            document.getElementById('resetBtn').addEventListener('click', resetFilters);
+
+            // Bind export logs button
+            document.getElementById('exportLogsBtn').addEventListener('click', exportLogs);
+        });
+
+        // Load logs function
+        function loadLogs(page = 1) {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const logLevel = document.getElementById('logLevel').value;
+
+            let params = new URLSearchParams();
+            params.append('page', page);
+            if (dateFrom) params.append('date_from', dateFrom);
+            if (dateTo) params.append('date_to', dateTo);
+            if (logLevel) params.append('level', logLevel);
+
+            fetch(`/api/logs?${params.toString()}`, { credentials: 'same-origin' })
+                .then(response => {
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return null;
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data === null) return;
+                    if (!data || data.error) {
+                        if (data && data.error === '未登录') {
+                            window.location.href = '/login';
+                            return;
+                        }
+                        document.getElementById('logsList').innerHTML =
+                            '<div class="message error">' + ((data && data.error) || '加载失败') + '</div>';
+                        renderPagination({ page: 1, pages: 1, has_prev: false, has_next: false, prev_num: 1, next_num: 1 });
+                        return;
+                    }
+                    const list = Array.isArray(data) ? data : (data.logs || []);
+                    const pag = (!Array.isArray(data) && data.pagination) ? data.pagination : {
+                        page: 1, pages: 1, has_prev: false, has_next: false, prev_num: 1, next_num: 1
+                    };
+                    displayLogs(list);
+                    renderPagination(pag);
+                })
+                .catch(error => {
+                    console.error('Error loading logs:', error);
+                    document.getElementById('logsList').innerHTML = '<div class="message error">加载日志失败</div>';
+                });
+        }
+
+        // Display logs
+        function displayLogs(logs) {
+            const logsList = document.getElementById('logsList');
+            if (logs && logs.length > 0) {
+                const logsHTML = logs.map(log => {
+                    let levelClass = '';
+                    let levelText = log.level || 'INFO';
+                    switch (log.level) {
+                        case 'WARNING':
+                            levelClass = 'log-level-warning';
+                            levelText = '警告';
+                            break;
+                        case 'ERROR':
+                            levelClass = 'log-level-error';
+                            levelText = '错误';
+                            break;
+                        default:
+                            levelClass = 'log-level-info';
+                            levelText = '信息';
+                    }
+
+                    if (currentLang === 'en') {
+                        levelText = log.level || 'INFO';
+                    } else if (currentLang === 'es') {
+                        switch (log.level) {
+                            case 'WARNING': levelText = 'Advertencia'; break;
+                            case 'ERROR': levelText = 'Error'; break;
+                            default: levelText = 'Información';
+                        }
+                    }
+
+                    return `
+                        <div class="log-entry">
+                            <div class="log-timestamp">${log.timestamp || 'N/A'}</div>
+                            <div class="log-level ${levelClass}">${levelText}</div>
+                            <div class="log-message">${log.message || 'N/A'}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                logsList.innerHTML = logsHTML;
+            } else {
+                logsList.innerHTML = '<div class="message">暂无日志记录</div>';
+            }
+        }
+
+        // Render pagination
+        function renderPagination(pagination) {
+            const paginationDiv = document.getElementById('pagination');
+            if (!pagination) return;
+
+            let paginationHTML = '';
+
+            if (pagination.has_prev) {
+                paginationHTML += `<button class="page-btn" onclick="loadLogs(${pagination.prev_num})"><i class="fas fa-chevron-left"></i></button>`;
+            }
+
+            for (let i = Math.max(1, pagination.page - 2); i <= Math.min(pagination.pages, pagination.page + 2); i++) {
+                paginationHTML += `<button class="page-btn ${i === pagination.page ? 'active' : ''}" onclick="loadLogs(${i})">${i}</button>`;
+            }
+
+            if (pagination.has_next) {
+                paginationHTML += `<button class="page-btn" onclick="loadLogs(${pagination.next_num})"><i class="fas fa-chevron-right"></i></button>`;
+            }
+
+            paginationHTML += `<div class="page-info">第 ${pagination.page} 页，共 ${pagination.pages} 页</div>`;
+
+            paginationDiv.innerHTML = paginationHTML;
+        }
+
+        // Reset filters
+        function resetFilters() {
+            document.getElementById('dateFrom').value = '';
+            document.getElementById('dateTo').value = '';
+            document.getElementById('logLevel').value = '';
+            loadLogs();
+        }
+
+        // Export logs
+        function exportLogs() {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const logLevel = document.getElementById('logLevel').value;
+
+            let params = new URLSearchParams();
+            if (dateFrom) params.append('date_from', dateFrom);
+            if (dateTo) params.append('date_to', dateTo);
+            if (logLevel) params.append('level', logLevel);
+
+            // Create download link
+            const link = document.createElement('a');
+            link.href = `/api/export_logs?${params.toString()}`;
+            link.download = `operation_logs_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Make loadLogs globally available for pagination
+        window.loadLogs = loadLogs;
+    </script>
+
+<script>
+    // 隐藏/显示成本核算按钮
+    document.addEventListener('DOMContentLoaded', function() {
+        fetch('/api/user_permissions')
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.cost_accounting && data.cost_accounting.can_view) {
+                    document.querySelectorAll('.cost-accounting-only').forEach(function(el) {
+                        el.style.display = 'inline-block';
+                    });
+                }
+            })
+            .catch(err => console.error('获取成本核算权限失败:', err));
+    });
+</script>
+</body>
+
+</html>

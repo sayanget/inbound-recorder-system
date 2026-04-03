@@ -1,0 +1,12 @@
+{'id': 165, 'sorting_time': '2026-03-19', 'pieces': 19901, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '00:00', 'created_at': '2026-03-19 00:01:00', 'manual_count': 6637, 'device_count': 13264}
+{'id': 166, 'sorting_time': '2026-03-19', 'pieces': 3121, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '01:00', 'created_at': '2026-03-19 01:01:00', 'manual_count': 1857, 'device_count': 1264}
+{'id': 167, 'sorting_time': '2026-03-19', 'pieces': 678, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '02:00', 'created_at': '2026-03-19 02:01:00', 'manual_count': 678, 'device_count': 0}
+{'id': 168, 'sorting_time': '2026-03-19', 'pieces': 0, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '03:00', 'created_at': '2026-03-19 03:01:00', 'manual_count': 0, 'device_count': 0}
+{'id': 169, 'sorting_time': '2026-03-19', 'pieces': 0, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '04:00', 'created_at': '2026-03-19 04:01:00', 'manual_count': 0, 'device_count': 0}
+{'id': 170, 'sorting_time': '2026-03-19', 'pieces': 0, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '05:00', 'created_at': '2026-03-19 05:01:00', 'manual_count': 0, 'device_count': 0}
+{'id': 171, 'sorting_time': '2026-03-19', 'pieces': 9414, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '06:00', 'created_at': '2026-03-19 06:02:51', 'manual_count': 0, 'device_count': 9414}
+{'id': 172, 'sorting_time': '2026-03-19', 'pieces': 18313, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '07:00', 'created_at': '2026-03-19 08:55:42', 'manual_count': 3170, 'device_count': 15143}
+{'id': 173, 'sorting_time': '2026-03-19', 'pieces': 17176, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '08:00', 'created_at': '2026-03-19 08:55:42', 'manual_count': 4937, 'device_count': 12239}
+{'id': 174, 'sorting_time': '2026-03-19', 'pieces': 20636, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '09:00', 'created_at': '2026-03-19 09:01:00', 'manual_count': 3160, 'device_count': 17476}
+{'id': 175, 'sorting_time': '2026-03-19', 'pieces': 9130, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '10:00', 'created_at': '2026-03-19 10:01:00', 'manual_count': 3703, 'device_count': 5427}
+{'id': 176, 'sorting_time': '2026-03-19', 'pieces': 999, 'remark': 'Auto-synced from Gofo (11:06)', 'time_slot': '11:00', 'created_at': '2026-03-19 11:01:00', 'manual_count': 202, 'device_count': 797}

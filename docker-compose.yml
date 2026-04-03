@@ -1,0 +1,21 @@
+﻿# 1. 复制 .env.example 为 .env，填写 SECRET_KEY（生产必设）
+# 2. 宿主机创建数据目录: mkdir data （首次）
+# 3. 构建并后台运行: docker compose up -d --build
+# 4. 浏览器访问 http://localhost:8080
+#
+# 使用 PostgreSQL 时：在 .env 中设置 DATABASE_URL，可去掉 DATABASE_PATH/volumes（或保留空 data 目录）
+# 仅用 SQLite：保持下方 DATABASE_PATH 与 volumes 映射即可持久化到 ./data/inbound.db
+
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /app/data/inbound.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

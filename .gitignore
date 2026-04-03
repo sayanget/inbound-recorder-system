@@ -1,0 +1,172 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+.venv/
+ENV/
+env/
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+inbound.db-shm
+inbound.db-wal
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+Backups/
+archive/
+inbound_python_source/
+backup_*/
+project_backup_*/
+dist_package/
+deployment_package/
+improved_deployment_package/
+
+# Test files
+test_*.py
+check_*.py
+debug_*.py
+analyze_*.py
+verify_*.py
+validate_*.py
+simulate_*.py
+fix_*.py
+cleanup_*.py
+reprocess_*.py
+add_test_*.py
+insert_*.py
+update_*.py
+create_*.py
+view_*.py
+tmp_*.py
+
+# Test data and responses
+*.json
+!package.json
+!package-lock.json
+
+# Excel files (reports)
+*.xlsx
+recent_records_*.xlsx
+daily_report_*.xlsx
+*.csv
+!daily_route_distribution.csv
+
+# Backup files
+*_backup*.py
+*_before_*.py
+*_final_*.py
+single_app_*.py
+!single_app.py
+
+# Build artifacts
+*.spec
+
+# Temporary files
+*.tmp
+*.bak
+page_content.html
+aas_debug.txt
+audit_log.txt
+calc_debug.txt
+calculation_final.txt
+calculation_output.txt
+check_final.txt
+dates_dump.txt
+db_schema.txt
+debug_est.log
+debug_est_vals.log
+debug_output.txt
+early_morning_results.txt
+gf_0301_dump.txt
+git_status.txt
+gofo_keepalive.log
+import_log.txt
+inspection.txt
+migration_log.txt
+monitor.log
+monitor_crash.log
+page_content.html
+schema_dump.txt
+trace_output.txt
+update_result.txt
+watchdog.log
+
+# Email configuration (contains sensitive data)
+email_config.py
+
+# Exclude files
+exclude.txt
+exclude_backup.txt
+essential_files.txt
+
+# HTML test files
+test_*.html
+debug_*.html
+
+# Icons
+in.ico
+in0.ico
+
+# Batch files for local use
+一键启动*.bat
+
+# Archives
+*.rar
+*.zip
+*.tar.gz
+*.7z
+
+# Accidental one-liner stubs at repo root (do not commit)
+import boto3.py
+import requests.py
+
+# Neon sync credentials (local only)
+neon_sync.env

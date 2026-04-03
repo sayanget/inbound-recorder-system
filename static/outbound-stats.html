@@ -1,0 +1,2287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="outbound_stats_title">出库记录统计</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <!-- Local vendor: avoids CDN blocking and duplicate-plugin issues with Chart.register + plugins[] -->
+    <script src="/static/js/vendor/chart.min.js"></script>
+    <script src="/static/js/vendor/chartjs-plugin-datalabels.min.js"></script>
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/nav_component.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--body-bg);
+            color: var(--text-color);
+            line-height: 1.6;
+            font-size: var(--font-size-base);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1.5rem 1rem;
+            }
+        }
+
+        h2 {
+            font-size: var(--font-size-xl);
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 2rem;
+            letter-spacing: -0.02em;
+        }
+
+
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 2.5rem;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .nav-btn {
+            padding: 12px 18px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            background-color: var(--table-header-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .nav-btn:hover {
+            background-color: var(--border-color);
+            transform: translateY(-1px);
+        }
+
+        .nav-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section h3 {
+            color: var(--text-color);
+            margin-bottom: 15px;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--card-bg) 0%, var(--table-stripe) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .stat-card h4 {
+            margin-top: 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary-color);
+            margin: 0.5rem 0;
+            letter-spacing: -0.02em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            text-align: left;
+            color: var(--text-color);
+        }
+
+        th {
+            background-color: var(--table-header-bg);
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background-color: var(--table-stripe);
+        }
+
+        .chart-container {
+            margin: 30px 0;
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            height: 400px;
+            position: relative;
+        }
+
+        .route-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .route-trunk {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .route-branch {
+            background-color: #2ecc71;
+            color: white;
+        }
+
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-container {
+                height: 300px;
+            }
+        }
+
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+            border: 1px solid #4CAF50;
+        }
+
+        .btn-primary:hover {
+            background-color: #45a049;
+        }
+
+        .btn-outline-primary {
+            background-color: transparent;
+            color: var(--text-color);
+            border: 1px solid #ddd;
+        }
+
+        .btn-outline-primary:hover {
+            background-color: var(--table-stripe);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div id="nav-container"></div>
+        <div id="message" class="message"></div>
+
+
+        <!-- Data Entry Form -->
+        <div class="section">
+            <h3 data-lang="data_entry">数据录入</h3>
+
+            <!-- Query Mode Selector -->
+            <div class="query-mode-selector"
+                style="margin-bottom: 25px; padding: 15px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                <div style="margin-bottom: 10px; font-weight: 600; color: var(--text-color);">查询模式</div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="singleDayMode" class="mode-btn active"
+                        style="padding: 10px 20px; border: 2px solid #4CAF50; background: #4CAF50; color: white; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.3s;">
+                        <span data-lang="single_day_query">单日查询</span>
+                    </button>
+                    <button id="dateRangeMode" class="mode-btn"
+                        style="padding: 10px 20px; border: 2px solid #ccc; background: white; color: #333; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.3s;">
+                        <span data-lang="date_range_query">时间范围查询</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Single Day Panel -->
+            <div id="singleDayPanel" class="query-panel">
+                <!-- Date Selection -->
+                <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+                    <div class="form-row"
+                        style="display: grid; grid-template-columns: 1fr auto; gap: 15px; align-items: end;">
+                        <div class="form-group">
+                            <label for="recordDate" data-lang="record_date"
+                                style="display: block; margin-bottom: 5px; font-weight: 500;">记录日期</label>
+                            <input type="date" id="recordDate"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; height: 38px; box-sizing: border-box;">
+                        </div>
+                        <button id="todayBtn" data-lang="today"
+                            style="padding: 10px 24px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; height: 38px; font-weight: 500; font-size: 14px; white-space: nowrap;">今天</button>
+                    </div>
+                </div>
+
+                <!-- Entry Form -->
+                <div
+                    style="padding: 15px; background: var(--card-bg); border-radius: 6px; border: 1px solid var(--border-color);">
+
+                    <!-- Entry Date Row -->
+                    <div
+                        style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color);">
+                        <div class="form-group">
+                            <label for="entryDate" data-lang="entry_date"
+                                style="display: block; margin-bottom: 5px; font-weight: 500;">录入日期</label>
+                            <input type="date" id="entryDate"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; height: 38px; box-sizing: border-box;">
+                        </div>
+                        <button id="entryTodayBtn" type="button"
+                            style="padding: 8px 18px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; height: 38px; font-weight: 500; font-size: 14px; white-space: nowrap;">今天</button>
+                    </div>
+                    <div class="form-row"
+                        style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label for="routeType" data-lang="route_type"
+                                style="display: block; margin-bottom: 5px; font-weight: 500;">流向类型</label>
+                            <select id="routeType"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">-- 请选择 --</option>
+                                <option value="trunk" data-lang="trunk_line">干线</option>
+                                <option value="branch" data-lang="branch_line">支线</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="routeCode" data-lang="route_destination"
+                                style="display: block; margin-bottom: 5px; font-weight: 500;">流向目的地</label>
+                            <select id="routeCode"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">-- 请先选择流向类型 --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row"
+                        style="display: grid; grid-template-columns: 1fr 2fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label for="cost" data-lang="cost"
+                                style="display: block; margin-bottom: 5px; font-weight: 500;">成本（自动计算）</label>
+                            <input type="text" id="cost" value="0" readonly
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background-color: #f0f0f0;">
+                        </div>
+                        <div class="form-group">
+                            <label for="notes" data-lang="notes"
+                                style="display: block; margin-bottom: 5px; font-weight: 500;">备注</label>
+                            <input type="text" id="notes"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button id="saveBtn" data-lang="save"
+                            style="padding: 10px 24px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 14px;">保存</button>
+                        <button id="exportBtn" class="btn-secondary" data-lang="export"
+                            style="padding: 10px 24px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 14px;">导出</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Date Range Query Panel -->
+            <div id="dateRangePanel" class="query-panel" style="display: none;">
+                <div
+                    style="padding: 20px; background: var(--card-bg); border-radius: 6px; border: 1px solid var(--border-color);">
+                    <div class="form-row"
+                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        <div class="form-group">
+                            <label for="startDate" data-lang="start_date"
+                                style="display: block; margin-bottom: 5px; font-weight: 500;">开始日期</label>
+                            <input type="date" id="startDate"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div class="form-group">
+                            <label for="endDate" data-lang="end_date"
+                                style="display: block; margin-bottom: 5px; font-weight: 500;">结束日期</label>
+                            <input type="date" id="endDate"
+                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <button id="queryRangeBtn"
+                            style="padding: 10px 24px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 14px;">
+                            <span data-lang="query">查询</span>
+                        </button>
+                        <button id="exportRangeBtn" class="btn-secondary"
+                            style="padding: 10px 24px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 14px;">
+                            <span data-lang="export">导出</span>
+                        </button>
+                        <div style="flex: 1; min-width: 20px;"></div>
+                        <button id="quickThisWeek" class="btn-secondary"
+                            style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 14px;">
+                            <span data-lang="this_week">本周</span>
+                        </button>
+                        <button id="quickThisMonth" class="btn-secondary"
+                            style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 14px;">
+                            <span data-lang="this_month">本月</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Statistics Section -->
+        <div class="section">
+            <h3 data-lang="daily_statistics">当日统计</h3>
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card">
+                    <h4 data-lang="trunk_total">干线总发车</h4>
+                    <div class="stat-value" id="trunkTotal">0</div>
+                </div>
+                <div class="stat-card">
+                    <h4 data-lang="branch_total">支线总发车</h4>
+                    <div class="stat-value" id="branchTotal">0</div>
+                </div>
+                <div class="stat-card">
+                    <h4 data-lang="total_vehicles">总发车数</h4>
+                    <div class="stat-value" id="totalVehicles">0</div>
+                </div>
+                <div class="stat-card">
+                    <h4 data-lang="total_cost">总成本</h4>
+                    <div class="stat-value" id="totalCost">$0</div>
+                </div>
+            </div>
+
+            <!-- Route Breakdown Section -->
+            <div id="routeBreakdown" style="margin-top: 20px; display: none;">
+                <h4 style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px;">干线详情 (Trunk Lines)
+                </h4>
+                <div id="trunkBreakdownGrid" class="stats-grid"
+                    style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;"></div>
+
+                <h4 style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px; margin-top: 20px;">
+                    支线详情 (Branch Lines)</h4>
+                <div id="branchBreakdownGrid" class="stats-grid"
+                    style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;"></div>
+            </div>
+
+            <table id="dailyTable">
+                <thead>
+                    <tr>
+                        <th data-lang="time">录入时间</th>
+                        <th data-lang="route_type">流向类型</th>
+                        <th data-lang="route_destination">目的地</th>
+                        <th data-lang="vehicle_count">发车数量</th>
+                        <th data-lang="cost">成本</th>
+                        <th data-lang="notes">备注</th>
+                        <th data-lang="actions" style="width: 200px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="dailyTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center;" data-lang="no_data">暂无数据</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="section">
+            <!-- Weekly Trend Chart -->
+            <div style="margin-bottom: 40px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 data-lang="weekly_trend" style="margin: 0;">每周趋势</h3>
+                    <div class="btn-group" role="group" style="display: flex; gap: 5px;">
+                        <button type="button" class="btn btn-outline-primary" id="btnWeeklyCount"
+                            data-lang="vehicle_count"
+                            style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">发车数量</button>
+                        <button type="button" class="btn btn-primary" id="btnWeeklyCost" data-lang="cost"
+                            style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">成本</button>
+                    </div>
+                </div>
+                <div class="chart-container" style="position: relative; height: 500px;">
+                    <canvas id="weeklyChart"></canvas>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 8px;">
+                <h3 data-lang="route_distribution" style="margin: 0 0 4px 0;">流向分布</h3>
+                <p data-lang="route_distribution_range" style="margin: 0; font-size: 13px; color: var(--text-muted, #666);">近 2 周（按日）</p>
+            </div>
+            <div class="chart-container" style="height: 500px;">
+                <canvas id="routeChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Shipments Section -->
+    <div class="section">
+        <h3 data-lang="pending_shipments_title">待发货记录</h3>
+
+        <!-- Pending Entry Form -->
+        <div
+            style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 15px; align-items: end; margin-bottom: 20px;">
+            <div class="form-group">
+                <label for="pendingRouteCode" data-lang="route_destination"
+                    style="display: block; margin-bottom: 5px; font-weight: 500;">流向目的地</label>
+                <select id="pendingRouteCode"
+                    style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--input-bg); color: var(--text-color);">
+                    <option value="">-- 请选择 --</option>
+                    <!-- Will be populated with all routes -->
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="pendingQuantity" data-lang="quantity"
+                    style="display: block; margin-bottom: 5px; font-weight: 500;">数量</label>
+                <input type="number" id="pendingQuantity" min="1" value="1"
+                    style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--input-bg); color: var(--text-color);">
+            </div>
+            <div class="form-group">
+                <label style="display: block; margin-bottom: 5px; font-weight: 500; visibility: hidden;">​</label>
+                <button id="savePendingBtn" data-lang="save"
+                    style="padding: 10px 24px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; white-space: nowrap; height: 38px; width: 100%;">保存</button>
+            </div>
+        </div>
+
+        <!-- Pending List -->
+        <table id="pendingTable">
+            <thead>
+                <tr>
+                    <th data-lang="route_destination">目的地</th>
+                    <th data-lang="quantity">数量</th>
+                    <th data-lang="actions" style="width: 150px;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="pendingTableBody">
+                <tr>
+                    <td colspan="4" style="text-align: center;" data-lang="no_data">暂无数据</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    </div>
+
+    <script>
+        // Register datalabels once globally. Do NOT also pass ChartDataLabels in new Chart({ plugins: [...] }) — duplicate id breaks rendering.
+        try {
+            if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+                Chart.register(ChartDataLabels);
+            }
+        } catch (e) {
+            console.warn('ChartDataLabels register skipped:', e);
+        }
+
+        // Language translations
+        const translations = {
+            zh: {
+                outbound_stats_title: "出库记录统计",
+                outbound_stats: "出库统计",
+                inbound_entry: "入库录入",
+                sorting_entry: "分拣录入",
+                statistics_data: "统计数据",
+                history_query: "历史查询",
+                capacity_planning: "产能计划看板",
+                data_entry: "数据录入",
+                record_date: "记录日期",
+                route_type: "流向类型",
+                trunk_line: "干线",
+                branch_line: "支线",
+                route_destination: "流向目的地",
+                vehicle_count: "发车数量",
+                cost: "成本",
+                notes: "备注",
+                save: "保存",
+                today: "今天",
+                export: "导出",
+                pending_shipments_title: "待发货记录",
+                add_pending: "添加待发货",
+                quantity: "数量",
+                daily_statistics: "当日统计",
+                trunk_total: "干线总发车",
+                branch_total: "支线总发车",
+                total_vehicles: "总发车数",
+                total_cost: "总成本",
+                route_distribution: "流向分布",
+                route_distribution_range: "近 2 周（按日）",
+                no_data: "暂无数据",
+                logout: "登出",
+                save_success: "保存成功",
+                save_error: "保存失败",
+                please_select_date: "请选择日期",
+                please_select_route: "请选择流向",
+                please_enter_count: "请输入发车数量",
+                single_day_query: "单日查询",
+                date_range_query: "时间范围查询",
+                start_date: "开始日期",
+                end_date: "结束日期",
+                query: "查询",
+                this_week: "本周",
+                this_month: "本月",
+                invalid_date_range: "开始日期不能晚于结束日期",
+                statistics: "统计",
+                export_success: "导出成功",
+                load_error: "加载失败",
+                weekly_trend: "每周趋势"
+            },
+            en: {
+                outbound_stats_title: "Outbound Statistics",
+                outbound_stats: "Outbound Stats",
+                inbound_entry: "Inbound Entry",
+                sorting_entry: "Sorting Entry",
+                statistics_data: "Statistics",
+                history_query: "History",
+                capacity_planning: "Capacity Planning",
+                data_entry: "Data Entry",
+                record_date: "Date",
+                route_type: "Route Type",
+                trunk_line: "Trunk",
+                branch_line: "Branch",
+                route_destination: "Destination",
+                vehicle_count: "Vehicle Count",
+                cost: "Cost",
+                notes: "Notes",
+                save: "Save",
+                today: "Today",
+                export: "Export",
+                pending_shipments_title: "Pending Shipments",
+                add_pending: "Add Pending Shipment",
+                quantity: "Quantity",
+                daily_statistics: "Daily Statistics",
+                trunk_total: "Trunk Total",
+                branch_total: "Branch Total",
+                total_vehicles: "Total Vehicles",
+                total_cost: "Total Cost",
+                route_distribution: "Route Distribution",
+                route_distribution_range: "Last 2 weeks (daily)",
+                no_data: "No data",
+                logout: "Logout",
+                save_success: "Saved successfully",
+                save_error: "Save failed",
+                please_select_date: "Please select date",
+                please_select_route: "Please select route",
+                please_enter_count: "Please enter vehicle count",
+                single_day_query: "Single Day Query",
+                date_range_query: "Date Range Query",
+                start_date: "Start Date",
+                end_date: "End Date",
+                query: "Query",
+                this_week: "This Week",
+                this_month: "This Month",
+                invalid_date_range: "Start date cannot be later than end date",
+                statistics: "Statistics",
+                export_success: "Export successful",
+                load_error: "Load failed",
+                weekly_trend: "Weekly Trend"
+            },
+            es: {
+                outbound_stats_title: "Estadísticas de Salida",
+                outbound_stats: "Estadísticas Salida",
+                inbound_entry: "Entrada",
+                sorting_entry: "Clasificación",
+                statistics_data: "Estadísticas",
+                history_query: "Historial",
+                capacity_planning: "Planificación",
+                data_entry: "Entrada de Datos",
+                record_date: "Fecha",
+                route_type: "Tipo de Ruta",
+                trunk_line: "Troncal",
+                branch_line: "Ramificación",
+                route_destination: "Destino",
+                vehicle_count: "Cantidad de Vehículos",
+                cost: "Costo",
+                notes: "Notas",
+                save: "Guardar",
+                today: "Hoy",
+                export: "Exportar",
+                pending_shipments_title: "Registros Pendientes de Envío",
+                add_pending: "Agregar Envío Pendiente",
+                quantity: "Cantidad",
+                daily_statistics: "Estadísticas Diarias",
+                trunk_total: "Total Troncal",
+                branch_total: "Total Ramificación",
+                total_vehicles: "Total Vehículos",
+                total_cost: "Costo Total",
+                route_distribution: "Distribución de Rutas",
+                route_distribution_range: "Últimas 2 semanas (por día)",
+                no_data: "Sin datos",
+                logout: "Cerrar sesión",
+                save_success: "Guardado exitosamente",
+                save_error: "Error al guardar",
+                please_select_date: "Por favor seleccione fecha",
+                please_select_route: "Por favor seleccione ruta",
+                please_enter_count: "Por favor ingrese cantidad",
+                single_day_query: "Consulta de Un Día",
+                date_range_query: "Consulta de Rango de Fechas",
+                start_date: "Fecha de Inicio",
+                end_date: "Fecha de Fin",
+                query: "Consultar",
+                this_week: "Esta Semana",
+                this_month: "Este Mes",
+                invalid_date_range: "La fecha de inicio no puede ser posterior a la fecha de fin",
+                statistics: "Estadísticas",
+                export_success: "Exportación exitosa",
+                load_error: "Error al cargar",
+                weekly_trend: "Tendencia Semanal"
+            }
+        };
+
+        // Route definitions
+        const routes = {
+            trunk: ['MIA', 'MCO', 'DFW', 'ATL', 'ORD', 'IAH', 'EWR', 'CLT', 'JFK', 'LAS', 'PHX'],
+            branch: ['LAX', 'DEN', 'SFO']
+        };
+
+        let currentLang = localStorage.getItem('preferred_language') || localStorage.getItem('language') || 'zh';
+        let currentDailyData = []; // Store for export
+
+        // Initialize page
+        // 流向汇总：统一按单元格规范化后的「前 3 个字符」分组（相同则合并到同一桶）
+        function normalizeRoute(route) {
+            if (!route) return 'Unknown';
+            let r = String(route).toUpperCase().trim();
+            if (r.endsWith('.H') || r.endsWith('.G')) r = r.substring(0, r.length - 2);
+            const u = r.replace(/\s+/g, ' ').trim();
+            if (u.length === 0) return 'Unknown';
+            return u.length >= 3 ? u.slice(0, 3) : u;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            initLanguage();
+            initEventListeners();
+            setTodayDate();
+            // Load records
+            loadDailyRecords();
+            loadPendingRecords(); // Load pending
+            initPendingRoutes(); // Init pending route options
+            checkLoginStatus();
+            loadFreights(); // Load freight rates
+            loadWeeklyData(); // Load weekly trend
+            
+            console.log("Outbound Stats Initialized");
+        });
+
+        function initLanguage() {
+            updateLanguage(currentLang);
+        }
+
+        function updateLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('language', lang);
+            localStorage.setItem('preferred_language', lang);
+
+            // Update all elements with data-lang attribute
+            document.querySelectorAll('[data-lang]').forEach(element => {
+                const key = element.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                        element.placeholder = translations[lang][key];
+                    } else if (element.tagName === 'OPTION') {
+                        element.textContent = translations[lang][key];
+                    } else {
+                        element.textContent = translations[lang][key];
+                    }
+                }
+            });
+
+            // Legacy inline selector (optional) + universal nav (nav_component.js uses #nav-currentLang)
+            const langNames = { zh: '中文', en: 'English', es: 'Español' };
+            const currentLangText = document.getElementById('currentLangText');
+            if (currentLangText) currentLangText.textContent = langNames[lang];
+            const navCurrentLang = document.getElementById('nav-currentLang');
+            if (navCurrentLang) navCurrentLang.textContent = (lang || 'zh').toUpperCase();
+        }
+
+        // Called by nav_component.js language dropdown
+        window.setLanguage = function (code) {
+            if (translations[code]) updateLanguage(code);
+        };
+
+        function initEventListeners() {
+            // Language selector
+            const langSelected = document.getElementById('langSelected');
+            if (langSelected) {
+                langSelected.addEventListener('click', function () {
+                    const langDropdown = document.getElementById('langDropdown');
+                    if (langDropdown) langDropdown.classList.toggle('show');
+                });
+            }
+
+            document.querySelectorAll('.lang-option').forEach(option => {
+                option.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const lang = this.getAttribute('data-lang');
+                    updateLanguage(lang);
+                    const ld = document.getElementById('langDropdown');
+                    if (ld) ld.classList.remove('show');
+                });
+            });
+
+            // Close dropdown when clicking outside (legacy lang UI only)
+            window.addEventListener('click', function (e) {
+                if (!e.target.matches('.lang-selected') && !e.target.closest('.lang-selected')) {
+                    const ld = document.getElementById('langDropdown');
+                    if (ld) ld.classList.remove('show');
+                }
+            });
+
+            // Route type change
+            const routeType = document.getElementById('routeType');
+            if (routeType) {
+                routeType.addEventListener('change', function () {
+                    updateRouteOptions(this.value);
+                    calculateCost(); // Recalculate cost when route type changes
+                });
+            }
+
+            // Route code change
+            const routeCode = document.getElementById('routeCode');
+            if (routeCode) {
+                routeCode.addEventListener('change', function () {
+                    calculateCost(); // Recalculate cost when route changes
+                });
+            }
+
+            // Save button
+            const saveBtn = document.getElementById('saveBtn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', saveRecord);
+            }
+
+            // Today button (query date)
+            const todayBtn = document.getElementById('todayBtn');
+            if (todayBtn) {
+                todayBtn.addEventListener('click', setTodayDate);
+            }
+
+            // Entry date today button
+            const entryTodayBtn = document.getElementById('entryTodayBtn');
+            if (entryTodayBtn) {
+                entryTodayBtn.addEventListener('click', function () {
+                    const entryDate = document.getElementById('entryDate');
+                    if (entryDate) entryDate.value = new Date().toISOString().split('T')[0];
+                });
+            }
+
+
+            // Export button
+            document.getElementById('exportBtn').addEventListener('click', exportToCSV);
+
+            // Query mode switching
+            document.getElementById('singleDayMode').addEventListener('click', function () {
+                document.getElementById('singleDayPanel').style.display = 'block';
+                document.getElementById('dateRangePanel').style.display = 'none';
+                this.classList.add('active');
+                this.style.background = '#4CAF50';
+                this.style.color = 'white';
+                this.style.borderColor = '#4CAF50';
+                document.getElementById('dateRangeMode').classList.remove('active');
+                document.getElementById('dateRangeMode').style.background = 'white';
+                document.getElementById('dateRangeMode').style.color = '#333';
+                document.getElementById('dateRangeMode').style.borderColor = '#ccc';
+                // Reload single day records
+                loadDailyRecords();
+            });
+
+            document.getElementById('dateRangeMode').addEventListener('click', function () {
+                document.getElementById('singleDayPanel').style.display = 'none';
+                document.getElementById('dateRangePanel').style.display = 'block';
+                this.classList.add('active');
+                this.style.background = '#4CAF50';
+                this.style.color = 'white';
+                this.style.borderColor = '#4CAF50';
+                document.getElementById('singleDayMode').classList.remove('active');
+                document.getElementById('singleDayMode').style.background = 'white';
+                document.getElementById('singleDayMode').style.color = '#333';
+                document.getElementById('singleDayMode').style.borderColor = '#ccc';
+                // Set default dates
+                const today = new Date().toISOString().split('T')[0];
+                const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+                document.getElementById('startDate').value = firstDayOfMonth;
+                document.getElementById('endDate').value = today;
+            });
+
+            // Date range query button
+            document.getElementById('queryRangeBtn').addEventListener('click', loadDateRangeRecords);
+
+            // Date range export button
+            document.getElementById('exportRangeBtn').addEventListener('click', exportRangeToCSV);
+
+            // Quick selection buttons
+            document.getElementById('quickThisWeek').addEventListener('click', function () {
+                const today = new Date();
+                const dayOfWeek = today.getDay();
+                const monday = new Date(today);
+                monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+                document.getElementById('startDate').value = monday.toISOString().split('T')[0];
+                document.getElementById('endDate').value = today.toISOString().split('T')[0];
+                loadDateRangeRecords();
+            });
+
+            document.getElementById('quickThisMonth').addEventListener('click', function () {
+                const today = new Date();
+                const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                document.getElementById('startDate').value = firstDay.toISOString().split('T')[0];
+                document.getElementById('endDate').value = today.toISOString().split('T')[0];
+                loadDateRangeRecords();
+            });
+
+
+            // Save Pending button
+            const savePendingBtn = document.getElementById('savePendingBtn');
+            if (savePendingBtn) {
+                savePendingBtn.addEventListener('click', savePendingRecord);
+            }
+
+            // Date change (Reload both tables)
+            const recordDateSelect = document.getElementById('recordDate');
+            if (recordDateSelect) {
+                recordDateSelect.addEventListener('change', () => {
+                    loadDailyRecords();
+                    loadPendingRecords();
+                    loadWeeklyData(); // Also refresh trend when date changes
+                });
+            }
+
+            // Logout button
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function () {
+                    fetch('/api/logout', { method: 'POST' })
+                        .then(() => window.location.href = '/login')
+                        .catch(() => window.location.href = '/login');
+                });
+            }
+        }
+
+        // Export to CSV
+        function exportToCSV() {
+            if (!currentDailyData || currentDailyData.length === 0) {
+                showMessage(translations[currentLang].no_data || "No data to export", 'warning');
+                return;
+            }
+
+            // Calculate totals
+            let trunkTotal = 0;
+            let branchTotal = 0;
+            let totalVehicles = 0;
+            let totalCost = 0;
+
+            currentDailyData.forEach(row => {
+                totalVehicles += 1;
+                totalCost += (row.cost || 0);
+
+                if (row.route_type === 'trunk') {
+                    trunkTotal += 1;
+                } else if (row.route_type === 'branch') {
+                    branchTotal += 1;
+                }
+            });
+
+            // CSV Header with Totals
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // Add BOM for Excel
+
+            // Add Summary Section
+            csvContent += `Summary Statistics\n`;
+            csvContent += `Trunk Total,${trunkTotal}\n`;
+            csvContent += `Branch Total,${branchTotal}\n`;
+            csvContent += `Total Trips,${totalVehicles}\n`;
+            csvContent += `Total Cost,${totalCost.toFixed(2)}\n\n`;
+
+            // Add Header Row
+            csvContent += "Date,Type,Route,Trips,Cost,Notes,Entry Time\n";
+
+            // Add Data Rows
+            currentDailyData.forEach(row => {
+                const rDate = row.record_date;
+                const typeStr = row.route_type === 'trunk' ? 'Trunk' : 'Branch';
+                const rCode = row.route_code;
+                const rCount = 1;
+                const rCost = row.cost;
+                const rNotes = (row.notes || '').replace(/,/g, '，').replace(/\n/g, ' '); // Escape commas and newlines
+                const timeStr = row.created_at || '';
+
+                csvContent += `${rDate},${typeStr},${rCode},${rCount},${rCost},${rNotes},${timeStr}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            const date = document.getElementById('recordDate').value;
+            link.setAttribute("download", `outbound_records_${date}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showMessage(translations[currentLang].export_success || "Export successful", 'success');
+        }
+
+        // Export date range to CSV
+        function exportRangeToCSV() {
+            if (!currentDailyData || currentDailyData.length === 0) {
+                showMessage(translations[currentLang].no_data || "No data to export", 'warning');
+                return;
+            }
+
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            // Calculate totals
+            let trunkTotal = 0;
+            let branchTotal = 0;
+            let totalVehicles = 0;
+            let totalCost = 0;
+
+            currentDailyData.forEach(row => {
+                totalVehicles += 1;
+                totalCost += (row.cost || 0);
+
+                if (row.route_type === 'trunk') {
+                    trunkTotal += 1;
+                } else if (row.route_type === 'branch') {
+                    branchTotal += 1;
+                }
+            });
+
+            // CSV Header with Totals
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // Add BOM for Excel
+
+            // Add Summary Section
+            csvContent += `Date Range,${startDate} to ${endDate}\n`;
+            csvContent += `Summary Statistics\n`;
+            csvContent += `Trunk Total,${trunkTotal}\n`;
+            csvContent += `Branch Total,${branchTotal}\n`;
+            csvContent += `Total Trips,${totalVehicles}\n`;
+            csvContent += `Total Cost,${totalCost.toFixed(2)}\n\n`;
+
+            // Add Header Row
+            csvContent += "Date,Type,Route,Trips,Cost,Notes,Entry Time\n";
+
+            // Add Data Rows
+            currentDailyData.forEach(row => {
+                const rDate = row.record_date;
+                const typeStr = row.route_type === 'trunk' ? 'Trunk' : 'Branch';
+                const rCode = row.route_code;
+                const rCount = 1;
+                const rCost = row.cost;
+                const rNotes = (row.notes || '').replace(/,/g, '，').replace(/\n/g, ' '); // Escape commas and newlines
+                const timeStr = row.created_at || '';
+
+                csvContent += `${rDate},${typeStr},${rCode},${rCount},${rCost},${rNotes},${timeStr}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `outbound_records_${startDate}_to_${endDate}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showMessage(translations[currentLang].export_success || "Export successful", 'success');
+        }
+        function updateRouteOptions(routeType) {
+            const routeCodeSelect = document.getElementById('routeCode');
+            routeCodeSelect.innerHTML = '<option value="">-- 请选择 --</option>';
+
+            if (routeType && routes[routeType]) {
+                routes[routeType].forEach(route => {
+                    const option = document.createElement('option');
+                    option.value = route;
+                    option.textContent = route;
+                    routeCodeSelect.appendChild(option);
+                });
+            }
+            calculateCost(); // Recalculate cost when route options change
+        }
+
+        function setTodayDate() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('recordDate').value = today;
+            loadDailyRecords();
+        }
+
+        // Load freight rates from API (Consolidated)
+        async function loadFreights() {
+            try {
+                const response = await fetch('/api/freight-rates');
+                if (response.ok) {
+                    const data = await response.json();
+                    // Supports both array of objects and route_code:rate dictionary
+                    if (data && typeof data === 'object' && !Array.isArray(data)) {
+                        window.freightRates = data;
+                    } else if (Array.isArray(data)) {
+                        window.freightRates = {};
+                        data.forEach(rate => {
+                            window.freightRates[rate.route_code] = rate.rate;
+                        });
+                    }
+                    if (typeof calculateCost === 'function') calculateCost();
+                }
+            } catch (error) {
+                console.error('Failed to load freight rates:', error);
+            }
+        }
+
+        // 一车次一行：成本 = 单价 × 1
+        function calculateCost() {
+            const routeCode = document.getElementById('routeCode').value;
+            const costInput = document.getElementById('cost');
+
+            if (routeCode && freightRates[routeCode]) {
+                const rate = freightRates[routeCode];
+                costInput.value = (rate * 1).toFixed(2);
+            } else {
+                costInput.value = '0.00';
+            }
+        }
+
+        function showMessage(message, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = message;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 3000);
+        }
+
+        async function saveRecord() {
+            // Use entryDate (entry form date) instead of recordDate (query date)
+            const date = document.getElementById('entryDate').value;
+            const routeType = document.getElementById('routeType').value;
+            const routeCode = document.getElementById('routeCode').value;
+            const cost = parseFloat(document.getElementById('cost').value) || 0;
+            const notes = document.getElementById('notes').value;
+
+            if (!date) {
+                showMessage(translations[currentLang].please_select_date, 'error');
+                return;
+            }
+
+            if (!routeType || !routeCode) {
+                showMessage(translations[currentLang].please_select_route, 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/outbound/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        date,
+                        route_code: routeCode,
+                        route_type: routeType,
+                        vehicle_count: 1,
+                        cost,
+                        notes
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showMessage(translations[currentLang].save_success, 'success');
+                    // Clear form
+                    // Trigger cost calculation for the next entry (same route usually)
+                    const routeType = document.getElementById('routeType').value;
+                    const routeCode = document.getElementById('routeCode').value;
+                    if (routeType && routeCode) {
+                        calculateCost();
+                    } else {
+                        document.getElementById('cost').value = 0;
+                    }
+                    document.getElementById('notes').value = '';
+                    // Reload stats and records
+                    loadDailyRecords();
+                    loadWeeklyData(); // Refresh weekly trend
+                } else {
+                    showMessage(result.error || translations[currentLang].save_error, 'error');
+                }
+            } catch (error) {
+                console.error('Error saving record:', error);
+                showMessage(translations[currentLang].save_error, 'error');
+            }
+        }
+
+        function updateStatsCards(records) {
+            let trunkTotal = 0;
+            let branchTotal = 0;
+            let totalCost = 0;
+
+            records.forEach(record => {
+                if (record.route_type === 'trunk') {
+                    trunkTotal += 1;
+                } else {
+                    branchTotal += 1;
+                }
+                totalCost += parseFloat(record.cost) || 0;
+            });
+
+            document.getElementById('trunkTotal').textContent = trunkTotal;
+            document.getElementById('branchTotal').textContent = branchTotal;
+            document.getElementById('totalVehicles').textContent = trunkTotal + branchTotal;
+            document.getElementById('totalCost').textContent = `$${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        }
+
+        // Load daily records with business day filtering (yesterday 12pm to today 12pm)
+        async function loadDailyRecords() {
+            const date = document.getElementById('recordDate').value;
+            console.log('Loading records for date:', date);
+
+            if (!date) {
+                console.log('No date selected');
+                return;
+            }
+
+            try {
+                const url = `/api/outbound/records?date=${date}`;
+                console.log('Fetching from:', url);
+
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
+
+                const records = await response.json();
+                console.log('Received records:', records.length);
+
+                currentDailyData = records; // Update global data for export
+
+                displayDailyRecords(records);
+                updateStatsCards(records);
+                updateRouteBreakdown(records); // Update breakdown
+                updateRouteBreakdown(records); // Update breakdown
+                updateRouteChart();
+            } catch (error) {
+                console.error('Error loading daily stats:', error);
+                showMessage(translations[currentLang].load_error, 'error');
+            }
+        }
+
+
+
+        // Load date range records
+        async function loadDateRangeRecords() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!startDate || !endDate) {
+                showMessage(translations[currentLang].please_select_date || '请选择开始和结束日期', 'error');
+                return;
+            }
+
+            if (startDate > endDate) {
+                showMessage(translations[currentLang].invalid_date_range || '开始日期不能晚于结束日期', 'error');
+                return;
+            }
+
+            try {
+                const url = `/api/outbound/records?start_date=${startDate}&end_date=${endDate}`;
+                console.log('Fetching range from:', url);
+
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    showMessage(error.error || translations[currentLang].load_error, 'error');
+                    return;
+                }
+
+                const records = await response.json();
+                console.log('Received records:', records.length);
+
+                currentDailyData = records; // Update global data for export
+
+                displayDailyRecords(records);
+                updateStatsCards(records);
+                updateRouteBreakdown(records);
+                updateRouteBreakdown(records);
+                updateRouteChart();
+
+                // Update section title to show date range
+                const statsSection = document.querySelector('.section h3[data-lang="daily_statistics"]');
+                if (statsSection) {
+                    statsSection.textContent = `${translations[currentLang].statistics || '统计'} (${startDate} ~ ${endDate})`;
+                }
+            } catch (error) {
+                console.error('Error loading range stats:', error);
+                showMessage(translations[currentLang].load_error, 'error');
+            }
+        }
+
+        // Helper to aggregate records
+        function aggregateRecords(records) {
+            const groups = {};
+
+            records.forEach(record => {
+                const normCode = normalizeRoute(record.route_code);
+                // Key for grouping: Date + RouteCode + RouteType
+                const key = `${record.record_date}_${normCode}_${record.route_type}`;
+
+                if (!groups[key]) {
+                    groups[key] = {
+                        id: [], // Array of IDs
+                        ids: [], // Alias
+                        record_date: record.record_date,
+                        route_code: record.route_code,
+                        route_type: record.route_type,
+                        vehicle_count: 0,
+                        cost: 0,
+                        notes: new Set(),
+                        created_at: record.created_at
+                    };
+                }
+
+                groups[key].id.push(record.id);
+                groups[key].ids.push(record.id);
+                groups[key].vehicle_count += 1;
+                groups[key].cost += (parseFloat(record.cost) || 0);
+                if (record.notes) groups[key].notes.add(record.notes);
+
+                // Keep latest created_at
+                if (record.created_at > groups[key].created_at) {
+                    groups[key].created_at = record.created_at;
+                }
+            });
+
+            return Object.values(groups).map(g => ({
+                ...g,
+                count: g.ids.length, // Trip count
+                notes: Array.from(g.notes).join('; ') // Join notes
+            }));
+        }
+
+        // Delete records (batch or single)
+        async function deleteRecords(ids, routeCode, routeType) {
+            if (!ids || ids.length === 0) return;
+
+            const isBatch = ids.length > 1;
+            const msg = isBatch
+                ? `确定要删除这 ${ids.length} 条汇总记录吗?\n\n路线: ${routeCode} (${routeType})\n\n此操作不可撤销!`
+                : `确定要删除这条记录吗?\n\n路线: ${routeCode} (${routeType})\n\n此操作不可撤销!`;
+
+            if (!confirm(msg)) return;
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const id of ids) {
+                try {
+                    const response = await fetch('/api/outbound/delete', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: id })
+                    });
+                    const result = await response.json();
+                    if (result.success) successCount++;
+                    else failCount++;
+                } catch (e) {
+                    console.error(e);
+                    failCount++;
+                }
+            }
+
+            if (failCount === 0) {
+                showMessage('记录删除成功！', 'success');
+                await loadDailyRecords();
+            } else {
+                showMessage(`删除完成: ${successCount} 成功, ${failCount} 失败`, 'warning');
+                await loadDailyRecords();
+            }
+        }
+
+        // Display records in table
+        function displayDailyRecords(rawRecords) {
+            const tableBody = document.getElementById('dailyTableBody');
+
+            tableBody.innerHTML = '';
+
+            // Aggregate records
+            const records = aggregateRecords(rawRecords);
+
+            if (records.length === 0) {
+                // Adjust colspan to 7 (Time, Type, Dest, Count, Cost, Notes, Actions)
+                tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center;">${translations[currentLang].no_data}</td></tr>`;
+                return;
+            }
+
+            records.forEach(record => {
+                const row = document.createElement('tr');
+
+                // Entry Time (Last Updated)
+                const timeCell = document.createElement('td');
+                timeCell.textContent = record.created_at || '-';
+                row.appendChild(timeCell);
+
+                const typeCell = document.createElement('td');
+                typeCell.textContent = record.route_type === 'trunk' ? translations[currentLang].trunk_line : translations[currentLang].branch_line;
+                row.appendChild(typeCell);
+
+                const codeCell = document.createElement('td');
+                codeCell.textContent = record.route_code;
+                row.appendChild(codeCell);
+
+                const countCell = document.createElement('td');
+                countCell.textContent = record.vehicle_count;
+                row.appendChild(countCell);
+
+                const costCell = document.createElement('td');
+                costCell.textContent = record.cost.toFixed(2);
+                row.appendChild(costCell);
+
+                const notesCell = document.createElement('td');
+                notesCell.textContent = record.notes || '';
+                row.appendChild(notesCell);
+
+                // Actions
+                const actionsCell = document.createElement('td');
+
+                // Edit Button
+                const editBtn = document.createElement('button');
+                editBtn.textContent = 'Edit';
+                editBtn.className = 'btn-secondary';
+                editBtn.style.marginRight = '5px';
+
+                if (record.ids.length > 1) {
+                    editBtn.disabled = true;
+                    editBtn.title = 'Aggregated records cannot be edited directly';
+                    editBtn.style.opacity = '0.5';
+                    editBtn.style.cursor = 'not-allowed';
+                } else {
+                    const original = rawRecords.find(r => r.id === record.ids[0]);
+                    editBtn.onclick = () => editRecord(original);
+                }
+                actionsCell.appendChild(editBtn);
+
+                // Delete Button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = record.ids.length > 1 ? 'Delete All' : 'Delete';
+                deleteBtn.className = 'btn-danger';
+                deleteBtn.onclick = () => deleteRecords(record.ids, record.route_code, record.route_type);
+                actionsCell.appendChild(deleteBtn);
+
+                row.appendChild(actionsCell);
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Update Route Breakdown Section
+        function updateRouteBreakdown(records) {
+            const trunkGrid = document.getElementById('trunkBreakdownGrid');
+            const branchGrid = document.getElementById('branchBreakdownGrid');
+            const container = document.getElementById('routeBreakdown');
+
+            trunkGrid.innerHTML = '';
+            branchGrid.innerHTML = '';
+
+            if (records.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            container.style.display = 'block';
+
+            // Aggregate data
+            const trunkStats = {};
+            const branchStats = {};
+
+            records.forEach(r => {
+                const normCode = normalizeRoute(r.route_code);
+                const target = r.route_type === 'trunk' ? trunkStats : branchStats;
+                if (!target[normCode]) {
+                    target[normCode] = { count: 0, cost: 0 };
+                }
+                target[normCode].count += 1;
+                target[normCode].cost += (r.cost || 0);
+            });
+
+            // Render helper
+            function renderCards(stats, grid) {
+                if (Object.keys(stats).length === 0) {
+                    grid.innerHTML = '<div style="color: #999; grid-column: 1/-1;">暂无数据</div>';
+                    return;
+                }
+
+                Object.keys(stats).sort().forEach(code => {
+                    const data = stats[code];
+                    const card = document.createElement('div');
+                    card.className = 'stat-card';
+                    card.style.padding = '10px';
+                    card.innerHTML = `
+                        <h5 style="margin: 0 0 5px 0; font-size: 1.1em; color: #333;">${code}</h5>
+                        <div style="font-size: 0.9em; display: flex; justify-content: space-between;">
+                            <span>数量: <b>${data.count}</b></span>
+                            <span>成本: <b>$${Math.round(data.cost)}</b></span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+
+            renderCards(trunkStats, trunkGrid);
+            renderCards(branchStats, branchGrid);
+        }
+
+        // Edit record with prompts（一车次一行，vehicle_count 固定为 1）
+        async function editRecord(record) {
+            const id = record.id;
+            const routeType = record.route_type;
+            const routeCode = record.route_code;
+            const cost = record.cost;
+            const notes = record.notes;
+
+            const newNotes = prompt('编辑备注 (可选):', notes || '');
+
+            if (newNotes === null) {
+                return;
+            }
+
+            let newCost = cost;
+            if (freightRates[routeCode]) {
+                newCost = freightRates[routeCode] * 1;
+            }
+
+            try {
+                const response = await fetch('/api/outbound/update', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        id: id,
+                        route_type: routeType,
+                        route_code: routeCode,
+                        vehicle_count: 1,
+                        cost: newCost,
+                        notes: newNotes
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showMessage('记录更新成功！', 'success');
+                    loadDailyRecords();
+                } else {
+                    showMessage(result.error || '更新失败', 'error');
+                }
+            } catch (error) {
+                console.error('Update error:', error);
+                showMessage('更新出错,请检查网络连接。', 'error');
+            }
+        }
+
+        // Delete record with confirmation
+        async function deleteRecord(id, routeCode, routeType) {
+            console.log('Delete called for record ID:', id);
+
+            if (!confirm(`确定要删除这条记录吗?\n\n路线: ${routeCode} (${routeType})\n\n此操作不可撤销!`)) {
+                console.log('Delete cancelled by user');
+                return;
+            }
+
+            console.log('Sending delete request...');
+            try {
+                const response = await fetch('/api/outbound/delete', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ id: id })
+                });
+
+                console.log('Delete response status:', response.status);
+                const result = await response.json();
+                console.log('Delete result:', result);
+
+                if (result.success) {
+                    showMessage('记录删除成功！', 'success');
+                    console.log('Reloading records...');
+                    await loadDailyRecords();
+                    console.log('Records reloaded');
+                } else {
+                    showMessage(result.error || '删除失败', 'error');
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                showMessage('删除出错，请检查网络连接。', 'error');
+            }
+        }
+
+        // Load records when date changes
+        document.getElementById('recordDate').addEventListener('change', loadDailyRecords);
+
+        function checkLoginStatus() {
+            fetch('/api/check_login')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.logged_in) {
+                        const userDisp = document.getElementById('usernameDisplay');
+                        if (userDisp) userDisp.textContent = data.username;
+                    } else {
+                        window.location.href = '/login';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking login status:', error);
+                    window.location.href = '/login';
+                });
+        }
+
+        // Initialize page
+        // --- Pending Shipments Logic ---
+
+        async function loadPendingRecords() {
+            const date = document.getElementById('recordDate').value;
+            if (!date) return;
+
+            try {
+                const response = await fetch(`/api/outbound/pending?date=${date}`);
+                const data = await response.json();
+                displayPendingRecords(data.records || []);
+            } catch (error) {
+                console.error('Error loading pending records:', error);
+            }
+        }
+
+        function displayPendingRecords(records) {
+            const tableBody = document.getElementById('pendingTableBody');
+            tableBody.innerHTML = '';
+
+            if (records.length === 0) {
+                // Adjust colspan to 3
+                tableBody.innerHTML = `<tr><td colspan="3" style="text-align: center;">${translations[currentLang].no_data}</td></tr>`;
+                return;
+            }
+
+            records.forEach(record => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${record.route_code}</td>
+                    <td>${record.quantity}</td>
+                    <td>
+                        <button class="btn-danger" onclick="deletePendingRecord('${record.route_code}')">${translations[currentLang].delete || '删除'}</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        async function savePendingRecord() {
+            // Check login status first (or rely on 401 response)
+            // But let's check input first
+
+            const date = document.getElementById('recordDate').value;
+            const routeCode = document.getElementById('pendingRouteCode').value;
+            const quantity = parseInt(document.getElementById('pendingQuantity').value);
+
+            console.log("Saving Pending:", { date, routeCode, quantity }); // Debug log
+
+            if (!date) {
+                showMessage(translations[currentLang].please_select_date, 'error');
+                return;
+            }
+
+            if (!routeCode) {
+                showMessage(translations[currentLang].please_select_route || "请选择流向", 'error');
+                return;
+            }
+
+            if (isNaN(quantity) || quantity < 1) {
+                showMessage(translations[currentLang].please_enter_count || "请输入数量", 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/outbound/pending/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        date: date,
+                        route_code: routeCode,
+                        quantity: quantity
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showMessage(translations[currentLang].save_success, 'success');
+                    // Clear form but keep date
+                    document.getElementById('pendingRouteCode').value = "";
+                    document.getElementById('pendingQuantity').value = 1;
+                    loadPendingRecords();
+                } else {
+                    console.error("Save Pending Failed:", result);
+                    showMessage(result.error || translations[currentLang].save_error, 'error');
+
+                    if (response.status === 401) {
+                        // Redirect to login if unauthorized
+                        window.location.href = '/login';
+                    }
+                }
+            } catch (error) {
+                console.error('Error saving pending record:', error);
+                showMessage(translations[currentLang].save_error + ": " + error.message, 'error');
+            }
+        }
+
+        async function deletePendingRecord(routeCode) {
+            const date = document.getElementById('recordDate').value;
+            if (!confirm(translations[currentLang].confirm_delete || "确定要删除该目的地的所有待发货记录吗？")) return;
+
+            try {
+                const response = await fetch('/api/outbound/pending/delete', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        route_code: routeCode,
+                        date: date
+                    })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showMessage(translations[currentLang].delete_success || "Deleted successfully", 'success');
+                    loadPendingRecords();
+                } else {
+                    showMessage(result.error || "Delete failed", 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting pending record:', error);
+                showMessage("Delete failed", 'error');
+            }
+        }
+
+        function initPendingRoutes() {
+            const select = document.getElementById('pendingRouteCode');
+            select.innerHTML = '<option value="">-- 请选择 --</option>';
+
+            // Combine trunk and branch routes
+            // Check if routes is defined
+            if (typeof routes === 'undefined') {
+                console.warn('Routes not defined, using fallback');
+                // prompt fallback or just use empty
+                var routes = {
+                    trunk: ['IAH', 'MCO', 'ORD', 'ATL', 'DFW', 'EWR', 'MIA', 'CLT', 'JFK', 'LAX', 'DEN', 'SFO'],
+                    branch: []
+                };
+            }
+
+            const allRoutes = [...(routes.trunk || []), ...(routes.branch || [])].sort();
+            allRoutes.forEach(route => {
+                const option = document.createElement('option');
+                option.value = route;
+                option.textContent = route;
+                select.appendChild(option);
+            });
+        }
+
+        // --- Restored/Added Functions ---
+
+        window.freightRates = {}; // Ensure global access
+
+        async function loadFreights() {
+            try {
+                const response = await fetch('/api/freight-rates'); // Match actual backend route (hyphen not underscore)
+                if (response.ok) {
+                    const data = await response.json();
+                    // Backend returns {route_code: rate} dict, support both formats
+                    if (data && typeof data === 'object' && !Array.isArray(data)) {
+                        window.freightRates = data;
+                    } else if (Array.isArray(data)) {
+                        data.forEach(rate => {
+                            window.freightRates[rate.route_code] = rate.rate;
+                        });
+                    }
+                }
+            } catch (error) {
+                console.warn('Error loading freight rates:', error);
+            }
+        }
+
+        let routeChart = null;
+
+        async function updateRouteChart() {
+            const canvas = document.getElementById('routeChart');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+
+            // Last 14 calendar days (2 weeks), match API record_date
+            const today = new Date();
+            const dates = [];
+            for (let i = 13; i >= 0; i--) {
+                const d = new Date(today);
+                d.setDate(today.getDate() - i);
+                dates.push(formatLocalDateISO(d));
+            }
+
+            // Fetch 2-week window from API
+            let allRecords = [];
+            try {
+                const url = `/api/outbound/records?start_date=${dates[0]}&end_date=${dates[dates.length - 1]}`;
+                const response = await fetch(url);
+                if (response.ok) {
+                    const payload = await response.json();
+                    allRecords = Array.isArray(payload) ? payload : [];
+                    if (!Array.isArray(payload)) {
+                        console.error('Route chart: expected JSON array from /api/outbound/records, got:', payload);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load 2-week route data:', err);
+            }
+
+            // Collect all unique route codes (Normalized)
+            const routeSet = new Set();
+            allRecords.forEach(r => routeSet.add(normalizeRoute(r.route_code)));
+            const routeCodes = Array.from(routeSet).sort();
+
+            // Build matrix: for each date, for each route, count trips (1 per row)
+            const dateRouteMap = {};
+            dates.forEach(d => {
+                dateRouteMap[d] = {};
+                routeCodes.forEach(rc => dateRouteMap[d][rc] = 0);
+            });
+
+            allRecords.forEach(r => {
+                const rd = r.record_date;
+                const normRC = normalizeRoute(r.route_code);
+                if (dateRouteMap[rd] && routeCodes.includes(normRC)) {
+                    dateRouteMap[rd][normRC] += 1;
+                }
+            });
+
+            // Colors for routes
+            const colors = [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                '#FF9F40', '#71B37C', '#C0392B', '#8E44AD', '#2ECC71',
+                '#F1C40F', '#E67E22', '#1ABC9C', '#3498DB', '#E74C3C'
+            ];
+
+            // Build datasets: one per route code, stacked
+            const datasets = routeCodes.map((rc, i) => ({
+                label: rc,
+                data: dates.map(d => dateRouteMap[d][rc]),
+                backgroundColor: colors[i % colors.length],
+                borderColor: colors[i % colors.length],
+                borderWidth: 1
+            }));
+
+            // Format date labels as shorter format (MM/DD or weekday)
+            const weekdayNames = { zh: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], es: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'] };
+            const displayLabels = dates.map(d => {
+                const dt = new Date(d + 'T12:00:00');
+                const wd = (weekdayNames[currentLang] || weekdayNames.en)[dt.getDay()];
+                return `${d.substring(5)} (${wd})`;
+            });
+
+            if (routeChart) {
+                routeChart.destroy();
+            }
+
+            // Custom plugin to draw total on top of stacked bars
+            const stackedTotalPlugin = {
+                id: 'stackedTotal',
+                afterDatasetsDraw(chart) {
+                    const { ctx: c, data, scales: { x, y } } = chart;
+                    const numBars = data.labels.length;
+                    for (let i = 0; i < numBars; i++) {
+                        let total = 0;
+                        data.datasets.forEach(ds => { total += (ds.data[i] || 0); });
+                        if (total <= 0) continue;
+                        const xPos = x.getPixelForValue(i);
+                        const yPos = y.getPixelForValue(total);
+                        c.save();
+                        c.font = 'bold 13px Arial';
+                        c.fillStyle = chart.options?.plugins?.title?.color || '#333';
+                        c.textAlign = 'center';
+                        c.textBaseline = 'bottom';
+                        c.fillText(total, xPos, yPos - 4);
+                        c.restore();
+                    }
+                }
+            };
+
+            routeChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: displayLabels,
+                    datasets: datasets
+                },
+                plugins: [stackedTotalPlugin],
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    // 悬停整根堆叠柱时，tooltip 展示该日所有流向（图例）对应数值
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    layout: {
+                        padding: {
+                            top: 30
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        title: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            // 含 0 的流向也列出，与图例一一对应
+                            filter: function () { return true; },
+                            itemSort: function (a, b) {
+                                return (b.parsed.y || 0) - (a.parsed.y || 0);
+                            },
+                            callbacks: {
+                                footer: function (tooltipItems) {
+                                    if (!tooltipItems.length) return '';
+                                    let sum = 0;
+                                    tooltipItems.forEach(function (ti) {
+                                        sum += ti.parsed.y || 0;
+                                    });
+                                    return '合计: ' + sum;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: function (context) {
+                                return context.dataset.data[context.dataIndex] > 0;
+                            },
+                            color: '#fff',
+                            font: { size: 11, weight: 'bold' },
+                            formatter: (value) => value > 0 ? value : ''
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: translations[currentLang].vehicle_count || '发车数量'
+                            },
+                            ticks: {
+                                stepSize: 1,
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        let weeklyChart = null;
+        let weeklyChartMode = 'cost'; // 'count' or 'cost'
+        let currentWeeklyData = []; // Store weekly data separately
+
+        // Initialize chart toggles
+        const btnWeeklyCount = document.getElementById('btnWeeklyCount');
+        if (btnWeeklyCount) {
+            btnWeeklyCount.addEventListener('click', function () {
+                setWeeklyChartMode('count');
+            });
+        }
+
+        const btnWeeklyCost = document.getElementById('btnWeeklyCost');
+        if (btnWeeklyCost) {
+            btnWeeklyCost.addEventListener('click', function () {
+                setWeeklyChartMode('cost');
+            });
+        }
+
+        function setWeeklyChartMode(mode) {
+            weeklyChartMode = mode;
+            // Update buttons
+            if (mode === 'count') {
+                if (btnWeeklyCount) {
+                    btnWeeklyCount.classList.add('active', 'btn-primary');
+                    btnWeeklyCount.classList.remove('btn-outline-primary');
+                }
+                if (btnWeeklyCost) {
+                    btnWeeklyCost.classList.remove('active', 'btn-primary');
+                    btnWeeklyCost.classList.add('btn-outline-primary');
+                }
+            } else {
+                if (btnWeeklyCount) {
+                    btnWeeklyCount.classList.remove('active', 'btn-primary');
+                    btnWeeklyCount.classList.add('btn-outline-primary');
+                }
+                if (btnWeeklyCost) {
+                    btnWeeklyCost.classList.add('active', 'btn-primary');
+                    btnWeeklyCost.classList.remove('btn-outline-primary');
+                }
+            }
+            // Re-render chart if data exists
+            if (currentWeeklyData && currentWeeklyData.length > 0) {
+                updateWeeklyChart(currentWeeklyData);
+            }
+        }
+
+        // Local calendar YYYY-MM-DD (avoid UTC shift from toISOString on boundaries)
+        function formatLocalDateISO(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        // Load data for the Weekly Trend chart (Last 12 weeks)
+        async function loadWeeklyData() {
+            try {
+                // Calculate date range: Today back to 12 weeks ago
+                const end = new Date();
+                const start = new Date();
+                start.setDate(end.getDate() - 84); // 12 * 7 = 84 days
+
+                const endDateStr = formatLocalDateISO(end);
+                const startDateStr = formatLocalDateISO(start);
+
+                const url = `/api/outbound/records?start_date=${startDateStr}&end_date=${endDateStr}`;
+                console.log(`Fetching weekly data: ${url}`);
+
+                const response = await fetch(url);
+                if (response.ok) {
+                    const payload = await response.json();
+                    if (!Array.isArray(payload)) {
+                        console.error('Weekly trend: expected JSON array from /api/outbound/records, got:', payload);
+                        return;
+                    }
+                    console.log(`Loaded ${payload.length} weekly records`);
+                    currentWeeklyData = payload;
+                    updateWeeklyChart(payload);
+                } else {
+                    console.error('Failed to load weekly data');
+                }
+            } catch (error) {
+                console.error('Error loading weekly data:', error);
+            }
+        }
+
+        function updateWeeklyChart(data) {
+            const canvas = document.getElementById('weeklyChart');
+            if (!canvas) return;
+            if (!Array.isArray(data)) {
+                console.error('updateWeeklyChart: expected array');
+                return;
+            }
+            const ctx = canvas.getContext('2d');
+
+            // Normalize API date to YYYY-MM-DD (handles ISO with "T" and timestamps)
+            function normalizeRecordDate(val) {
+                if (val == null || val === '') return '';
+                let s = String(val).trim();
+                if (s.includes('T')) s = s.split('T')[0];
+                if (s.includes(' ')) s = s.split(' ')[0];
+                return s.length >= 10 ? s.substring(0, 10) : s;
+            }
+
+            // Helper to get Week Start Date (Monday)
+            // Use UTC to avoid timezone shifts affecting the "date" part
+            function getMonday(dateString) {
+                if (!dateString) return 'Unknown';
+                const normalized = normalizeRecordDate(dateString);
+                const parts = normalized.split('-');
+                if (parts.length !== 3) return normalized || 'Unknown';
+
+                const dayNum = parseInt(parts[2], 10);
+                const monthNum = parseInt(parts[1], 10);
+                const yearNum = parseInt(parts[0], 10);
+                if (isNaN(yearNum) || isNaN(monthNum) || isNaN(dayNum)) return 'Unknown';
+
+                const d = new Date(Date.UTC(yearNum, monthNum - 1, dayNum));
+                const day = d.getUTCDay();
+                const diff = d.getUTCDate() - day + (day == 0 ? -6 : 1);
+                d.setUTCDate(diff);
+                return d.toISOString().split('T')[0];
+            }
+
+            // Group by Week -> Route
+            const weeks = {};
+            const allRoutes = new Set();
+
+            data.forEach(record => {
+                const weekStart = getMonday(record.record_date);
+                const normRC = normalizeRoute(record.route_code);
+                if (!weeks[weekStart]) weeks[weekStart] = {};
+                if (!weeks[weekStart][normRC]) {
+                    weeks[weekStart][normRC] = { count: 0, cost: 0 };
+                }
+                weeks[weekStart][normRC].count += 1;
+                weeks[weekStart][normRC].cost += (parseFloat(record.cost) || 0);
+                allRoutes.add(normRC);
+            });
+
+            // Sort weeks
+            const sortedWeeks = Object.keys(weeks).sort();
+            const routeList = Array.from(allRoutes).sort();
+
+
+            // Colors
+            const routeColors = {
+                'IAH': '#FF6384', 'MCO': '#36A2EB', 'ORD': '#FFCE56',
+                'ATL': '#4BC0C0', 'DFW': '#9966FF', 'EWR': '#FF9F40',
+                'MIA': '#E7E9ED', 'CLT': '#71B37C', 'JFK': '#C0392B',
+                'LAX': '#8E44AD', 'DEN': '#2ECC71', 'SFO': '#F39C12'
+            };
+            function getColor(route) {
+                if (routeColors[route]) return routeColors[route];
+                const hash = route.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+                return `hsl(${hash % 360}, 70%, 50%)`;
+            }
+
+            const datasets = routeList.map(route => {
+                return {
+                    label: route,
+                    data: sortedWeeks.map(week => {
+                        return weeks[week][route] ? weeks[week][route][weeklyChartMode] : 0;
+                    }),
+                    backgroundColor: getColor(route),
+                    stack: 'Stack 0',
+                };
+            });
+
+            if (weeklyChart) {
+                weeklyChart.destroy();
+                weeklyChart = null;
+            }
+
+            // Custom plugin to draw totals on top of stacked bars
+            const stackTotalPlugin = {
+                id: 'stackTotal',
+                afterDatasetsDraw: (chart, args, options) => {
+                    const ctx = chart.ctx;
+                    chart.data.labels.forEach((label, index) => {
+                        let total = 0;
+                        chart.data.datasets.forEach(dataset => {
+                            total += dataset.data[index] || 0;
+                        });
+
+                        if (chart.data.datasets.length === 0) return;
+                        const meta = chart.getDatasetMeta(chart.data.datasets.length - 1);
+                        if (!meta || !meta.data) return;
+                        const model = meta.data[index];
+                        if (model) {
+                            ctx.save();
+                            ctx.font = 'bold 12px Arial';
+                            ctx.fillStyle = '#333';
+                            ctx.textAlign = 'center';
+
+                            // Format total
+                            let text = '';
+                            if (weeklyChartMode === 'cost') {
+                                // Shorten large numbers if needed or just simple currency
+                                text = '$' + Math.round(total).toLocaleString();
+                            } else {
+                                text = total;
+                            }
+
+                            // Position on top of the stack
+                            // We need to find the top-most visible element
+                            let topY = model.y;
+                            // Check all datasets for this index to find the minimum y (highest visual point)
+                            // Actually, with stacked, the last dataset is usually on top if positive? 
+                            // But better to just aggregate values.
+                            // Chart.js stacks accumulate. content.parsed.y is value, .y is pixel.
+
+                            // A safer way for "stacked" is to rely on values, but pixel calculation:
+                            // The "y" of the last dataset element is acceptable for standard stacked bars.
+                            // Let's adjust slightly up.
+                            ctx.fillText(text, model.x, topY - 5);
+                            ctx.restore();
+                        }
+                    });
+                }
+            };
+
+            weeklyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedWeeks,
+                    datasets: datasets
+                },
+                plugins: [stackTotalPlugin], // Register local plugin
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: {
+                            display: true,
+                            text: weeklyChartMode === 'count' ? translations[currentLang].vehicle_count : translations[currentLang].cost
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) {
+                                        if (weeklyChartMode === 'cost') {
+                                            label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                                        } else {
+                                            label += context.parsed.y;
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: false // Disable default datalabels for bars to avoid clutter
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Initialization is handled by the first DOMContentLoaded listener
+    </script>
+</body>
+
+</html>

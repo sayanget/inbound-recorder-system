@@ -1,0 +1,57 @@
+---
+description: Global Quota Conservation (minimize tokens, keep quality)
+alwaysApply: true
+---
+
+# Global Quota Conservation Rule (Applies to ALL Models & ALL Projects)
+
+## Core Principle
+Minimize token consumption while maintaining code quality.
+
+## File Operations
+- View outline first: use `view_file_outline` before `view_file` for code files (when available).
+- Targeted reads: specify `StartLine`/`EndLine` (or equivalent) to read only relevant sections.
+- No re-reads: do not view files already seen in the conversation/session unless explicitly required.
+- Code items: use `view_code_item` for specific functions/classes when available.
+
+## Command Execution
+- Auto-run safe commands: set `SafeToAutoRun=true` for read-only operations (e.g., `ls`, `grep`, `cat`), when the tool supports it.
+- Batch operations: combine related commands into a single operation/script when possible.
+- Limit output: use output limits/filters (e.g., `head -n 20`, `tail -n 50`, grep filters).
+- Appropriate waits: set `WaitDurationSeconds` correctly; avoid aggressive polling.
+
+## Search & Discovery
+- Precise patterns: use specific globs with depth/pattern limits and appropriate excludes.
+- Grep before view: search file contents before reading entire files.
+- Case sensitivity: use `CaseInsensitive=false` for exact matches.
+
+## Tool Call Optimization
+- Parallel by default: run independent tool calls in parallel when supported.
+- Sequential only when needed: enforce sequencing when dependencies exist.
+- Batch file operations: move/copy multiple files in one command/script when possible.
+
+## Workspace Hygiene
+- Root directory target: keep fewer than 150 files in the project root (favor subfolders).
+- Archive regularly: move test/debug/backup scripts into `archive/` (or an equivalent folder).
+- Backup retention: keep only the last 7 days of database backups in the root.
+- Compress archives: use `zip` for infrequently accessed files.
+
+## Artifact Management
+- Concise content: keep `task.md` / `implementation_plan.md` brief.
+- Update, don't recreate: edit existing artifacts instead of creating new versions.
+- Minimal metadata: avoid verbose summaries and repeated headers.
+
+## Communication
+- No filler: zero conversational pleasantries.
+- Code-first: show code blocks directly when relevant.
+- Bullet points: use lists instead of paragraphs when output is inherently list-shaped.
+- Batch questions: ask all clarifications in one message.
+
+## Anti-Patterns
+- Do not read entire large files when only a section is needed.
+- Do not view the same file multiple times.
+- Do not run commands synchronously when parallel is safe.
+- Do not search without depth/pattern limits.
+- Do not keep 200+ test scripts in the workspace.
+- Do not store all historical backups in the root.
+

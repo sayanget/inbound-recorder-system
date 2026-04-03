@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="sorting_entry_title">分拣数据录入</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/nav_component.js"></script>
+    <style>
+        /* :root variables moved to theme.css */
+
+
+        /* User info and language selector responsive adjustments */
+        header {
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+
+        /* User info display */
+        .user-info {
+            position: absolute;
+            top: 15px;
+            right: 120px;
+            z-index: 1000;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-info button {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .user-info button:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--body-bg);
+            color: var(--text-color);
+            line-height: 1.6;
+            font-size: var(--font-size-base);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: var(--card-shadow);
+            position: relative;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin-bottom: 1.25rem;
+            line-height: 1.2;
+        }
+
+        h1 {
+            font-size: var(--font-size-xl);
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: -0.02em;
+        }
+
+        h3 {
+            font-size: var(--font-size-lg);
+            font-weight: 700;
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .nav-buttons {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                width: 100%;
+            }
+
+            .btn {
+                padding: 12px 8px;
+                font-size: 0.85rem;
+                text-align: center;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 5px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: var(--transition);
+            box-shadow: var(--card-shadow);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .btn-info {
+            background-color: var(--info-color);
+        }
+
+        .btn-warning {
+            background-color: var(--warning-color);
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: var(--card-shadow);
+        }
+
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-col {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 16px;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border-radius: 5px;
+            font-size: 16px;
+            transition: var(--transition);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .btn-submit {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-reset {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            text-align: left;
+            color: var(--text-color);
+        }
+
+        th {
+            background-color: var(--table-header-bg);
+        }
+
+        tr:nth-child(even) {
+            background-color: var(--table-stripe);
+        }
+
+        /* Message styles moved to theme.css */
+
+        .action-cell {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .edit-btn,
+        .delete-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        .edit-btn {
+            background-color: var(--info-color);
+            color: white;
+        }
+
+        .delete-btn {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        /* Responsive layout updates */
+        @media (max-width: 768px) {
+            .container {
+                padding: 12px;
+            }
+
+            .card {
+                padding: 1.25rem;
+            }
+
+            .form-row {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .form-col {
+                min-width: 100%;
+            }
+
+            th,
+            td {
+                padding: 12px 8px;
+                font-size: 0.85rem;
+            }
+
+            .action-buttons {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .action-btn {
+                width: 100%;
+                padding: 14px;
+            }
+        }
+
+        @media (max-width: 480px) {
+
+            input,
+            select,
+            textarea {
+                font-size: 0.95rem;
+                padding: 10px;
+            }
+
+            .action-cell {
+                flex-direction: column;
+                gap: 5px;
+            }
+        }
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            margin: 10% auto;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            width: 90%;
+            max-width: 500px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            color: white;
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .close-modal {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .close-modal:hover {
+            color: white;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+
+        .modal-footer button {
+            padding: 10px 20px;
+        }
+
+        .modal-body .form-group {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+        <div id="nav-container"></div>
+
+        <!-- Entry form -->
+        <div class="card">
+            <h2><i class="fas fa-plus-circle"></i> <span data-lang="add_sorting_record">新增分拣记录</span></h2>
+            <form id="sortingForm">
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="sorting_time" data-lang="sorting_date">分拣日期:</label>
+                            <input type="date" id="sorting_time" name="sorting_time" required>
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="time_slot" data-lang="time_slot">时间段:</label>
+                            <input type="text" id="time_slot" name="time_slot" placeholder="例如: 上午/下午/具体时间" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="pieces" data-lang="sorting_pieces">分拣总件数:</label>
+                    <input type="number" id="pieces" name="pieces" required min="1">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="manual_count" data-lang="manual_collection">人工集包:</label>
+                            <input type="number" id="manual_count" name="manual_count" min="0">
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="device_count" data-lang="device_collection">设备集包:</label>
+                            <input type="number" id="device_count" name="device_count" min="0">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="remark" data-lang="remarks">备注:</label>
+                    <textarea id="remark" name="remark" rows="3" placeholder="请输入备注信息..."></textarea>
+                </div>
+
+                <div class="action-buttons">
+                    <button type="submit" class="action-btn btn-submit">
+                        <i class="fas fa-save"></i> <span data-lang="submit_record">提交记录</span>
+                    </button>
+                    <button type="reset" class="action-btn btn-reset">
+                        <i class="fas fa-undo"></i> <span data-lang="reset">重置</span>
+                    </button>
+                    <button type="button" id="syncGofoBtn" class="action-btn btn-info" style="background-color: #fd7e14;">
+                        <i class="fas fa-sync"></i> <span data-lang="sync_from_gofo">从 GOFO 同步</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="message"></div>
+
+        <!-- GOFO 同步历史（表 gofo_sync_history） -->
+        <div class="card">
+            <h2><i class="fas fa-database"></i> <span data-lang="gofo_sync_history_title">GOFO 同步记录</span></h2>
+            <p style="opacity: 0.85; font-size: 0.95rem; margin-bottom: 1rem;" data-lang="gofo_sync_history_hint">以下为从 GOFO 同步写入数据库的历史记录。</p>
+            <div class="form-row">
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="gofoStartDate" data-lang="gofo_start_date">开始日期</label>
+                        <input type="date" id="gofoStartDate">
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="gofoEndDate" data-lang="gofo_end_date">结束日期</label>
+                        <input type="date" id="gofoEndDate">
+                    </div>
+                </div>
+                <div class="form-col">
+                    <div class="form-group">
+                        <label for="gofoSyncTypeFilter" data-lang="gofo_sync_type_filter">同步类型</label>
+                        <select id="gofoSyncTypeFilter">
+                            <option value="" data-lang="gofo_type_all">全部</option>
+                            <option value="auto" data-lang="gofo_type_auto">自动</option>
+                            <option value="manual" data-lang="gofo_type_manual">手动</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="action-buttons" style="margin-top: 0;">
+                <button type="button" id="queryGofoHistoryBtn" class="action-btn btn-submit">
+                    <i class="fas fa-search"></i> <span data-lang="gofo_query">查询</span>
+                </button>
+                <button type="button" id="gofoLast7DaysBtn" class="action-btn btn-secondary">
+                    <i class="fas fa-calendar-week"></i> <span data-lang="gofo_last_7_days">最近7天</span>
+                </button>
+            </div>
+            <div class="table-container">
+                <div id="gofoSyncHistoryList"></div>
+            </div>
+        </div>
+
+        <!-- Records list -->
+        <div class="card records-section">
+            <h2 style="margin-bottom: 1rem;"><i class="fas fa-list"></i> <span data-lang="sorting_records">分拣记录</span></h2>
+            <div class="action-buttons">
+                <button id="loadRecords" class="btn btn-info">
+                    <i class="fas fa-sync-alt"></i> <span data-lang="refresh_records">刷新记录</span>
+                </button>
+                <button id="exportRecordsBtn" class="btn btn-success" style="background-color: #28a745;">
+                    <i class="fas fa-file-excel"></i> <span data-lang="export_records">导出表格</span>
+                </button>
+            </div>
+            <div class="table-container">
+                <div id="recordsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Record Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 data-lang="edit_record">编辑分拣记录</h2>
+                <span class="close-modal" onclick="closeEditModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit_record_id">
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="edit_sorting_time" data-lang="sorting_time">分拣时间</label>
+                            <input type="date" id="edit_sorting_time" required>
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="edit_time_slot" data-lang="time_slot">时间段</label>
+                            <select id="edit_time_slot">
+                                <option value="00:00">00:00</option><option value="01:00">01:00</option>
+                                <option value="02:00">02:00</option><option value="03:00">03:00</option>
+                                <option value="04:00">04:00</option><option value="05:00">05:00</option>
+                                <option value="06:00">06:00</option><option value="07:00">07:00</option>
+                                <option value="08:00">08:00</option><option value="09:00">09:00</option>
+                                <option value="10:00">10:00</option><option value="11:00">11:00</option>
+                                <option value="12:00">12:00</option><option value="13:00">13:00</option>
+                                <option value="14:00">14:00</option><option value="15:00">15:00</option>
+                                <option value="16:00">16:00</option><option value="17:00">17:00</option>
+                                <option value="18:00">18:00</option><option value="19:00">19:00</option>
+                                <option value="20:00">20:00</option><option value="21:00">21:00</option>
+                                <option value="22:00">22:00</option><option value="23:00">23:00</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="edit_pieces" data-lang="sorting_pieces">分拣总件数</label>
+                    <input type="number" id="edit_pieces" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="edit_manual_count" data-lang="manual_collection">人工集包</label>
+                            <input type="number" id="edit_manual_count" min="0">
+                        </div>
+                    </div>
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="edit_device_count" data-lang="device_collection">设备集包</label>
+                            <input type="number" id="edit_device_count" min="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="edit_remark" data-lang="remarks">备注</label>
+                    <textarea id="edit_remark" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeEditModal()" data-lang="cancel">取消</button>
+                <button type="button" class="btn" onclick="saveRecordEdit()" data-lang="save">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Language translations
+        const translations = {
+            zh: {
+                sorting_entry_title: "分拣数据录入",
+                sorting_entry: "分拣数据录入",
+                home: "首页",
+                statistics_data: "统计数据",
+                history_query: "历史查询",
+                capacity_planning: "产能计划看板",
+                add_sorting_record: "新增分拣记录",
+                sorting_date: "分拣日期:",
+                sorting_pieces: "分拣件数:",
+                time_slot: "时间段:",
+                remarks: "备注:",
+                submit_record: "提交记录",
+                reset: "重置",
+                sorting_records: "分拣记录",
+                refresh_records: "刷新记录",
+                no_sorting_records: "暂无分拣记录",
+                id: "ID",
+                sorting_time: "分拣时间",
+                sorting_pieces_short: "分拣件数",
+                time_slot_short: "时间段",
+                remarks_short: "备注",
+                created_at: "创建时间",
+                actions: "操作",
+                edit: "编辑",
+                delete: "删除",
+                confirm_delete: "确定要删除这条分拣记录吗？",
+                submit_success: "分拣记录提交成功！",
+                submit_failed: "提交失败：",
+                unknown_error: "未知错误",
+                submit_error: "提交出错，请检查网络连接。",
+                load_error: "加载记录出错，请检查网络连接。",
+                delete_success: "记录删除成功！",
+                delete_failed: "删除失败：",
+                delete_error: "删除出错，请检查网络连接。",
+                logout: "登出",
+                sync_from_gofo: "从 GOFO 同步",
+                sync_success: "GOFO 数据同步成功！",
+                sync_failed: "同步失败：",
+                manual_collection: "人工集包",
+                device_collection: "设备集包",
+                export_records: "导出表格",
+                gofo_sync_history_title: "GOFO 同步记录",
+                gofo_sync_history_hint: "以下为从 GOFO 同步写入数据库的历史（表 gofo_sync_history）。",
+                gofo_start_date: "开始日期",
+                gofo_end_date: "结束日期",
+                gofo_sync_type_filter: "同步类型",
+                gofo_type_all: "全部",
+                gofo_type_auto: "自动",
+                gofo_type_manual: "手动",
+                gofo_query: "查询",
+                gofo_last_7_days: "最近7天",
+                gofo_sync_time: "同步时间",
+                gofo_sync_type: "类型",
+                gofo_status: "状态",
+                gofo_synced_count: "同步条数",
+                gofo_last_hour: "对应时段",
+                gofo_last_pieces: "小时件数",
+                gofo_message: "说明",
+                gofo_load_error: "加载 GOFO 同步记录失败",
+                no_gofo_sync: "暂无同步记录"
+            },
+            en: {
+                sorting_entry_title: "Sorting Data Entry",
+                sorting_entry: "Sorting Data Entry",
+                home: "Home",
+                statistics_data: "Statistics Data",
+                history_query: "History Query",
+                capacity_planning: "Capacity Planning",
+                add_sorting_record: "Add Sorting Record",
+                sorting_date: "Sorting Date:",
+                sorting_pieces: "Sorting Pieces:",
+                time_slot: "Time Slot:",
+                remarks: "Remarks:",
+                submit_record: "Submit Record",
+                reset: "Reset",
+                sorting_records: "Sorting Records",
+                refresh_records: "Refresh Records",
+                no_sorting_records: "No sorting records",
+                id: "ID",
+                sorting_time: "Sorting Time",
+                sorting_pieces_short: "Pieces",
+                time_slot_short: "Time Slot",
+                remarks_short: "Remarks",
+                created_at: "Created At",
+                actions: "Actions",
+                edit: "Edit",
+                delete: "Delete",
+                confirm_delete: "Are you sure you want to delete this sorting record?",
+                submit_success: "Sorting record submitted successfully!",
+                submit_failed: "Submission failed:",
+                unknown_error: "Unknown error",
+                submit_error: "Error submitting, please check your network connection.",
+                load_error: "Error loading records, please check your network connection.",
+                delete_success: "Record deleted successfully!",
+                delete_failed: "Deletion failed:",
+                delete_error: "Error deleting, please check your network connection.",
+                logout: "Logout",
+                sync_from_gofo: "Sync from GOFO",
+                sync_success: "GOFO Sync Success!",
+                sync_failed: "Sync Failed:",
+                manual_collection: "Manual Collection",
+                device_collection: "Device Collection",
+                export_records: "Export Records",
+                gofo_sync_history_title: "GOFO Sync History",
+                gofo_sync_history_hint: "History from GOFO syncs (table gofo_sync_history).",
+                gofo_start_date: "Start date",
+                gofo_end_date: "End date",
+                gofo_sync_type_filter: "Sync type",
+                gofo_type_all: "All",
+                gofo_type_auto: "Auto",
+                gofo_type_manual: "Manual",
+                gofo_query: "Query",
+                gofo_last_7_days: "Last 7 days",
+                gofo_sync_time: "Sync time",
+                gofo_sync_type: "Type",
+                gofo_status: "Status",
+                gofo_synced_count: "Rows",
+                gofo_last_hour: "Hour slot",
+                gofo_last_pieces: "Pieces",
+                gofo_message: "Message",
+                gofo_load_error: "Failed to load GOFO sync history",
+                no_gofo_sync: "No sync records"
+            },
+            es: {
+                sorting_entry_title: "Entrada de Datos de Clasificación",
+                sorting_entry: "Entrada de Datos de Clasificación",
+                home: "Inicio",
+                statistics_data: "Datos Estadísticos",
+                history_query: "Consulta Histórica",
+                capacity_planning: "Planificación de Capacidad",
+                add_sorting_record: "Agregar Registro de Clasificación",
+                sorting_date: "Fecha de Clasificación:",
+                sorting_pieces: "Piezas Clasificadas:",
+                time_slot: "Franja Horaria:",
+                remarks: "Observaciones:",
+                submit_record: "Enviar Registro",
+                reset: "Restablecer",
+                sorting_records: "Registros de Clasificación",
+                refresh_records: "Actualizar Registros",
+                no_sorting_records: "No hay registros de clasificación",
+                id: "ID",
+                sorting_time: "Tiempo de Clasificación",
+                sorting_pieces_short: "Piezas",
+                time_slot_short: "Franja Horaria",
+                remarks_short: "Observaciones",
+                created_at: "Creado En",
+                actions: "Acciones",
+                edit: "Editar",
+                delete: "Eliminar",
+                confirm_delete: "¿Está seguro de que desea eliminar este registro de clasificación?",
+                submit_success: "¡Registro de clasificación enviado con éxito!",
+                submit_failed: "Error en el envío:",
+                unknown_error: "Error desconocido",
+                submit_error: "Error al enviar, por favor verifique su conexión de red.",
+                load_error: "Error al cargar registros, por favor verifique su conexión de red.",
+                delete_success: "¡Registro eliminado con éxito!",
+                delete_failed: "Error en la eliminación:",
+                delete_error: "Error al eliminar, por favor verifique su conexión de red.",
+                logout: "Cerrar sesión",
+                sync_from_gofo: "Sincronizar de GOFO",
+                sync_success: "¡Sincronización de GOFO con éxito!",
+                sync_failed: "Sincronización fallida:",
+                manual_collection: "Colección Manual",
+                device_collection: "Colección de Dispositivos",
+                export_records: "Exportar Registros",
+                gofo_sync_history_title: "Historial de sincronización GOFO",
+                gofo_sync_history_hint: "Registros de sincronización GOFO (tabla gofo_sync_history).",
+                gofo_start_date: "Fecha inicio",
+                gofo_end_date: "Fecha fin",
+                gofo_sync_type_filter: "Tipo",
+                gofo_type_all: "Todos",
+                gofo_type_auto: "Automático",
+                gofo_type_manual: "Manual",
+                gofo_query: "Consultar",
+                gofo_last_7_days: "Últimos 7 días",
+                gofo_sync_time: "Hora de sync",
+                gofo_sync_type: "Tipo",
+                gofo_status: "Estado",
+                gofo_synced_count: "Filas",
+                gofo_last_hour: "Franja horaria",
+                gofo_last_pieces: "Piezas",
+                gofo_message: "Mensaje",
+                gofo_load_error: "Error al cargar historial GOFO",
+                no_gofo_sync: "Sin registros",
+                edit_record: "Editar Registro de Clasificación",
+                save: "Guardar",
+                cancel: "Cancelar",
+                update_success: "Actualización Exitosa",
+                update_failed: "Actualización Fallida",
+                delete_success: "Eliminación Exitosa",
+                delete_error: "Error de Eliminación"
+            }
+        };
+
+        // Current language
+        let currentLang = 'zh';
+
+        // Set language（顶栏由 nav_component 注入，无 #currentLangText，仅更新 #nav-currentLang）
+        window.setLanguage = function(lang) {
+            currentLang = lang;
+
+            const langTexts = {
+                'zh': '中文',
+                'en': 'English',
+                'es': 'Español'
+            };
+            const currentLangTextEl = document.getElementById('currentLangText');
+            if (currentLangTextEl) currentLangTextEl.textContent = langTexts[lang] || '中文';
+            const navCurrentLang = document.getElementById('nav-currentLang');
+            if (navCurrentLang) navCurrentLang.textContent = (lang || 'zh').toUpperCase();
+
+            document.querySelectorAll('[data-lang]').forEach(element => {
+                const key = element.getAttribute('data-lang');
+                if (translations[lang] && translations[lang][key]) {
+                    if (element.tagName === 'OPTION') {
+                        element.textContent = translations[lang][key];
+                    } else {
+                        element.textContent = translations[lang][key];
+                    }
+                }
+            });
+
+            document.title = (translations[lang] && translations[lang].sorting_entry_title) || '分拣数据录入';
+
+            localStorage.setItem('preferredLanguage', lang);
+            localStorage.setItem('preferred_language', lang);
+        }
+
+        function toggleLanguageDropdown() {
+            const el = document.getElementById('langDropdown');
+            if (el) el.classList.toggle('show');
+        }
+
+        window.onclick = function (event) {
+            if (!event.target.matches('.lang-selected') && !event.target.closest('.lang-dropdown')) {
+                const dropdowns = document.getElementsByClassName('lang-dropdown-content');
+                for (let i = 0; i < dropdowns.length; i++) {
+                    dropdowns[i].classList.remove('show');
+                }
+            }
+            const modal = document.getElementById('editModal');
+            if (modal && event.target === modal) {
+                closeEditModal();
+            }
+        }
+
+        function checkLoginStatus() {
+            fetch('/api/check_login')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.logged_in) {
+                        window.location.href = '/login';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking login status:', error);
+                });
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+                .then(() => { window.location.href = '/login'; })
+                .catch(() => { window.location.href = '/login'; });
+        }
+
+        function formatYmd(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function setGofoDefaultDateRange(daysBack) {
+            const end = new Date();
+            const start = new Date();
+            start.setDate(end.getDate() - (daysBack || 7));
+            const ge = document.getElementById('gofoEndDate');
+            const gs = document.getElementById('gofoStartDate');
+            if (ge) ge.value = formatYmd(end);
+            if (gs) gs.value = formatYmd(start);
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
+        function renderGofoSyncHistoryTable(rows) {
+            const box = document.getElementById('gofoSyncHistoryList');
+            if (!box) return;
+            const t = translations[currentLang];
+            if (!rows || rows.length === 0) {
+                box.innerHTML = `<p style="text-align:center;color:#666;">${t.no_gofo_sync || '暂无同步记录'}</p>`;
+                return;
+            }
+            let html = `<table><thead><tr>
+                <th>${t.id || 'ID'}</th>
+                <th>${t.gofo_sync_time || '同步时间'}</th>
+                <th>${t.gofo_sync_type || '类型'}</th>
+                <th>${t.gofo_status || '状态'}</th>
+                <th>${t.gofo_synced_count || '同步条数'}</th>
+                <th>${t.gofo_last_hour || '对应时段'}</th>
+                <th>${t.gofo_last_pieces || '小时件数'}</th>
+                <th>${t.manual_collection || '人工集包'}</th>
+                <th>${t.device_collection || '设备集包'}</th>
+                <th>${t.gofo_message || '说明'}</th>
+            </tr></thead><tbody>`;
+            rows.forEach(r => {
+                const status = (r.status || '').toLowerCase();
+                const badge = status === 'success' ? 'var(--success-color, #28a745)' : 'var(--danger-color, #dc3545)';
+                html += `<tr>
+                    <td>${r.id}</td>
+                    <td>${escapeHtml(r.sync_time)}</td>
+                    <td>${escapeHtml(r.sync_type)}</td>
+                    <td><span style="color:${badge};font-weight:600;">${escapeHtml(r.status)}</span></td>
+                    <td>${r.synced_count != null ? r.synced_count : ''}</td>
+                    <td>${escapeHtml(r.last_hour)}</td>
+                    <td>${r.last_pieces != null ? r.last_pieces : ''}</td>
+                    <td>${r.manual_count != null ? r.manual_count : ''}</td>
+                    <td>${r.device_count != null ? r.device_count : ''}</td>
+                    <td style="max-width:280px;word-break:break-word;">${escapeHtml(r.message || '')}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            box.innerHTML = html;
+        }
+
+        function loadGofoSyncHistory() {
+            const box = document.getElementById('gofoSyncHistoryList');
+            const startEl = document.getElementById('gofoStartDate');
+            const endEl = document.getElementById('gofoEndDate');
+            const typeEl = document.getElementById('gofoSyncTypeFilter');
+            const start = startEl && startEl.value;
+            const end = endEl && endEl.value;
+            const st = typeEl && typeEl.value;
+            const params = new URLSearchParams();
+            if (start) params.set('start_date', start);
+            if (end) params.set('end_date', end);
+            if (st) params.set('sync_type', st);
+            params.set('limit', '200');
+            if (box) {
+                box.innerHTML = '<p style="text-align:center;color:#666;"><i class="fas fa-spinner fa-spin"></i></p>';
+            }
+
+            fetch('/api/gofo/sync_history?' + params.toString())
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.error) {
+                        showMessage((translations[currentLang].gofo_load_error || '加载失败') + ': ' + data.error, 'error');
+                        if (box) box.innerHTML = '';
+                        return;
+                    }
+                    if (!Array.isArray(data)) {
+                        if (box) box.innerHTML = '';
+                        return;
+                    }
+                    renderGofoSyncHistoryTable(data);
+                })
+                .catch(err => {
+                    console.error(err);
+                    showMessage(translations[currentLang].gofo_load_error || '加载失败', 'error');
+                    if (box) box.innerHTML = '';
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', async function () {
+            const savedLang = localStorage.getItem('preferred_language') || localStorage.getItem('preferredLanguage');
+            if (savedLang && ['zh', 'en', 'es'].includes(savedLang)) {
+                setLanguage(savedLang);
+            }
+
+            const langSelectedEl = document.getElementById('langSelected');
+            if (langSelectedEl) langSelectedEl.addEventListener('click', toggleLanguageDropdown);
+
+            document.querySelectorAll('.lang-option').forEach(option => {
+                option.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const lang = this.getAttribute('data-lang');
+                    setLanguage(lang);
+                    const langDropdownEl = document.getElementById('langDropdown');
+                    if (langDropdownEl) langDropdownEl.classList.remove('show');
+                });
+            });
+
+            const logoutBtnEl = document.getElementById('logoutBtn');
+            if (logoutBtnEl) logoutBtnEl.addEventListener('click', logout);
+
+            checkLoginStatus();
+
+            setGofoDefaultDateRange(7);
+            const qGofo = document.getElementById('queryGofoHistoryBtn');
+            if (qGofo) qGofo.addEventListener('click', loadGofoSyncHistory);
+            const last7 = document.getElementById('gofoLast7DaysBtn');
+            if (last7) last7.addEventListener('click', function () {
+                setGofoDefaultDateRange(7);
+                loadGofoSyncHistory();
+            });
+
+            // Set default date to today (using local time instead of UTC)
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day}`;
+            document.getElementById('sorting_time').value = formattedDate;
+
+            // Bind form submit event
+            document.getElementById('sortingForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                submitSortingRecord();
+            });
+
+            // Bind load records button
+            document.getElementById('loadRecords').addEventListener('click', loadSortingRecords);
+
+            // Bind export records button
+            document.getElementById('exportRecordsBtn').addEventListener('click', exportSortingRecords);
+
+            // Bind sync Gofo button
+            document.getElementById('syncGofoBtn').addEventListener('click', async function () {
+                const btn = this;
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
+
+                try {
+                    const response = await fetch('/api/gofo/sync_hourly', {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+
+                    if (result.success) {
+                        const successMsg = translations[currentLang].sync_success || "GOFO 数据同步成功！";
+                        showMessage(`${successMsg} (${result.synced_hour}: ${result.pieces})`, 'success');
+                        loadSortingRecords();
+                        loadGofoSyncHistory();
+                    } else {
+                        const failMsg = translations[currentLang].sync_failed || "同步失败：";
+                        showMessage(failMsg + (result.error || translations[currentLang].unknown_error), 'error');
+                    }
+                } catch (error) {
+                    console.error('Sync error:', error);
+                    showMessage(translations[currentLang].submit_error, 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            });
+
+            // Check permissions first
+            await checkPermissions();
+
+            // Load initial records
+            loadSortingRecords();
+            loadGofoSyncHistory();
+        });
+
+        // Permission variables
+        let canEdit = false;
+        let canDelete = false;
+
+        // Check permissions
+        async function checkPermissions() {
+            try {
+                const response = await fetch('/api/user_permissions');
+                if (response.ok) {
+                    const permissions = await response.json();
+                    const pagePerms = permissions['sorting'] || { can_view: false, can_edit: false, can_delete: false };
+
+                    canEdit = pagePerms.can_edit;
+                    canDelete = pagePerms.can_delete;
+
+                    // If no edit permission, hide/disable form
+                    if (!canEdit) {
+                        const form = document.getElementById('sortingForm');
+                        if (form) {
+                            // Hide submit button
+                            const submitBtn = form.querySelector('button[type="submit"]');
+                            if (submitBtn) submitBtn.style.display = 'none';
+
+                            // Disable inputs
+                            const inputs = form.querySelectorAll('input, textarea');
+                            inputs.forEach(el => el.disabled = true);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking permissions:', error);
+            }
+        }
+
+        // Submit sorting record
+        function submitSortingRecord() {
+            const formData = new FormData(document.getElementById('sortingForm'));
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+
+            fetch('/api/sorting', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        showMessage(translations[currentLang].submit_success || "分拣记录提交成功！", 'success');
+                        document.getElementById('sortingForm').reset();
+                        // Reset date to today (using local time instead of UTC)
+                        const today = new Date();
+                        const year = today.getFullYear();
+                        const month = String(today.getMonth() + 1).padStart(2, '0');
+                        const day = String(today.getDate()).padStart(2, '0');
+                        const formattedDate = `${year}-${month}-${day}`;
+                        document.getElementById('sorting_time').value = formattedDate;
+                        // Reload records
+                        loadSortingRecords();
+                    } else {
+                        showMessage(translations[currentLang].submit_failed || "提交失败：" + (result.error || translations[currentLang].unknown_error || "未知错误"), 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showMessage(translations[currentLang].submit_error || "提交出错，请检查网络连接。", 'error');
+                });
+        }
+
+        // Export sorting records
+        function exportSortingRecords() {
+            window.location.href = '/api/sorting/export';
+        }
+
+        // Load sorting records
+        function loadSortingRecords() {
+            fetch('/api/sorting?v=' + new Date().getTime())
+                .then(response => response.json())
+                .then(data => {
+                    currentRecords = data; // Store in global variable
+                    updateRecordsTable(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showMessage(translations[currentLang].load_error || "加载记录出错，请检查网络连接。", 'error');
+                });
+        }
+
+        // Update records table
+        function updateRecordsTable(records) {
+            const recordsList = document.getElementById('recordsList');
+
+            if (!records || records.length === 0) {
+                recordsList.innerHTML = `<p style="text-align: center; color: #666;">${translations[currentLang].no_sorting_records || "暂无分拣记录"}</p>`;
+                return;
+            }
+
+            let tableHtml = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${translations[currentLang].id || 'ID'}</th>
+                            <th>${translations[currentLang].sorting_time || '分拣日期'}</th>
+                            <th>${translations[currentLang].time_slot_short || '时间段'}</th>
+                            <th>${translations[currentLang].sorting_pieces_short || '总件数'}</th>
+                            <th>${translations[currentLang].manual_collection || '人工集包'}</th>
+                            <th>${translations[currentLang].device_collection || '设备集包'}</th>
+                            <th>${translations[currentLang].remarks_short || '备注'}</th>
+                            <th>${translations[currentLang].actions || '操作'}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            records.forEach(record => {
+                tableHtml += `
+                    <tr>
+                        <td>${record.id}</td>
+                        <td>${record.sorting_time || ''}</td>
+                        <td>${record.time_slot || ''}</td>
+                        <td><strong style="color: var(--primary-color);">${record.pieces || ''}</strong></td>
+                        <td>${record.manual_count !== null ? record.manual_count : ''}</td>
+                        <td>${record.device_count !== null ? record.device_count : ''}</td>
+                        <td>${record.remark || ''}</td>
+                        <td class="action-cell">
+                            ${canEdit ? `<button class="edit-btn" onclick="editRecord(${record.id})">
+                                <i class="fas fa-edit"></i> ${translations[currentLang].edit || '编辑'}
+                            </button>` : ''}
+                            ${canDelete ? `<button class="delete-btn" onclick="deleteRecord(${record.id})">
+                                <i class="fas fa-trash"></i> ${translations[currentLang].delete || '删除'}
+                            </button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `
+                    </tbody>
+                </table>
+            `;
+
+            recordsList.innerHTML = tableHtml;
+        }
+
+        // Show message
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = 'message ' + type;
+
+            // Clear message after 3 seconds
+            setTimeout(() => {
+                messageDiv.textContent = '';
+                messageDiv.className = '';
+            }, 3000);
+        }
+
+        // Edit record
+        let currentRecords = []; // Store current records globally
+
+        function editRecord(recordId) {
+            const record = currentRecords.find(r => r.id === recordId);
+            if (!record) return;
+
+            document.getElementById('edit_record_id').value = record.id;
+            document.getElementById('edit_sorting_time').value = record.sorting_time;
+            document.getElementById('edit_pieces').value = record.pieces;
+            document.getElementById('edit_manual_count').value = record.manual_count !== null ? record.manual_count : '';
+            document.getElementById('edit_device_count').value = record.device_count !== null ? record.device_count : '';
+            document.getElementById('edit_time_slot').value = record.time_slot;
+            document.getElementById('edit_remark').value = record.remark || '';
+
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function saveRecordEdit() {
+            const recordId = document.getElementById('edit_record_id').value;
+            const data = {
+                sorting_time: document.getElementById('edit_sorting_time').value,
+                pieces: document.getElementById('edit_pieces').value,
+                manual_count: document.getElementById('edit_manual_count').value,
+                device_count: document.getElementById('edit_device_count').value,
+                time_slot: document.getElementById('edit_time_slot').value,
+                remark: document.getElementById('edit_remark').value
+            };
+
+            fetch(`/api/sorting/${recordId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showMessage(translations[currentLang].update_success || "更新成功", 'success');
+                    closeEditModal();
+                    loadSortingRecords();
+                } else {
+                    showMessage(translations[currentLang].update_failed || "更新失败: " + result.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage(translations[currentLang].update_failed || "同步出错", 'error');
+            });
+        }
+
+        // Delete record
+        function deleteRecord(recordId) {
+            if (confirm(translations[currentLang].confirm_delete || "确定要删除这条分拣记录吗？")) {
+                fetch(`/api/sorting/${recordId}`, {
+                    method: 'DELETE'
+                })
+                    .then(response => {
+                        // 检查HTTP状态码
+                        if (response.status === 404) {
+                            return { success: false, error: '记录未找到' };
+                        } else if (!response.ok) {
+                            return { success: false, error: `HTTP错误: ${response.status}` };
+                        }
+                        return response.json();
+                    })
+                    .then(result => {
+                        if (result.success) {
+                            showMessage(translations[currentLang].delete_success || "记录删除成功！", 'success');
+                            // Reload records
+                            loadSortingRecords();
+                        } else {
+                            // 显示具体的错误信息
+                            const errorMessage = result.error || "删除出错，请检查网络连接。";
+                            showMessage(translations[currentLang].delete_failed || errorMessage, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showMessage(translations[currentLang].delete_error || "删除出错，请检查网络连接。", 'error');
+                    });
+            }
+        }
+    </script>
+</body>
+
+</html>
