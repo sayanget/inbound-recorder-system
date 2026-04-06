@@ -2,6 +2,10 @@ import sqlite3
 from flask import Flask, request, jsonify, send_file, send_from_directory, session, redirect, Response, render_template
 import os
 import sys
+import csv
+import io
+import unicodedata
+import re
 
 # Fix Unicode output on Windows
 if sys.platform == 'win32':
@@ -66,6 +70,26 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 app.config['SESSION_KEY_PREFIX'] = 'inbound_app:'
+
+
+@app.before_request
+def _api_cors_preflight():
+    """跨源打开静态页时，POST 上传等会先发 OPTIONS；必须响应否则浏览器报 Failed to fetch。"""
+    if request.method == 'OPTIONS' and request.path.startswith('/api/'):
+        r = Response('', status=204)
+        r.headers['Access-Control-Allow-Origin'] = '*'
+        r.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+        r.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        r.headers['Access-Control-Max-Age'] = '3600'
+        return r
+
+
+@app.after_request
+def _api_cors_headers(response):
+    if request.path.startswith('/api/'):
+        response.headers.setdefault('Access-Control-Allow-Origin', '*')
+    return response
+
 
 # 获取正确的数据库路径
 def get_db_path():
@@ -2369,98 +2393,74 @@ def _apply_plate_exclusion_to_record(data):
     data['excluded_pieces'] = int(ep)
 
 
-@app.route('/api/record', methods=['POST'])
-def record():
-    data = request.json
-    vt = data.get("vehicle_type","")
-    if vt=="16英尺":
-        data["unit"]="托盘"
+def _apply_vehicle_type_defaults(data):
+    vt = data.get("vehicle_type", "")
+    if vt == "16英尺":
+        data["unit"] = "托盘"
         load_amount = data.get("load_amount", 0)
         if not load_amount or load_amount == 0:
             data["load_amount"] = 6
             data["pieces"] = 6 * 344
         else:
             data["pieces"] = int(load_amount) * 344
-    elif vt=="26英尺":
-        data["unit"]="托盘"
-        data["load_amount"]=12
-        data["pieces"]=12*344
-    elif vt=="Car":
-        data["unit"]="篮筐"
-        data["load_amount"]=1
-        data["pieces"]=1*172
-    elif vt=="Van":
-        data["unit"]="篮筐"
-        data["load_amount"]=9
-        data["pieces"]=9*172
-    elif vt=="53英尺":
-        data.setdefault("unit","托盘")
-        # 当车辆类型为53英尺时，如果没有输入装载量，则默认为24托盘
+    elif vt == "26英尺":
+        data["unit"] = "托盘"
+        data["load_amount"] = 12
+        data["pieces"] = 12 * 344
+    elif vt == "Car":
+        data["unit"] = "篮筐"
+        data["load_amount"] = 1
+        data["pieces"] = 1 * 172
+    elif vt == "Van":
+        data["unit"] = "篮筐"
+        data["load_amount"] = 9
+        data["pieces"] = 9 * 172
+    elif vt == "53英尺":
+        data.setdefault("unit", "托盘")
         load_amount = data.get("load_amount", 0)
         if not load_amount or load_amount == 0:
-            # 默认24托盘
             data["load_amount"] = 24
-            data["pieces"] = 24 * 344  # 8256件
+            data["pieces"] = 24 * 344
         elif load_amount > 0:
-            # 用户输入了装载量，自动计算件数
             data["pieces"] = load_amount * 344
-        # 如果已有件数但没有装载量，也可以反向计算装载量
         elif data.get("pieces") and data["pieces"] > 0:
             data["load_amount"] = data["pieces"] // 344
 
-    _apply_plate_exclusion_to_record(data)
 
-    conn=get_db()
-    # 获取当前系统时间
-    current_time = datetime.now()
+def _insert_inbound_record_core(data, current_time, *, broadcast=True):
+    """在已执行车型规则与 plate_exclusion 后写入一条 inbound 记录。current_time 决定 created_at、班次、默认时间段。"""
+    conn = get_db()
     current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
-    
-    # 自动判断班次类型:17点之前是早班,17点之后是晚班
     if current_time.hour < 17:
         shift_type = "早班"
     else:
         shift_type = "晚班"
-    
-    # 自动填充时间段:如果用户没有提供time_slot,则使用系统当前时间的小时部分
     time_slot = data.get("time_slot")
     if not time_slot or time_slot == "" or time_slot is None:
         time_slot = str(current_time.hour)
-    
-    # 修正后的时长计算逻辑:
-    # 当新车到达时,更新同一道口上一台车的时长
-    # 新车的时长为NULL(因为还不知道下一台车什么时候来)
-    # 注意: Car和Van不占用道口,不计算时长
     dock_no = data.get("dock_no")
     vehicle_type = data.get("vehicle_type")
-    
-    # 只有非Car/Van车型才计算道口占用时长
     if dock_no and vehicle_type not in ['Car', 'Van']:
-        # 查询同一道口的最后一条非Car/Van记录
-        cursor = conn.cursor(); cursor.execute("""
+        cursor = conn.cursor()
+        cursor.execute("""
             SELECT id, created_at, vehicle_type FROM inbound_records 
             WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van')
             ORDER BY created_at DESC 
             LIMIT 1
         """, (dock_no,))
         last_record = cursor.fetchone()
-        
         if last_record:
             try:
                 last_id = last_record[0]
                 last_vehicle_type = last_record[2]
-                # 解析上一条记录的时间
                 if isinstance(last_record[1], str):
                     last_time = datetime.strptime(last_record[1], '%Y-%m-%d %H:%M:%S')
                 else:
-                    last_time = last_record[1] # 已经是 datetime 对象
-                # 计算上一台车的占用时长(分钟)
+                    last_time = last_record[1]
                 time_diff_seconds = (current_time - last_time).total_seconds()
                 last_duration = int(time_diff_seconds / 60)
-                # 确保时长不为负数
                 if last_duration < 0:
                     last_duration = 0
-                
-                # 更新上一条记录的时长
                 conn.cursor().execute("""
                     UPDATE inbound_records 
                     SET duration = ? 
@@ -2469,8 +2469,6 @@ def record():
                 print(f"[INFO] 更新记录ID {last_id} ({last_vehicle_type}) 的时长为 {last_duration} 分钟")
             except Exception as e:
                 print(f"计算并更新上一条记录时长时出错: {e}")
-    
-    # 插入新记录,时长为NULL(车刚到,还不知道会占用多久)
     pel_ins = data.get("plate_excluded_load", 0)
     epc_ins = data.get("excluded_pieces", 0)
     try:
@@ -2481,7 +2479,6 @@ def record():
         epc_ins = int(epc_ins) if epc_ins is not None else 0
     except (TypeError, ValueError):
         epc_ins = 0
-
     insert_sql = """INSERT INTO inbound_records
         (dock_no, vehicle_type, vehicle_no, unit, load_amount, pieces, time_slot, shift_type, remark, created_at, duration, plate_excluded_load, excluded_pieces)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)"""
@@ -2512,10 +2509,488 @@ def record():
         new_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    
-    # Broadcast update to all connected SSE clients
-    broadcast_update('refresh_stats', {'action': 'add', 'id': new_id})
-        
+    if broadcast:
+        broadcast_update('refresh_stats', {'action': 'add', 'id': new_id})
+    return new_id
+
+
+INBOUND_IMPORT_VEHICLE_TYPES = frozenset({'16英尺', '26英尺', 'Car', 'Van', '53英尺', '其他'})
+
+
+def _normalize_import_vehicle_type(raw):
+    """
+    将导入中的车型简写规范为系统内车型名。
+    常见：Excel 数字列 26、53 或文本「26」「53」表示 26英尺、53英尺卡车。
+    """
+    if raw is None:
+        return ''
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        try:
+            n = int(round(float(raw)))
+            if n == 16:
+                return '16英尺'
+            if n == 26:
+                return '26英尺'
+            if n == 53:
+                return '53英尺'
+        except (TypeError, ValueError):
+            pass
+    s = str(raw).strip()
+    if not s:
+        return ''
+    if s in INBOUND_IMPORT_VEHICLE_TYPES:
+        return s
+    # 英文大小写、中文俗称（面包车即 Van）
+    slx = s.casefold().replace(' ', '').replace('_', '')
+    if slx == 'van':
+        return 'Van'
+    if slx == 'car':
+        return 'Car'
+    if s in ('面包车', '厢式车'):
+        return 'Van'
+    try:
+        f = float(s.replace(',', ''))
+        if abs(f - round(f)) < 1e-9:
+            n = int(round(f))
+            if n == 16:
+                return '16英尺'
+            if n == 26:
+                return '26英尺'
+            if n == 53:
+                return '53英尺'
+    except (TypeError, ValueError):
+        pass
+    sl = s.casefold().replace(' ', '')
+    for prefix, canon in (('16', '16英尺'), ('26', '26英尺'), ('53', '53英尺')):
+        if sl == prefix + 'ft' or sl == prefix + '-ft' or sl == prefix + 'foot':
+            return canon
+    if s.isdigit():
+        if s == '16':
+            return '16英尺'
+        if s == '26':
+            return '26英尺'
+        if s == '53':
+            return '53英尺'
+    return s
+
+
+# 表头至少包含以下三列；其余列可省略，导入后按车型规则与录入时间自动补全。
+# 内部标准列名（解析后统一为这三项；文件中第三列可写「时间」「時間」等，见别名）
+INBOUND_IMPORT_REQUIRED_HEADERS = ('码头号', '车辆类型', '录入时间')
+# 下载模板用表头（与 Excel 常见写法一致：第三列为「时间」）
+INBOUND_IMPORT_TEMPLATE_HEADERS = ('码头号', '车辆类型', '时间')
+INBOUND_IMPORT_OPTIONAL_HEADERS = (
+    '车牌号', '装载量', '时间段', '备注', '不计入统计装载量', '件数',
+)
+INBOUND_IMPORT_MAX_ROWS = 2000
+
+# 表头别名（Excel 另存、英文列名、少字）：归一化后映射到内部标准列名
+INBOUND_HEADER_ALIASES = {
+    '码头号': (
+        '码头号', 'dock', 'dock_no', 'dockno', '码头编号', 'dock no', 'dock_id', 'dockid',
+        'docknumber', 'dock_number', 'mt', 'mt_no',
+    ),
+    '车辆类型': (
+        '车辆类型', 'vehicle_type', 'vehicletype', 'vehicle type', '车型', '类型', 'type', 'vt',
+        'vtype', 'vehicle', 'cartype', 'car_type',
+    ),
+    '录入时间': (
+        '录入时间', '录入時間', 'entry_time', 'entrytime', 'entry time', '时间', '時間', 'time', '录入时刻', '时刻',
+        '录时间', 'logtime', 'record_time', 'recordtime', 'datetime', 'date_time',
+    ),
+    '车牌号': ('车牌号', '车牌', 'plate', 'license_plate', 'vehicle_no', 'vehicleno'),
+    '装载量': ('装载量', 'load', 'load_amount', '装载', 'amount'),
+    '时间段': ('时间段', 'slot', 'time_slot', '时段'),
+    '备注': ('备注', 'remark', 'note', 'notes', 'memo'),
+    '不计入统计装载量': ('不计入统计装载量', 'plate_excluded', 'excluded_load', '不计入统计', '排除装载'),
+    '件数': ('件数', 'pieces', 'piece', 'pcs', 'qty'),
+}
+
+_INBOUND_HEADER_LOOKUP = None
+
+
+def _strip_invisible_chars(s: str) -> str:
+    """去掉零宽字符等，避免 Excel 复制表头后无法匹配。"""
+    if not s:
+        return ''
+    return re.sub(r'[\u200b-\u200d\ufeff\u2060\u00ad]', '', s)
+
+
+def _normalize_header_token(s):
+    if s is None:
+        return ''
+    t = _strip_invisible_chars(str(s)).strip().lstrip('\ufeff').replace('\u00a0', ' ')
+    t = unicodedata.normalize('NFKC', t)
+    t = t.strip(' "\'').strip()
+    return t
+
+
+def _header_match_key(s):
+    """用于别名匹配：英文忽略大小写与下划线空格。"""
+    t = _normalize_header_token(s)
+    if not t:
+        return ''
+    t = t.replace('\u3000', ' ').replace('_', ' ').replace(' ', '')
+    if all(ord(c) < 128 for c in t):
+        return t.casefold()
+    return t
+
+
+def _inbound_header_lookup_dict():
+    global _INBOUND_HEADER_LOOKUP
+    if _INBOUND_HEADER_LOOKUP is None:
+        d = {}
+        for canon, variants in INBOUND_HEADER_ALIASES.items():
+            for v in variants:
+                k = _header_match_key(v)
+                if k and k not in d:
+                    d[k] = canon
+        for canon in INBOUND_IMPORT_REQUIRED_HEADERS + INBOUND_IMPORT_OPTIONAL_HEADERS:
+            k = _header_match_key(canon)
+            if k and k not in d:
+                d[k] = canon
+        _INBOUND_HEADER_LOOKUP = d
+    return _INBOUND_HEADER_LOOKUP
+
+
+def _canonical_inbound_header(raw):
+    """将文件中的表头列名转为内部标准名；无法识别则返回 None。"""
+    lk = _inbound_header_lookup_dict()
+    k = _header_match_key(raw)
+    if k:
+        hit = lk.get(k)
+        if hit:
+            return hit
+    t = _normalize_header_token(raw)
+    if t in ('时间', '時間', '录入时间', '录入時間'):
+        return '录入时间'
+    # 模糊：Excel 简写、少字、英文混排（不用「含时间」泛匹配，避免「时间戳」等误判）
+    tc = t.replace(' ', '').replace('\u3000', '')
+    tl = tc.casefold()
+    if ('码头' in tc and '号' in tc) or tc == '码头' or ('dock' in tl and 'no' in tl) or tl == 'dock':
+        return '码头号'
+    if ('车辆' in tc and '类型' in tc) or ('车' in tc and '类型' in tc) or ('vehicle' in tl and 'type' in tl):
+        return '车辆类型'
+    if '时间段' in tc or (tc.startswith('时间') and '段' in tc):
+        return '时间段'
+    if ('录入' in tc and '时间' in tc) or tc in ('时间', '時間', '时刻'):
+        return '录入时间'
+    if 'entry' in tl and 'time' in tl:
+        return '录入时间'
+    if tl in ('time', 'entry_time', 'entrytime', 'datetime'):
+        return '录入时间'
+    return None
+
+
+def _inbound_row_to_canonical(row):
+    """CSV 行 dict -> 标准列名 -> 值（后者覆盖前者）。"""
+    out = {}
+    for k, v in row.items():
+        if k is None:
+            continue
+        ck = _canonical_inbound_header(_normalize_csv_cell_key(k))
+        if ck:
+            out[ck] = v
+    return out
+
+
+def _strip_leading_blank_lines(text: str) -> str:
+    lines = text.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    return '\n'.join(lines)
+
+
+def _prepare_inbound_csv_text(text: str) -> str:
+    """去掉前导空行；Excel 欧洲区常见首行 Sep=; 需跳过，否则整行被当成表头。"""
+    text = _strip_leading_blank_lines(text or '')
+    lines = text.splitlines()
+    if lines:
+        first = lines[0].strip()
+        if re.match(r'^sep\s*=\s*\S', first, re.I):
+            lines = lines[1:]
+    return '\n'.join(lines)
+
+
+def _fix_inbound_csv_if_header_in_one_cell(text: str) -> str:
+    """
+    表头被写进一个单元格时，首行解析为单列但单元格内含「码头号,车辆类型,...」。
+    将首行展开为多列标准 CSV 行。
+    """
+    req = set(INBOUND_IMPORT_REQUIRED_HEADERS)
+    lines = text.splitlines()
+    if not lines:
+        return text
+    first = lines[0]
+    try:
+        row0 = next(csv.reader(io.StringIO(first)))
+    except (StopIteration, csv.Error):
+        return text
+    if len(row0) != 1:
+        return text
+    cell = str(row0[0] or '')
+    if ',' not in cell:
+        return text
+    try:
+        inner = next(csv.reader(io.StringIO(cell)))
+    except (StopIteration, csv.Error):
+        return text
+    if len(inner) < 3 or not _header_row_matches_required(inner, req):
+        return text
+    buf = io.StringIO()
+    csv.writer(buf).writerow(inner)
+    lines[0] = buf.getvalue().rstrip('\r\n')
+    return '\n'.join(lines)
+
+
+def _normalize_csv_cell_key(key):
+    s = _strip_invisible_chars(str(key or '')).strip().lstrip('\ufeff')
+    s = s.replace('\u00a0', ' ')
+    s = unicodedata.normalize('NFKC', s).strip()
+    return s
+
+
+def _decode_inbound_csv_bytes(raw: bytes) -> str:
+    """Excel 常见为 UTF-8、系统 ANSI(GBK)；依次尝试。"""
+    if not raw:
+        return ''
+    if len(raw) >= 2 and raw[:2] in (b'\xff\xfe', b'\xfe\xff'):
+        try:
+            return raw.decode('utf-16')
+        except UnicodeDecodeError:
+            pass
+    last_err = None
+    for enc in ('utf-8-sig', 'utf-8', 'gb18030', 'gbk', 'cp936'):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError as e:
+            last_err = e
+    if last_err:
+        raise last_err
+    return ''
+
+
+def _header_row_matches_required(fieldnames, req):
+    if not fieldnames:
+        return False
+    fn = [_normalize_csv_cell_key(h) for h in fieldnames if h is not None]
+    fn = [x for x in fn if x != '']
+    canon = {_canonical_inbound_header(h) for h in fn}
+    canon.discard(None)
+    return req.issubset(canon)
+
+
+def _try_dict_reader_inbound(sub_text: str, req: set, delims: tuple) -> object:
+    """在一段文本上尝试分隔符，表头须满足必填列。成功返回 csv.DictReader，否则 None。"""
+    if not (sub_text or '').strip():
+        return None
+    for delim in delims:
+        r = csv.DictReader(io.StringIO(sub_text), delimiter=delim)
+        if not r.fieldnames:
+            continue
+        if _header_row_matches_required(r.fieldnames, req):
+            return r
+    sub_lines = sub_text.splitlines()
+    if not sub_lines:
+        return None
+    first = sub_lines[0]
+    for delim in delims:
+        try:
+            row0 = next(csv.reader(io.StringIO(first), delimiter=delim))
+        except (StopIteration, csv.Error):
+            continue
+        if len(row0) < 3:
+            continue
+        if _header_row_matches_required(row0, req):
+            return csv.DictReader(io.StringIO(sub_text), delimiter=delim)
+    return None
+
+
+def _csv_dict_reader_for_inbound(text: str):
+    """
+    自动选择分隔符（逗号 / 分号 / Tab / 全角逗号 / 竖线），使必填表头能正确识别。
+    支持跳过前若干行（Excel 第 1 行常为标题「入库明细」等，真正表头在第二行）。
+    """
+    text = _prepare_inbound_csv_text(text)
+    text = _fix_inbound_csv_if_header_in_one_cell(text)
+    if not text.strip():
+        return None
+    req = set(INBOUND_IMPORT_REQUIRED_HEADERS)
+    delims = (',', ';', '\t', '\uff0c', '|')
+    lines = text.splitlines()
+    max_skip = min(12, len(lines))
+    for skip in range(max_skip):
+        sub = '\n'.join(lines[skip:])
+        hit = _try_dict_reader_inbound(sub, req, delims)
+        if hit is not None:
+            return hit
+    try:
+        sample = text[:8192]
+        dialect = csv.Sniffer().sniff(sample, delimiters=',;\t|\uff0c')
+        r = csv.DictReader(io.StringIO(text), dialect=dialect)
+        if r.fieldnames and _header_row_matches_required(r.fieldnames, req):
+            return r
+    except (csv.Error, AttributeError):
+        pass
+    return csv.DictReader(io.StringIO(text))
+
+
+def _parse_import_datetime_on_date(import_date_str, time_cell):
+    """import_date_str: 页面「导入日期」YYYY-MM-DD；time_cell: 行内「录入时间」必填，支持 HH:MM 或 HH:MM:SS。"""
+    d = (import_date_str or '').strip()
+    if not d:
+        raise ValueError('导入日期为空')
+    t_raw = (time_cell or '').strip() if time_cell is not None else ''
+    if not t_raw:
+        raise ValueError('录入时间必填')
+    if t_raw.count(':') == 1:
+        t_raw = t_raw + ':00'
+    elif t_raw.count(':') == 0:
+        raise ValueError('录入时间格式须为 HH:MM 或 HH:MM:SS')
+    return datetime.strptime(f"{d} {t_raw}", '%Y-%m-%d %H:%M:%S')
+
+
+def _parse_dock_no_cell(raw):
+    if raw is None or str(raw).strip() == '':
+        raise ValueError('码头号必填')
+    s = str(raw).strip()
+    try:
+        return int(float(s))
+    except (TypeError, ValueError):
+        raise ValueError(f'码头号无效: {raw!r}')
+
+
+def _parse_float_cell(raw, default=0.0):
+    if raw is None or str(raw).strip() == '':
+        return default
+    return float(str(raw).strip())
+
+
+def _parse_optional_int_cell(raw):
+    if raw is None or str(raw).strip() == '':
+        return None
+    return int(float(str(raw).strip()))
+
+
+def _csv_row_to_inbound_dict(norm_row, import_date_str):
+    """norm_row: 表头 -> 值（已去 BOM）。返回 (data_dict, created_at datetime)。"""
+    vt = _normalize_import_vehicle_type(norm_row.get('车辆类型'))
+    if not vt or vt not in INBOUND_IMPORT_VEHICLE_TYPES:
+        raise ValueError(f'车辆类型无效或为空: {vt!r}')
+    dock_no = _parse_dock_no_cell(norm_row.get('码头号'))
+    plate = (norm_row.get('车牌号') or '').strip()
+    pel = _parse_float_cell(norm_row.get('不计入统计装载量'), 0.0)
+    remark = norm_row.get('备注')
+    if remark is None:
+        remark = ''
+    else:
+        remark = str(remark).strip()
+    ts_slot = norm_row.get('时间段')
+    if ts_slot is not None and str(ts_slot).strip() != '':
+        time_slot = str(ts_slot).strip()
+    else:
+        time_slot = None
+    load_raw = norm_row.get('装载量')
+    if load_raw is None or str(load_raw).strip() == '':
+        load_amount = 0
+    else:
+        load_amount = _parse_float_cell(load_raw, 0.0)
+    pieces_cell = _parse_optional_int_cell(norm_row.get('件数'))
+    data = {
+        'dock_no': dock_no,
+        'vehicle_type': vt,
+        'vehicle_no': plate,
+        'load_amount': load_amount,
+        'remark': remark,
+        'plate_excluded_load': pel,
+    }
+    if time_slot is not None:
+        data['time_slot'] = time_slot
+    if vt == '其他':
+        data['pieces'] = pieces_cell if pieces_cell is not None else 0
+    elif pieces_cell is not None:
+        data['pieces'] = pieces_cell
+    created_at = _parse_import_datetime_on_date(import_date_str, norm_row.get('录入时间'))
+    return data, created_at
+
+
+def _inbound_row_looks_like_data(row):
+    """首行无表头时：第一列像码头号且第二列为合法车型。"""
+    if len(row) < 3:
+        return False
+    try:
+        _parse_dock_no_cell(row[0])
+    except ValueError:
+        return False
+    return _normalize_import_vehicle_type(str(row[1])) in INBOUND_IMPORT_VEHICLE_TYPES
+
+
+def _inbound_positional_parse(text, import_date_str):
+    """
+    表头无法识别时的兜底：固定列序为 码头号、车辆类型、时间（第4列起依次对应可选列）。
+    首行若已是数据（无表头），则从第一行开始导入。
+    """
+    text = _prepare_inbound_csv_text(text)
+    text = _fix_inbound_csv_if_header_in_one_cell(text)
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    delims = (',', ';', '\t', '\uff0c', '|')
+    opt_keys = INBOUND_IMPORT_OPTIONAL_HEADERS
+    for skip in range(min(16, len(lines))):
+        sub = '\n'.join(lines[skip:])
+        for delim in delims:
+            try:
+                rows = list(csv.reader(io.StringIO(sub), delimiter=delim))
+            except csv.Error:
+                continue
+            if not rows or len(rows[0]) < 3:
+                continue
+            start_i = 0 if _inbound_row_looks_like_data(rows[0]) else 1
+            if start_i >= len(rows):
+                continue
+            parsed = []
+            errors = []
+            for i in range(start_i, len(rows)):
+                row = rows[i]
+                row_index = skip + i + 1
+                if len(row) < 3:
+                    continue
+                if all((c is None or str(c).strip() == '') for c in row[:3]):
+                    continue
+                norm = {'码头号': row[0], '车辆类型': row[1], '录入时间': row[2]}
+                for j, ok in enumerate(opt_keys):
+                    idx = 3 + j
+                    if len(row) > idx and row[idx] is not None and str(row[idx]).strip() != '':
+                        norm[ok] = row[idx]
+                try:
+                    data, created_at = _csv_row_to_inbound_dict(norm, import_date_str)
+                    parsed.append((created_at, row_index, data))
+                except ValueError as e:
+                    errors.append({"row": row_index, "message": str(e)})
+            if len(parsed) + len(errors) > INBOUND_IMPORT_MAX_ROWS:
+                return None
+            if parsed or errors:
+                return parsed, errors
+    return None
+
+
+@app.route('/api/record', methods=['POST'])
+def record():
+    data = request.json
+    if isinstance(data, dict) and data.get('vehicle_type') is not None:
+        data['vehicle_type'] = _normalize_import_vehicle_type(data['vehicle_type'])
+    _apply_vehicle_type_defaults(data)
+    _apply_plate_exclusion_to_record(data)
+    new_id = _insert_inbound_record_core(data, datetime.now(), broadcast=True)
+    pel_ins = data.get("plate_excluded_load", 0)
+    epc_ins = data.get("excluded_pieces", 0)
+    try:
+        pel_ins = float(pel_ins) if pel_ins is not None else 0.0
+    except (TypeError, ValueError):
+        pel_ins = 0.0
+    try:
+        epc_ins = int(epc_ins) if epc_ins is not None else 0
+    except (TypeError, ValueError):
+        epc_ins = 0
     return jsonify({
         "success": True,
         "record_id": new_id,
@@ -2523,11 +2998,107 @@ def record():
         "excluded_pieces": epc_ins,
     })
 
+
+@app.route('/api/inbound_import_template', methods=['GET'])
+def inbound_import_template():
+    buf = io.StringIO()
+    buf.write('\ufeff')
+    w = csv.writer(buf, lineterminator='\r\n')
+    w.writerow(list(INBOUND_IMPORT_TEMPLATE_HEADERS))
+    w.writerow(['1', '16英尺', '09:15'])
+    body = buf.getvalue()
+    return Response(
+        body.encode('utf-8'),
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': 'attachment; filename="inbound_import_template.csv"'},
+    )
+
+
+@app.route('/api/inbound_import', methods=['POST'])
+def inbound_import():
+    import_date = (request.form.get('import_date') or '').strip()
+    if not import_date:
+        return jsonify({"success": False, "error": "请填写导入日期 import_date（YYYY-MM-DD）"}), 400
+    try:
+        datetime.strptime(import_date, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({"success": False, "error": "导入日期格式应为 YYYY-MM-DD"}), 400
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({"success": False, "error": "请上传 CSV 文件"}), 400
+    raw = f.read()
+    if not raw:
+        return jsonify({"success": False, "error": "文件为空"}), 400
+    try:
+        text = _decode_inbound_csv_bytes(raw)
+    except UnicodeDecodeError:
+        return jsonify({"success": False, "error": "无法解析文件编码，请用 Excel「另存为 CSV UTF-8」或记事本保存为 UTF-8"}), 400
+    reader = _csv_dict_reader_for_inbound(text)
+    req = set(INBOUND_IMPORT_REQUIRED_HEADERS)
+    fnames = []
+    if reader and reader.fieldnames:
+        fnames = [_normalize_csv_cell_key(h) for h in reader.fieldnames if h is not None]
+    canon_set = {_canonical_inbound_header(h) for h in fnames}
+    canon_set.discard(None)
+    use_positional = (not reader or not reader.fieldnames or not req.issubset(canon_set))
+
+    parsed = []
+    errors = []
+    if use_positional:
+        res = _inbound_positional_parse(text, import_date)
+        if not res:
+            opt_hint = '可选追加列: ' + ','.join(INBOUND_IMPORT_OPTIONAL_HEADERS)
+            return jsonify({
+                "success": False,
+                "error": (
+                    "无法按表头识别列；已尝试按列序（第1列码头、第2列车型、第3列时间）解析仍失败。"
+                    "请确认 CSV 为三列及以上，且另存为 UTF-8 或 Excel 简体中文 CSV。"
+                    + opt_hint
+                ),
+            }), 400
+        parsed, errors = res
+    else:
+        row_index = 1
+        for row in reader:
+            row_index += 1
+            if row_index - 1 > INBOUND_IMPORT_MAX_ROWS:
+                return jsonify({"success": False, "error": f"单次最多处理 {INBOUND_IMPORT_MAX_ROWS} 行"}), 400
+            if not row or all((v is None or str(v).strip() == '') for v in row.values()):
+                continue
+            norm = _inbound_row_to_canonical(row)
+            try:
+                data, created_at = _csv_row_to_inbound_dict(norm, import_date)
+                parsed.append((created_at, row_index, data))
+            except ValueError as e:
+                errors.append({"row": row_index, "message": str(e)})
+    if not parsed and not errors:
+        return jsonify({"success": False, "error": "没有有效数据行"}), 400
+    if errors:
+        return jsonify({"success": False, "errors": errors, "imported": 0}), 400
+    parsed.sort(key=lambda x: (x[0], x[1]))
+    imported = 0
+    try:
+        for created_at, _ridx, data in parsed:
+            data = dict(data)
+            _apply_vehicle_type_defaults(data)
+            _apply_plate_exclusion_to_record(data)
+            _insert_inbound_record_core(data, created_at, broadcast=False)
+            imported += 1
+    except Exception as e:
+        print(f"[ERROR] inbound_import 写入失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e), "imported": imported}), 500
+    broadcast_update('refresh_stats', {'action': 'batch_import', 'count': imported})
+    return jsonify({"success": True, "imported": imported, "errors": []})
+
 @app.route('/api/record/<int:record_id>', methods=['PUT'])
 def update_record(record_id):
     print(f"[DEBUG] PUT /api/record/{record_id} 被调用")
     data = request.json
     print(f"[DEBUG] 接收到的数据: {data}")
+    if isinstance(data, dict) and data.get('vehicle_type') is not None:
+        data['vehicle_type'] = _normalize_import_vehicle_type(data['vehicle_type'])
     
     # 获取当前系统时间并自动判断班次类型
     current_time = datetime.now()
@@ -5401,16 +5972,6 @@ def get_statistics():
         print(f"Error calculating predicted vehicles: {e}")
         pass
 
-    # [新增] 获取已记录的矫正总量
-    corrected_total_from_db = None
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT Corrected_Pieces FROM daily_cost_summary WHERE Record_Date = ? AND Agency_Name = '【当日总计】'", (request_date.strftime('%Y-%m-%d'),))
-        c_row = cur.fetchone()
-        corrected_total_from_db = c_row[0] if c_row and c_row[0] else None
-    except Exception as e:
-        print(f"Error fetching corrected total from DB: {e}")
-
     conn.close()
     
     return jsonify({
@@ -5418,7 +5979,8 @@ def get_statistics():
         "calculated_sorted_pieces": int(theoretical_sorted_pieces),
         "total_vehicles": total_vehicles,
         "total_pieces": total_pieces,
-        "correctedTotal": corrected_total_from_db if corrected_total_from_db else int(round(total_pieces)),
+        # 矫正总量 = 当日入库实到件数合计（与 total_pieces 一致，与历史核对口径一致；不用成本表覆盖）
+        "correctedTotal": int(total_pieces),
         "total_pallets": total_pallets,
         "vehicle_stats": vehicle_stats,
         "vehicles_19_to_20": vehicles_19_to_20,
@@ -8293,7 +8855,14 @@ def update_sync_status(source, success_flag):
 
 @app.route('/api/admin/labor_sync_status', methods=['GET'])
 def get_labor_sync_status():
-    if 'user_id' not in session: return jsonify({'error': '未登录', 'success': False}), 401
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录', 'success': False}), 401
+    conn = get_db()
+    cursor = conn.cursor()
+    if not require_admin(cursor):
+        conn.close()
+        return jsonify({'error': '无权访问', 'success': False}), 403
+    conn.close()
     return jsonify({
         'success': True,
         'data': _sync_status_cache

@@ -731,10 +731,8 @@
 
                 const data = await res.json();
                 const totalPieces = data.total_pieces || 0;
-                // 与统计页一致：实到件数（/api/stats 已含 0.76 口径）；优先 correctedTotal（成本表）
-                const correctedTotal = Math.round(Number(
-                    data.correctedTotal != null ? data.correctedTotal : totalPieces
-                ));
+                // 与统计页「矫正总量」一致：实到件数 total_pieces
+                const correctedTotal = Math.round(Number(totalPieces));
 
                 // Only auto-fill if the user hasn't typed something else in manually recently,
                 // or just aggressively overwrite when date changes to be safe. We'll overwrite.

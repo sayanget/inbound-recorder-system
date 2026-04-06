@@ -316,14 +316,6 @@
             </div>
         </div>
 
-        <!-- Forecast vs Actual Comparison Chart -->
-        <div class="stats-section">
-            <h3 data-lang="forecast_vs_actual_title">揽收预估与实际入库对比（历史数据）</h3>
-            <div class="chart-container">
-                <canvas id="forecastVsActualChart"></canvas>
-            </div>
-        </div>
-
         <!-- Waybill Trend Chart (Feishu Data) -->
         <div class="stats-section">
             <h3 data-lang="waybill_trend_title">各流向每日票数趋势</h3>
@@ -614,10 +606,6 @@
                 week_total: "周总计",
                 date: "日期",
                 historical_avg: "历史日均值",
-                forecast_vs_actual_title: "揽收预估与实际入库对比（历史数据）",
-                forecast_value: "预估值",
-                actual_value: "实际值",
-                difference_percent: "差异百分比",
                 vs_last_week: "环比上周",
                 capacity_planning: "产能计划看板",
                 manual_sync: "手动同步数据",
@@ -709,10 +697,6 @@
                 week_total: "Week Total",
                 date: "Date",
                 historical_avg: "Hist. Daily Avg.",
-                forecast_vs_actual_title: "Forecast vs Actual (History)",
-                forecast_value: "Forecast",
-                actual_value: "Actual",
-                difference_percent: "Diff %",
                 vs_last_week: "vs Last Week",
                 capacity_planning: "Capacity Planning",
                 manual_sync: "Manual Sync",
@@ -799,10 +783,6 @@
                 week_total: "Total Semanal",
                 date: "Fecha",
                 historical_avg: "Promedio Diario Histórico",
-                forecast_vs_actual_title: "Comparación de Previsión vs Real (Todos los Datos Históricos)",
-                forecast_value: "Previsión",
-                actual_value: "Real",
-                difference_percent: "Diferencia %",
                 vs_last_week: "de la semana pasada",
                 capacity_planning: "Planificación de Capacidad",
                 waybill_trend_title: "Tendencia Diaria de Guías por Dirección",
@@ -1509,10 +1489,8 @@
 
             const useCorrected = document.getElementById('useCorrectedTotal').checked;
             const originalTotalPieces = loadedStatsData.total_pieces || 0;
-            // 与后端一致：实到件数口径（净录入×系数，默认 0.76）；矫正总量优先取成本表 daily_cost_summary.Corrected_Pieces，否则同 total_pieces
-            const correctedTotalPieces = Math.round(Number(
-                loadedStatsData.correctedTotal != null ? loadedStatsData.correctedTotal : originalTotalPieces
-            ));
+            // 矫正总量 = 当日入库实到件数（total_pieces），与统计摘要/历史核对一致
+            const correctedTotalPieces = Math.round(Number(loadedStatsData.total_pieces ?? originalTotalPieces ?? 0));
 
             // Update Corrected Total Display
             // Using convertToRange if available, otherwise raw number
@@ -3402,218 +3380,9 @@
         window.addEventListener('load', function () {
             loadDailyTrendData();
             loadWeekComparisonData();
-            loadForecastVsActual();
             loadWaybillTrendData();
             loadWeeklyWaybillTrendData();
-
-            // Poll for updates every 30 seconds
-            setInterval(loadForecastVsActual, 30000);
         });
-
-        // Load forecast vs actual comparison data
-        function loadForecastVsActual() {
-            // console.log('Starting to load forecast vs actual data...');
-            fetch('/api/forecast_vs_actual')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok: ' + response.statusText);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // console.log('Data received:', data);
-                    if (!data || !data.dates || data.dates.length === 0) {
-                        if (!window.forecastChartInstance) {
-                            console.warn('No data received for forecast chart');
-                            const canvas = document.getElementById('forecastVsActualChart');
-                            if (canvas) {
-                                const ctx = canvas.getContext('2d');
-                                ctx.font = '14px Arial';
-                                ctx.fillStyle = 'black';
-                                ctx.fillText('暂无数据 / No Data', 10, 50);
-                            }
-                        } else {
-                            console.log('[Statistics] New forecast data is empty, preserving existing chart.');
-                        }
-                        return;
-                    }
-                    renderForecastVsActualChart(data);
-                })
-                .catch(error => {
-                    console.error('Error loading forecast vs actual data:', error);
-                    showMessage('Load Error: ' + error.message, 'error');
-                });
-        }
-
-        // Render forecast vs actual comparison chart
-        function renderForecastVsActualChart(data) {
-            try {
-                const canvas = document.getElementById('forecastVsActualChart');
-                if (!canvas) {
-                    console.error('Canvas element forecastVsActualChart not found');
-                    return;
-                }
-
-                // Ensure canvas has size
-                if (canvas.height === 0) canvas.height = 300;
-
-                const ctx = canvas.getContext('2d');
-
-                // Check if Chart is defined
-                if (typeof Chart === 'undefined') {
-                    throw new Error('Chart.js library not loaded');
-                }
-
-                // Update existing chart if it exists
-                if (window.forecastChartInstance) {
-                    window.forecastChartInstance.data.labels = data.dates;
-                    window.forecastChartInstance.data.datasets[0].data = data.forecast;
-                    window.forecastChartInstance.data.datasets[1].data = data.actual;
-                    window.forecastChartInstance.data.datasets[2].data = data.difference_percent;
-                    window.forecastChartInstance.update();
-                    return;
-                }
-
-                const isMobile = window.innerWidth < 768;
-                // Create new chart
-                window.forecastChartInstance = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: data.dates,
-                        datasets: [
-                            {
-                                label: translations[currentLang].forecast_value,
-                                data: data.forecast,
-                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                                borderColor: 'rgba(54, 162, 235, 1)',
-                                borderWidth: 1,
-                                yAxisID: 'y',
-                                order: 2
-                            },
-                            {
-                                label: translations[currentLang].actual_value,
-                                data: data.actual,
-                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                                borderColor: 'rgba(75, 192, 192, 1)',
-                                borderWidth: 1,
-                                yAxisID: 'y',
-                                order: 1
-                            },
-                            {
-                                label: translations[currentLang].difference_percent,
-                                data: data.difference_percent,
-                                type: 'line',
-                                borderColor: 'rgba(255, 99, 132, 1)',
-                                backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                                borderWidth: 2,
-                                yAxisID: 'y1',
-                                tension: 0.3,
-                                order: 0
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'top',
-                                labels: {
-                                    font: {
-                                        size: isMobile ? 10 : 12
-                                    },
-                                    boxWidth: isMobile ? 12 : 15
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: translations[currentLang].forecast_vs_actual_title,
-                                font: {
-                                    size: isMobile ? 14 : 16
-                                }
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function (context) {
-                                        let label = context.dataset.label || '';
-                                        if (label) {
-                                            label += ': ';
-                                        }
-                                        if (context.parsed.y !== null) {
-                                            if (context.dataset.type === 'line') {
-                                                label += context.parsed.y + '%';
-                                            } else {
-                                                label += context.parsed.y;
-                                            }
-                                        }
-                                        return label;
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: {
-                                    font: {
-                                        size: isMobile ? 9 : 11
-                                    },
-                                    maxRotation: 45,
-                                    minRotation: isMobile ? 45 : 0
-                                }
-                            },
-                            y: {
-                                type: 'linear',
-                                display: true,
-                                position: 'left',
-                                beginAtZero: true,
-                                ticks: {
-                                    font: {
-                                        size: isMobile ? 9 : 11
-                                    }
-                                },
-                                title: {
-                                    display: !isMobile,
-                                    text: translations[currentLang].pieces || '件数'
-                                }
-                            },
-                            y1: {
-                                type: 'linear',
-                                display: true,
-                                position: 'right',
-                                beginAtZero: true,
-                                ticks: {
-                                    font: {
-                                        size: isMobile ? 9 : 11
-                                    }
-                                },
-                                grid: {
-                                    drawOnChartArea: true, // Enable grid lines to draw the zero line
-                                    color: function (context) {
-                                        if (context.tick.value === 0) {
-                                            return '#28a745'; // Green color for 0 line
-                                        }
-                                        return 'transparent'; // Hide other grid lines
-                                    },
-                                    lineWidth: function (context) {
-                                        if (context.tick.value === 0) {
-                                            return 2; // Thicker line for 0
-                                        }
-                                        return 0;
-                                    }
-                                },
-                                title: {
-                                    display: !isMobile,
-                                    text: translations[currentLang].difference_percent + ' (%)'
-                                }
-                            }
-                        }
-                    }
-                });
-            } catch (err) {
-                console.error('Render Chart Error:', err);
-                showMessage('Render Chart Error: ' + err.message, 'error');
-            }
-        }
 
         // Auto-refresh sorting metrics every 30 seconds
         function refreshSortingMetrics() {

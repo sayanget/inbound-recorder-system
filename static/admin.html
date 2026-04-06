@@ -1181,9 +1181,9 @@
                 }
             }
 
-            // 检查登录状态
+            // 检查登录状态（管理员确认后再启动 labor_sync_status 轮询，避免未带会话时 401）
             function checkLoginStatus() {
-                fetch('/api/check_login')
+                fetch('/api/check_login', { credentials: 'same-origin' })
                     .then(response => response.json())
                     .then(data => {
                         if (!data.logged_in) {
@@ -1193,6 +1193,8 @@
                             setTimeout(() => {
                                 window.location.href = '/';
                             }, 2000);
+                        } else if (typeof startLaborSyncPolling === 'function') {
+                            startLaborSyncPolling();
                         }
                     })
                     .catch(error => {
@@ -2739,34 +2741,39 @@
                 if (gofoEl) gofoEl.textContent = timeStr;
             }
 
+            let _laborSyncPollTimer = null;
+
             function fetchSyncStatus() {
-                fetch('/api/admin/labor_sync_status')
-                    .then(r => r.json())
+                fetch('/api/admin/labor_sync_status', { credentials: 'same-origin' })
+                    .then(r => {
+                        if (r.status === 401) return null;
+                        return r.json();
+                    })
                     .then(res => {
-                        if (res.success && res.data) {
-                            const outStatus = document.getElementById('lastSyncStatusOutsource');
-                            if (outStatus && res.data.Outsource.last_sync) {
-                                outStatus.textContent = `已同步: ${res.data.Outsource.last_sync}`;
-                                outStatus.style.color = res.data.Outsource.success ? '#28a745' : '#dc3545';
-                            }
-                            const gofoStatus = document.getElementById('lastSyncStatusGofo');
-                            if (gofoStatus && res.data.Gofo.last_sync) {
-                                gofoStatus.textContent = `已同步: ${res.data.Gofo.last_sync}`;
-                                gofoStatus.style.color = res.data.Gofo.success ? '#28a745' : '#dc3545';
-                            }
+                        if (!res || !res.success || !res.data) return;
+                        const outStatus = document.getElementById('lastSyncStatusOutsource');
+                        if (outStatus && res.data.Outsource && res.data.Outsource.last_sync) {
+                            outStatus.textContent = `已同步: ${res.data.Outsource.last_sync}`;
+                            outStatus.style.color = res.data.Outsource.success ? '#28a745' : '#dc3545';
+                        }
+                        const gofoStatus = document.getElementById('lastSyncStatusGofo');
+                        if (gofoStatus && res.data.Gofo && res.data.Gofo.last_sync) {
+                            gofoStatus.textContent = `已同步: ${res.data.Gofo.last_sync}`;
+                            gofoStatus.style.color = res.data.Gofo.success ? '#28a745' : '#dc3545';
                         }
                     })
-                    .catch(e => console.error("Failed to fetch sync status", e));
+                    .catch(e => console.error('Failed to fetch sync status', e));
+            }
+
+            function startLaborSyncPolling() {
+                if (_laborSyncPollTimer) return;
+                fetchSyncStatus();
+                _laborSyncPollTimer = setInterval(fetchSyncStatus, 5000);
             }
 
             document.addEventListener('DOMContentLoaded', () => {
-                // Initialize countdown and refresh every 1 second
                 updateCountdown();
                 setInterval(updateCountdown, 1000);
-
-                // Fetch latest manual/auto sync logs initially and every 30 seconds
-                fetchSyncStatus();
-                setInterval(fetchSyncStatus, 5000);
             });
         </script>
 </body>

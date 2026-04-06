@@ -775,6 +775,26 @@
                     </button>
                 </div>
             </form>
+            <div class="import-section" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e0e0e0;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.75rem;"><i class="fas fa-file-import"></i> <span data-lang="batch_import">批量导入</span></h3>
+                <div class="form-group">
+                    <label for="importDate" data-lang="import_date">导入日期</label>
+                    <input type="date" id="importDate" name="import_date" required>
+                </div>
+                <div class="compact-actions" style="flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                    <a href="/api/inbound_import_template" download="inbound_import_template.csv" class="btn btn-secondary btn-sm" id="downloadInboundTemplate">
+                        <i class="fas fa-download"></i> <span data-lang="download_import_template">下载 CSV 模板</span>
+                    </a>
+                    <input type="file" id="inboundImportFile" accept=".csv,text/csv" style="max-width: 240px;">
+                    <button type="button" id="inboundImportBtn" class="btn btn-primary btn-sm">
+                        <i class="fas fa-upload"></i> <span data-lang="run_import">导入</span>
+                    </button>
+                </div>
+                <p id="inboundImportResult" style="margin-top: 0.5rem; font-size: 0.9rem; color: #555;"></p>
+                <p class="form-hint" style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;" data-lang="import_csv_hint">
+                    CSV 表头至少含：码头号、车辆类型、录入时间；其余列可省略，系统按车型与录入时间自动补全。
+                </p>
+            </div>
         </div>
 
         <div id="message"></div>
@@ -907,6 +927,14 @@
     </div>
 
     <script>
+        /** 静态页与后端不同源时（如用 Live Server 打开）：先设置 window.INBOUND_API_BASE = 'http://IP:端口'（无末尾斜杠） */
+        function inboundApiUrl(path) {
+            const b = (typeof window.INBOUND_API_BASE === 'string' && window.INBOUND_API_BASE.trim())
+                ? window.INBOUND_API_BASE.trim().replace(/\/$/, '')
+                : '';
+            return b ? (b + path) : path;
+        }
+
         // Language translations
         const translations = {
             zh: {
@@ -931,6 +959,17 @@
                 please_select: "请选择",
                 other: "其他",
                 submit_record: "提交记录",
+                batch_import: "批量导入",
+                import_date: "导入日期（写入每条记录的日期）",
+                download_import_template: "下载 CSV 模板",
+                run_import: "导入",
+                import_need_file: "请选择要导入的 CSV 文件",
+                import_need_date: "请选择导入日期",
+                import_success_n: "成功导入 {n} 条记录",
+                import_failed: "导入失败",
+                import_network_error: "导入请求失败，请检查网络",
+                import_fetch_failed_hint: "无法连接导入接口。请用浏览器打开与后端一致的地址（如 http://192.168.0.250:8080/），勿用本地文件打开；若前端与 API 不同端口，在控制台执行：window.INBOUND_API_BASE='http://后端地址:端口'",
+                import_csv_hint: "CSV 表头至少含：码头号、车辆类型、第三列时间（可写「时间」或「录入时间」）；其余列可省略，系统按车型与时间自动补全。",
                 recent_records: "最近记录",
                 refresh: "刷新",
                 export_records: "导出记录",
@@ -982,6 +1021,17 @@
                 please_select: "Please Select",
                 other: "Other",
                 submit_record: "Submit Record",
+                batch_import: "Batch import",
+                import_date: "Import date (applied to each row)",
+                download_import_template: "Download CSV template",
+                run_import: "Import",
+                import_need_file: "Please choose a CSV file",
+                import_need_date: "Please select import date",
+                import_success_n: "Imported {n} record(s)",
+                import_failed: "Import failed",
+                import_network_error: "Import request failed; check network",
+                import_fetch_failed_hint: "Cannot reach import API. Open the app via the same http://host:port as the server (not file://). If the page is served from another port, set window.INBOUND_API_BASE to your API root.",
+                import_csv_hint: "CSV must include: dock, vehicle type, and time (column may be labeled time or entry_time). Other columns optional.",
                 recent_records: "Recent Records",
                 refresh: "Refresh",
                 export_records: "Export Records",
@@ -1032,6 +1082,17 @@
                 please_select: "Por favor seleccione",
                 other: "Otro",
                 submit_record: "Enviar Registro",
+                batch_import: "Importación por lotes",
+                import_date: "Fecha de importación (por fila)",
+                download_import_template: "Descargar plantilla CSV",
+                run_import: "Importar",
+                import_need_file: "Seleccione un archivo CSV",
+                import_need_date: "Seleccione la fecha de importación",
+                import_success_n: "Se importaron {n} registro(s)",
+                import_failed: "Error al importar",
+                import_network_error: "Error de red en la importación",
+                import_fetch_failed_hint: "No se puede conectar a la API de importación. Abra la app con la misma URL http://servidor:puerto. Si usa otro puerto, defina window.INBOUND_API_BASE.",
+                import_csv_hint: "El CSV debe incluir: muelle, tipo de vehículo, hora de registro. Las demás columnas son opcionales.",
                 recent_records: "Registros Recientes",
                 refresh: "Actualizar",
                 export_records: "Exportar Registros",
@@ -1278,6 +1339,89 @@
 
             // Bind export records button
             document.getElementById('exportRecords').addEventListener('click', exportRecords);
+
+            const importDateEl = document.getElementById('importDate');
+            if (importDateEl) {
+                importDateEl.value = new Date().toISOString().slice(0, 10);
+            }
+            const inboundImportBtn = document.getElementById('inboundImportBtn');
+            if (inboundImportBtn) {
+                inboundImportBtn.addEventListener('click', async () => {
+                    const fileInput = document.getElementById('inboundImportFile');
+                    const dateEl = document.getElementById('importDate');
+                    const resultEl = document.getElementById('inboundImportResult');
+                    const t = translations[currentLang] || translations.zh;
+                    if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+                        if (resultEl) resultEl.textContent = t.import_need_file || '';
+                        showMessage(t.import_need_file || '请选择 CSV 文件', 'error');
+                        return;
+                    }
+                    if (!dateEl || !dateEl.value) {
+                        if (resultEl) resultEl.textContent = t.import_need_date || '';
+                        showMessage(t.import_need_date || '请选择导入日期', 'error');
+                        return;
+                    }
+                    if (window.location.protocol === 'file:') {
+                        const hint = t.import_fetch_failed_hint || '';
+                        if (resultEl) resultEl.textContent = hint;
+                        showMessage(hint, 'error');
+                        return;
+                    }
+                    const fd = new FormData();
+                    fd.append('file', fileInput.files[0], 'inbound_import.csv');
+                    fd.append('import_date', dateEl.value);
+                    try {
+                        inboundImportBtn.disabled = true;
+                        const resp = await fetch(inboundApiUrl('/api/inbound_import'), {
+                            method: 'POST',
+                            body: fd,
+                            credentials: 'same-origin',
+                            mode: 'cors',
+                        });
+                        let j = {};
+                        try {
+                            j = await resp.json();
+                        } catch (parseErr) {
+                            if (resultEl) resultEl.textContent = '服务器返回非 JSON，HTTP ' + resp.status;
+                            showMessage(t.import_failed || '导入失败', 'error');
+                            console.warn('inbound_import parse error', resp.status, parseErr);
+                            return;
+                        }
+                        if (!resp.ok || !j.success) {
+                            console.warn('inbound_import', resp.status, j);
+                        }
+                        if (j.success) {
+                            const msg = (t.import_success_n || '成功导入 {n} 条').replace('{n}', String(j.imported));
+                            if (resultEl) resultEl.textContent = msg;
+                            showMessage(msg, 'success');
+                            loadStats();
+                            loadRecords();
+                            fileInput.value = '';
+                            try {
+                                const channel = new BroadcastChannel('inbound_updates');
+                                channel.postMessage({ type: 'refresh_stats' });
+                            } catch (e) { /* ignore */ }
+                        } else {
+                            let detail = j.error || '';
+                            if (j.errors && j.errors.length) {
+                                detail = j.errors.slice(0, 8).map((e) => '第' + e.row + '行: ' + e.message).join('；');
+                            }
+                            if (resultEl) resultEl.textContent = detail;
+                            showMessage((t.import_failed || '导入失败') + (detail ? ': ' + detail : ''), 'error');
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        const isFetchFail = e && (e.name === 'TypeError') && (
+                            String(e.message || '').indexOf('fetch') !== -1 || String(e.message || '').indexOf('Failed to fetch') !== -1
+                        );
+                        const hint = isFetchFail ? (t.import_fetch_failed_hint || t.import_network_error) : String(e);
+                        if (resultEl) resultEl.textContent = hint;
+                        showMessage(hint, 'error');
+                    } finally {
+                        inboundImportBtn.disabled = false;
+                    }
+                });
+            }
 
             // Bind save edit button
             document.getElementById('saveEdit').addEventListener('click', saveEdit);
