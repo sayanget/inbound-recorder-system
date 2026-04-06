@@ -33,6 +33,9 @@ node_modules/
 
 # Environment variables
 .env
+
+# Flask session signing (auto-generated when SECRET_KEY unset)
+.flask_session_secret
 .env.local
 .env.*.local
 
@@ -170,3 +173,6 @@ import requests.py
 
 # Neon sync credentials (local only)
 neon_sync.env
+
+# Optional GitHub telemetry state (local)
+.telemetry_github_state.json

@@ -1,0 +1,26 @@
+---
+description: When user asks to sync/push to GitHub, use full local→remote overwrite (force push main)
+alwaysApply: false
+---
+
+# GitHub 同步（本地为准）
+
+## 触发
+用户表达「同步到 GitHub」「推送到 GitHub」「上传 GitHub」「sync to github」等意图时适用。
+
+## 约定
+- 仓库仅由用户本人维护，无他人向 `main` 推送；允许使用 **`--force`**。
+- 目标：**本地 `main` 与远程 `origin/main` 完全一致**（本地怎样，GitHub 就怎样）。
+
+## 执行方式（二选一，优先脚本）
+1. **推荐**：在仓库根目录执行  
+   `.\scripts\sync_github_full.ps1`  
+   或带说明：  
+   `.\scripts\sync_github_full.ps1 -Message "简短说明"`
+2. **等价命令**：  
+   `git add -A` → 若有未提交变更则 `git commit -m "..."` → `git push --force origin main`
+
+## 助手行为
+- **直接在本机执行**上述脚本或命令，不要只给文字步骤。
+- 不要默认使用 `git pull` / 合并远程来解决分歧；除非用户明确要求先拉再推。
+- 若 `git commit` 因无变更跳过，仍执行 `git push --force` 以保证远程与本地 HEAD 对齐。

@@ -1,0 +1,4 @@
+Flask>=2.3.0,<4
+SQLAlchemy>=2.0.0,<3
+# PostgreSQL 时取消下一行注释并安装
+psycopg2-binary>=2.9.0,<3

@@ -1,7 +1,15 @@
+# Copyright (c) 2026 Fan Yang. All rights reserved.
+# 商业/营利性使用须事先书面许可；未经授权构成侵权，权利人保留依法主张全部救济之权利。
 import sqlite3
 from flask import Flask, request, jsonify, send_file, send_from_directory, session, redirect, Response, render_template
 import os
 import sys
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass
 import csv
 import io
 import unicodedata
@@ -64,12 +72,101 @@ def _initial_admin_password():
 
 # 数据库抽象层 - 自动适配 SQLite/PostgreSQL
 from database import get_db_connection, convert_sql, get_placeholder, USE_POSTGRES
+from app_identity import identity_dict
 
 app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_PERMANENT'] = True
 app.config['SESSION_USE_SIGNER'] = True
 app.config['SESSION_KEY_PREFIX'] = 'inbound_app:'
+
+
+def _apply_trusted_proxy_headers():
+    """在 Render 等反向代理后启用，使 request.remote_addr / X-Forwarded-For 可信。"""
+    if (os.environ.get("TRUST_PROXY_HEADERS", "") or "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return
+    try:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=1,
+            x_proto=1,
+            x_host=1,
+            x_port=1,
+            x_prefix=1,
+        )
+    except Exception as e:
+        print(f"[TRUST_PROXY_HEADERS] ProxyFix 未生效: {e}", flush=True)
+
+
+_apply_trusted_proxy_headers()
+
+
+def _license_request_exempt() -> bool:
+    """不拦截的路径（健康检查、静态、OPTIONS、许可证状态）。"""
+    p = request.path or ""
+    if p in ("/ping", "/health", "/api/license_status"):
+        return True
+    if p.startswith("/static"):
+        return True
+    if request.method == "OPTIONS" and p.startswith("/api/"):
+        return True
+    return False
+
+
+@app.before_request
+def _license_enforce_gate():
+    """可选：LICENSE_ENFORCE=1 时向许可服务校验 LICENSE_DEVICE_TOKEN。"""
+    if _license_request_exempt():
+        return None
+    ev = (os.environ.get("LICENSE_ENFORCE") or "").strip().lower()
+    if ev not in ("1", "true", "yes", "on"):
+        return None
+    base = (os.environ.get("LICENSE_SERVER_URL") or "").strip()
+    tok = (os.environ.get("LICENSE_DEVICE_TOKEN") or "").strip()
+    if not base or not tok:
+        msg = "LICENSE_SERVER_URL 或 LICENSE_DEVICE_TOKEN 未配置"
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "license", "reason": msg}), 503
+        return (
+            f"<h1>许可证未配置</h1><p>{msg}</p>",
+            503,
+            {"Content-Type": "text/html; charset=utf-8"},
+        )
+    try:
+        from license_client import verify_license
+
+        ok, reason = verify_license()
+    except Exception as e:
+        ok, reason = False, str(e)
+    if ok:
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"ok": False, "error": "license", "reason": reason}), 403
+    return (
+        "<h1>许可证无效或已过期</h1><p>请检查 LICENSE_DEVICE_TOKEN 与许可服务状态。</p>"
+        f"<p>原因: {reason}</p>",
+        403,
+        {"Content-Type": "text/html; charset=utf-8"},
+    )
+
+
+@app.before_request
+def _telemetry_github_hook():
+    """可选：首次请求时后台上报强关联信息到 GitHub Issue（须 TELEMETRY_GITHUB_ENABLE=1）。"""
+    try:
+        from telemetry_github import schedule_report_on_first_request
+        schedule_report_on_first_request(request)
+    except Exception as e:
+        ev = (os.environ.get("TELEMETRY_GITHUB_ENABLE") or "").strip().lower()
+        if ev in ("1", "true", "yes", "on"):
+            print(f"[telemetry_github] hook 异常: {e}", flush=True)
 
 
 @app.before_request
@@ -89,6 +186,14 @@ def _api_cors_headers(response):
     if request.path.startswith('/api/'):
         response.headers.setdefault('Access-Control-Allow-Origin', '*')
     return response
+
+
+@app.before_request
+def _session_keep_alive():
+    """已登录用户：持久会话 + 每次请求续期 Cookie，减少频繁重新登录。"""
+    if session.get('user_id'):
+        session.permanent = True
+        session.modified = True
 
 
 # 获取正确的数据库路径
@@ -263,18 +368,36 @@ def round_to_ten_thousand(value):
         return 0
     return (int(value) // 10000) * 10000
 
-# Flask session signing: set SECRET_KEY in production (stable across restarts).
-_secret = os.environ.get("SECRET_KEY")
-if not _secret:
-    _secret = secrets.token_hex(32)
-    print(
-        "[WARNING] SECRET_KEY not set; using an ephemeral key (sessions invalid after restart). "
-        "Set SECRET_KEY in production."
-    )
-app.secret_key = _secret
+def _load_session_secret_key():
+    """优先环境变量 SECRET_KEY；否则写入项目目录 .flask_session_secret，重启后会话仍有效。"""
+    sk = os.environ.get("SECRET_KEY")
+    if sk and sk.strip():
+        return sk.strip()
+    root = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(root, ".flask_session_secret")
+    try:
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as f:
+                s = f.read().strip()
+                if len(s) >= 16:
+                    return s
+    except OSError:
+        pass
+    new = secrets.token_hex(32)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new)
+        if hasattr(os, "chmod"):
+            os.chmod(path, 0o600)
+        print(f"[session] SECRET_KEY 已写入 {path}，重启后登录状态可保持", flush=True)
+    except OSError as e:
+        print(f"[session] 无法写入 {path}: {e}，本次使用内存密钥（重启后需重新登录）", flush=True)
+    return new
 
-# Session configuration
-app.config['SESSION_COOKIE_SECURE'] = False  # 在开发环境中设为False
+
+app.secret_key = _load_session_secret_key()
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
@@ -2196,6 +2319,24 @@ def shadcn_dashboard():
 def ping():
     """健康检查接口"""
     return "pong", 200
+
+
+@app.route('/api/app_identity')
+def api_app_identity():
+    """返回应用指纹、版权与商业使用声明（含制作人 Fan Yang）。"""
+    return jsonify(identity_dict()), 200
+
+
+@app.route("/api/license_status")
+def api_license_status():
+    """许可证配置与在线校验结果（不强制要求 LICENSE_ENFORCE）。"""
+    try:
+        from license_client import license_status
+
+        return jsonify(license_status()), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.route('/dashboard-assets/<path:filename>')
 def serve_dashboard_assets(filename):
@@ -7016,7 +7157,8 @@ def login():
     conn.close()
     
     if user:
-        # 登录成功，设置session
+        # 登录成功，设置session（持久 Cookie，见 PERMANENT_SESSION_LIFETIME）
+        session.permanent = True
         session['user_id'] = user['id'] if USE_POSTGRES else user[0]
         session['username'] = user['username'] if USE_POSTGRES else user[1]
         session['role'] = user['role'] if USE_POSTGRES else user[2]
