@@ -1,240 +1,145 @@
-# 入库记录系统 (Inbound Recorder System)
+# Inbound Recorder System（入库记录系统）
 
-一个基于 Flask 的入库记录管理系统，用于记录和管理仓库入库、分拣和托盘数据。
+基于 **Flask** 的仓库入库与分拣数据管理应用：录入车辆到港信息、按车型规则计算装载与件数、统计看板、历史查询与多类导出。默认单机使用 **SQLite**，生产可通过 **`DATABASE_URL`** 连接 **PostgreSQL**（如 Neon）。
 
-## 功能特点
+**仓库**：<https://github.com/sayanget/inbound-recorder-system>
 
-### 核心功能
-- 📦 **入库记录管理** - 记录车辆入库信息，包括道口号、车辆类型、车牌号、装载量等
-- 📊 **分拣记录管理** - 记录每日分拣数据
-- 🎯 **托盘统计** - 统计托盘数据
-- 📈 **数据统计与可视化** - 实时统计和图表展示
-- 📅 **历史记录查询** - 按日期范围查询历史数据
-- 📤 **数据导出** - 导出Excel格式报表
+---
 
-### 高级功能
-- 👥 **用户权限管理** - 多用户登录，权限分级（管理员/普通用户）
-- 🌐 **离线数据支持** - 支持离线录入，自动同步
-- 📧 **每日邮件报告** - 自动生成并发送每日数据汇总邮件
-- 🕐 **时区支持** - 自动处理洛杉矶时区（America/Los_Angeles）
-- 📱 **响应式设计** - 支持桌面和移动设备
+## 主要功能
+
+| 模块 | 说明 |
+|------|------|
+| **入库录入** | 码头号、车型、车牌、装载量、时间段、备注；支持「不计入统计」装载量（有车牌时）；道口占用时长（非 Car/Van） |
+| **批量 CSV 导入** | 页面选择「导入日期」，上传 CSV；支持模板下载；表头识别失败时按列序兜底（第 1～3 列：码头、车型、时间） |
+| **车型** | 系统内：`16英尺`、`26英尺`、`53英尺`、`Car`、`Van`、`其他`。导入/接口中可写简写：`16`/`26`/`53`、`van`/`面包车`、`Car`/`car` 等，服务端会规范为正式名称 |
+| **分拣 / 托盘 / 耗材等** | 分拣录入、统计页、历史、产能与排程相关页面与 API（见 `single_app.py` 路由） |
+| **管理后台** | 用户与权限、系统配置、外包/Gofo 等集成接口（按角色开放） |
+| **实时刷新** | SSE（`/api/sse/updates`）推送统计更新；前端可选 BroadcastChannel |
+| **离线录入** | 浏览器端离线队列，恢复在线后同步（见 `static/js/offlineManager.js`） |
+| **导出** | 近期记录 Excel、历史/分拣等导出接口 |
+
+---
 
 ## 技术栈
 
-- **后端**: Python 3.x + Flask
-- **数据库**: SQLite
-- **前端**: HTML5 + CSS3 + JavaScript
-- **图表**: Chart.js
-- **Excel生成**: openpyxl
-- **邮件发送**: smtplib
-- **定时任务**: schedule
+- **后端**：Python 3.x、Flask  
+- **数据库**：SQLite（默认）或 PostgreSQL（`DATABASE_URL` / `POSTGRES_URL`）  
+- **前端**：静态 HTML/CSS/JS、Chart.js；部分 React 仪表在 `static/react-dashboard/`  
+- **其他**：openpyxl、pytz、schedule、requests、pandas（与财务同步模块联动）
+
+---
+
+## 环境要求
+
+- Python **3.10+**（建议；与当前依赖一致即可）  
+- 使用 PostgreSQL 时安装：`pip install -r requirements-prod.txt`（含 `psycopg2-binary`）
+
+---
 
 ## 快速开始
 
-### 1. 安装依赖
-
 ```bash
-# 运行安装脚本
-安装依赖.bat
+git clone https://github.com/sayanget/inbound-recorder-system.git
+cd inbound-recorder-system
 
-# 或手动安装
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
-### 2. 配置邮件服务（可选）
+### 启动
 
 ```bash
-# 运行配置向导
-配置邮箱.bat
-
-# 或手动编辑 email_config.py
-```
-
-### 3. 启动应用
-
-```bash
-# 方式1：使用一键启动脚本
-一键启动.bat
-
-# 方式2：手动启动
 python single_app.py
 ```
 
-应用将在 `http://localhost:5000` 启动
+- 默认监听 **`0.0.0.0:8080`**（可用环境变量 **`HOST`**、**`PORT`** 修改）  
+- 浏览器访问：`http://localhost:8080/`（局域网访问示例：`http://<本机IP>:8080/`）
 
-### 4. 启动邮件服务（可选）
+### 常用环境变量
 
-```bash
-启动邮件服务.bat
+| 变量 | 说明 |
+|------|------|
+| `HOST` | 绑定地址，默认 `0.0.0.0` |
+| `PORT` | 端口，默认 **8080** |
+| `SECRET_KEY` | Flask 会话签名密钥；生产环境**必须**设置为固定随机串 |
+| `DATABASE_URL` / `POSTGRES_URL` | 若设置则使用 PostgreSQL，否则使用本地 SQLite |
+| `DATABASE_PATH` | 仅 SQLite：数据库文件路径（可选） |
+| `INITIAL_ADMIN_PASSWORD` | 首次初始化时管理员 `admin` 的密码；未设置时会在启动日志中打印**一次性随机密码** |
+
+首次启动会初始化数据库与默认管理员账号（用户名一般为 **`admin`**，密码见上表或控制台日志）。**生产环境请务必修改密码并设置 `SECRET_KEY`。**
+
+---
+
+## 批量导入 CSV（入库）
+
+1. 在首页选择 **导入日期**（写入每条记录的日期部分）。  
+2. 下载模板或自备 CSV：  
+   - **表头**至少能识别：**码头号、车辆类型、第三列时间**（可写「时间」「录入时间」或 `entry_time` 等）。  
+   - 编码建议 **UTF-8**；Excel 另存为「CSV UTF-8」或系统中文 CSV；服务端会尝试 GBK 等编码。  
+3. **列顺序兜底**：若表头无法识别，会按 **第 1 列=码头、第 2 列=车型、第 3 列=时刻** 解析（首行可为标题行或数据行，自动判断）。  
+4. **接口**：`GET /api/inbound_import_template`，`POST /api/inbound_import`（`multipart/form-data`：`file`、`import_date=YYYY-MM-DD`）。
+
+---
+
+## 数据库说明
+
+- **开发**：默认在项目目录生成 `inbound.db`（或打包 exe 同目录）。  
+- **生产**：设置 `DATABASE_URL`，使用 `database.py` 中的抽象层与占位符转换（`?` → `%s`）。  
+- 详细备份说明见 **`README_DB_BACKUP.md`**。
+
+---
+
+## 项目结构（节选）
+
+```
+├── single_app.py          # 主应用：路由、业务与定时任务
+├── database.py            # SQLite / PostgreSQL 连接与 SQL 适配
+├── calc_outsource_finance.py
+├── requirements.txt       # 本地默认依赖
+├── requirements-prod.txt    # 生产（含 psycopg2、gunicorn 等）
+├── docker-compose.yml
+├── static/
+│   ├── index.html         # 入库首页（含批量导入）
+│   ├── sorting.html, statistics.html, admin.html, ...
+│   └── js/                # offlineManager 等
+├── DEPLOYMENT.md
+└── DEPLOYMENT_FULL.md
 ```
 
-## 项目结构
+更完整的部署说明见 **`DEPLOYMENT.md`**、**`DEPLOYMENT_FULL.md`**。邮件相关见 **`README_EMAIL.md`**。
 
-```
-inbound_python_source/
-├── single_app.py           # 主应用程序
-├── daily_email_report.py   # 邮件报告脚本
-├── email_config.py         # 邮件配置（需自行创建）
-├── setup_email_config.py   # 邮件配置向导
-├── requirements.txt        # Python依赖
-├── inbound.db             # SQLite数据库
-├── static/                # 静态资源
-│   ├── css/              # 样式文件
-│   ├── js/               # JavaScript文件
-│   ├── login.html        # 登录页面
-│   ├── index.html        # 主页面
-│   ├── sorting.html      # 分拣页面
-│   ├── pallet.html       # 托盘页面
-│   └── admin.html        # 管理页面
-├── 一键启动.bat           # 快速启动脚本
-├── 启动邮件服务.bat       # 邮件服务启动脚本
-├── 配置邮箱.bat           # 邮件配置脚本
-└── 备份项目.bat           # 项目备份脚本
-```
+---
 
-## 数据库结构
+## 开发与调试
 
-### users 表
-- id: 用户ID
-- username: 用户名
-- password: 密码（加密存储）
-- role: 角色（admin/user）
-- created_at: 创建时间
+- 直接运行 `single_app.py` 时默认 **Flask debug**（仅用于开发）。  
+- 生产建议使用 **gunicorn** 等 WSGI 服务器，并关闭 debug、配置 HTTPS 与反向代理。  
+- CORS：对 **`/api/*`** 提供了浏览器跨域常用头；同域部署一般不受影响。
 
-### inbound_records 表
-- id: 记录ID
-- dock_no: 道口号
-- vehicle_type: 车辆类型
-- vehicle_no: 车牌号
-- unit: 单位
-- load_amount: 装载量
-- pieces: 件数
-- time_slot: 时间段
-- shift_type: 班次
-- remark: 备注
-- created_by: 创建人
-- created_at: 创建时间
+---
 
-### sorting_records 表
-- id: 记录ID
-- sorting_time: 分拣日期
-- pieces: 件数
-- time_slot: 时间段
-- remark: 备注
-- created_at: 创建时间
+## 安全说明
 
-### pallet_records 表
-- id: 记录ID
-- pallet_time: 托盘日期
-- pieces: 件数
-- time_slot: 时间段
-- remark: 备注
-- created_at: 创建时间
+- 勿在公网暴露未改默认口令的服务。  
+- 设置 **`SECRET_KEY`**、**`INITIAL_ADMIN_PASSWORD`**，并限制管理接口访问范围。  
+- 本项目按**内部使用**场景维护；对外开源时请自行审计依赖与配置。
 
-## 默认用户
+---
 
-- **管理员账户**: 
-  - 用户名: `admin`
-  - 密码: `admin123`
+## 许可证与贡献
 
-- **普通用户**: 
-  - 用户名: `user`
-  - 密码: `user123`
+内部/团队使用为主；若需开源许可证或贡献指南，请在仓库中补充 `LICENSE` 与 `CONTRIBUTING.md`。
 
-⚠️ **首次使用后请立即修改默认密码！**
+---
 
-## 邮件报告功能
+## 更新摘要（近期）
 
-系统支持每日自动发送数据汇总邮件，包含：
-- 入库总件数和车辆数
-- 分拣总件数和记录数
-- 车辆类型统计
-- 详细数据Excel附件
+- 入库 **CSV 批量导入**、模板下载、导入日期与车型简写/俗称规范化。  
+- **PostgreSQL** 可选部署；统计与管理页持续迭代。  
+- 默认 HTTP 端口与文档已统一为 **8080**（以代码中 `PORT` 为准）。
 
-配置步骤：
-1. 运行 `配置邮箱.bat` 或手动创建 `email_config.py`
-2. 填写SMTP服务器信息和邮箱凭据
-3. 设置报告发送时间
-4. 运行 `启动邮件服务.bat` 启动定时任务
-
-## 部署
-
-### 本地部署
-参见"快速开始"部分
-
-### Docker部署
-```bash
-docker-compose up -d
-```
-
-### 云平台部署
-详见 `DEPLOYMENT.md` 和 `DEPLOYMENT_FULL.md`
-
-## 离线功能
-
-系统支持离线数据录入：
-1. 离线时，数据会保存在浏览器本地存储
-2. 恢复网络后，自动同步到服务器
-3. 支持手动触发同步
-
-## 数据导出
-
-支持导出以下格式的报表：
-- Excel (.xlsx) - 包含完整数据和格式
-- 按日期范围筛选
-- 自动计算统计数据
-
-## 备份与恢复
-
-```bash
-# 备份项目
-备份项目.bat
-
-# 备份会创建包含所有核心文件的压缩包
-```
-
-## 开发说明
-
-### 添加新功能
-1. 在 `single_app.py` 中添加路由
-2. 在 `static/` 中添加前端页面
-3. 更新数据库结构（如需要）
-
-### 调试模式
-在 `single_app.py` 中设置：
-```python
-app.run(debug=True, host='0.0.0.0', port=5000)
-```
-
-## 常见问题
-
-### 1. 数据库锁定错误
-- 确保只有一个应用实例在运行
-- 检查数据库文件权限
-
-### 2. 邮件发送失败
-- 检查SMTP服务器配置
-- 确认使用应用专用密码（如Gmail）
-- 检查网络连接
-
-### 3. 时区问题
-- 系统默认使用洛杉矶时区
-- 可在代码中修改 `LA_TZ` 变量
-
-## 许可证
-
-本项目仅供内部使用。
-
-## 更新日志
-
-### v1.0.0 (2025-12-28)
-- ✨ 初始版本发布
-- 📦 入库、分拣、托盘记录功能
-- 👥 用户权限管理
-- 📧 每日邮件报告
-- 🌐 离线数据支持
-- 📊 数据统计与可视化
-
-## 联系方式
-
-如有问题或建议，请联系系统管理员。
+如有问题请联系系统管理员或提交 Issue。
