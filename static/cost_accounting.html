@@ -416,6 +416,25 @@
             margin-top: 0;
             color: #206bc4;
         }
+
+        .preview-hub-filter {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            color: #444;
+            cursor: pointer;
+            user-select: none;
+            line-height: 1.4;
+            max-width: 52rem;
+        }
+
+        .preview-hub-filter input {
+            margin-top: 3px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 
@@ -670,6 +689,10 @@
 
                 <div class="calc-result-box">
                     <h3>核算结果汇总预览</h3>
+                    <label class="preview-hub-filter">
+                        <input type="checkbox" id="previewCoreHubOnly" onchange="updateFinalCalc()">
+                        <span>仅汇总五线票数与运费：LAV（LAV*）、LAS（LAS01 + LAS01001）、PHX（仅 PHX01）、SFO、DEN。勾选后「总票数」「运输费用」仅含上述口径；计时/计件人工与耗材均按<strong>五线票数占当日总票数比例</strong>分摊。「总成本」「综合单票成本」= 五线运费 + 分摊后人工 + 分摊后耗材。</span>
+                    </label>
                     <table id="finalCalcTable">
                         <thead>
                             <tr>
@@ -850,6 +873,40 @@
 
         // Store preview data
         let currentPreviewData = null;
+
+        /**
+         * 汇总预览「仅五线」口径：
+         * - LAV：凡以 LAV 开头的流向
+         * - LAS：LAS01 与 LAS01001（及带分隔后缀的变体，如 LAS01.xxx、LAS01001（往返））；先匹配 LAS01001 以免与 LAS01 前缀混淆
+         * - PHX：仅 PHX01（含 PHX01.xxx / PHX01（…），不含 PHX、PHX02 等）
+         * - SFO、DEN：主代码段为 SFO / DEN
+         */
+        function isLasPreviewDirection(u) {
+            if (u.startsWith('LAS01001')) return true;
+            if (u === 'LAS01' || u.startsWith('LAS01.') || u.startsWith('LAS01（')) return true;
+            return false;
+        }
+
+        function isPreviewCoreHubDirection(dir) {
+            if (!dir) return false;
+            const s = String(dir).trim();
+            const u = s.toUpperCase();
+            if (u.startsWith('LAV')) return true;
+            if (isLasPreviewDirection(u)) return true;
+            if (/^PHX01(?:[.(（].*)?$/.test(u)) return true;
+            const head = s.split(/[.(（[\s]/)[0].toUpperCase();
+            if (head === 'SFO' || head === 'DEN') return true;
+            return false;
+        }
+
+        function sumPreviewDetailedForDate(detailedByDate, date) {
+            const day = (detailedByDate && detailedByDate[date]) || {};
+            let sum = 0;
+            for (const [dir, val] of Object.entries(day)) {
+                if (isPreviewCoreHubDirection(dir)) sum += Number(val) || 0;
+            }
+            return sum;
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             initUserData();
@@ -1319,6 +1376,8 @@
         function updateFinalCalc() {
             if (!currentPreviewData) return;
             const d = currentPreviewData;
+            const hubOnlyEl = document.getElementById('previewCoreHubOnly');
+            const hubOnly = !!(hubOnlyEl && hubOnlyEl.checked);
             let html = '';
 
             let gP = 0, gT = 0, gL = 0, gC = 0, gTotal = 0;
@@ -1337,16 +1396,31 @@
             const dates = Array.from(datesMatch).sort((a, b) => b.localeCompare(a));
 
             dates.forEach(date => {
-                const pieces = (d.pieces_daily && d.pieces_daily[date]) || 0;
-                const trCost = (d.transport_daily && d.transport_daily[date]) || 0;
+                let pieces = (d.pieces_daily && d.pieces_daily[date]) || 0;
+                let trCost = (d.transport_daily && d.transport_daily[date]) || 0;
+                let hubTicketShare = 1;
+                if (hubOnly) {
+                    pieces = sumPreviewDetailedForDate(d.pieces_detailed, date);
+                    trCost = sumPreviewDetailedForDate(d.transport_detailed, date);
+                    const piecesAll = (d.pieces_daily && d.pieces_daily[date]) || 0;
+                    hubTicketShare = piecesAll > 0 ? Math.min(1, pieces / piecesAll) : 0;
+                }
 
                 const labList = (d.labor_daily && d.labor_daily[date]) || [];
-                const lCost = labList.reduce((sum, item) => sum + item.subtotal, 0);
-                const lTimeCost = labList.filter(i => i.is_hourly).reduce((sum, item) => sum + item.subtotal, 0);
-                const lPieceCost = labList.filter(i => !i.is_hourly).reduce((sum, item) => sum + item.subtotal, 0);
+                let lTimeCost = labList.filter(i => i.is_hourly).reduce((sum, item) => sum + item.subtotal, 0);
+                let lPieceCost = labList.filter(i => !i.is_hourly).reduce((sum, item) => sum + item.subtotal, 0);
+
+                if (hubOnly) {
+                    lTimeCost *= hubTicketShare;
+                    lPieceCost *= hubTicketShare;
+                }
+                const lCost = lTimeCost + lPieceCost;
 
                 const conList = (d.consumables_daily && d.consumables_daily[date]) || [];
-                const cCost = conList.reduce((sum, item) => sum + item.total_amount, 0);
+                let cCost = conList.reduce((sum, item) => sum + item.total_amount, 0);
+                if (hubOnly) {
+                    cCost *= hubTicketShare;
+                }
 
                 const total = trCost + lCost + cCost;
                 const unit = pieces > 0 ? (total / pieces) : 0;
