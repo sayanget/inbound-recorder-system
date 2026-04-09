@@ -748,6 +748,23 @@ def init_db():
                 cursor.execute("ALTER TABLE gofo_sync_history ADD COLUMN manual_count INTEGER DEFAULT 0")
                 cursor.execute("ALTER TABLE gofo_sync_history ADD COLUMN device_count INTEGER DEFAULT 0")
 
+        # DMS 运单管理查询（WaybillManageQuery）导入
+        sql = convert_sql("""CREATE TABLE IF NOT EXISTS gofo_waybill_manage_import (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            waybill_no TEXT NOT NULL,
+            waybill_status TEXT,
+            plan_origin_center TEXT,
+            dest_station TEXT,
+            courier_work_area_name TEXT,
+            source_create_time TEXT,
+            filter_create_date DATE NOT NULL,
+            import_batch_id TEXT,
+            raw_json TEXT,
+            imported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(waybill_no, filter_create_date)
+        );""")
+        cursor.execute(sql)
+
         # inbound_records：填写车牌时可选「不计入总托盘/货量」的装载量（与 load_amount 同单位）
         try:
             cursor.execute("SELECT plate_excluded_load FROM inbound_records LIMIT 1")
@@ -11305,6 +11322,15 @@ def gofo_hourly_sync_job():
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(f"[GofoAutoSync] Triggering scheduled sync at {now_str}...")
             result = perform_gofo_hourly_sync()
+            
+            # Sync the center checkin stats at the same time
+            try:
+                import sync_center_checkin
+                print(f"[GofoAutoSync] Triggering center checkin sync at {now_str}...")
+                sync_center_checkin.fetch_center_checkin_data()
+            except Exception as e:
+                print(f"[GofoAutoSync] Center checkin sync failed: {e}")
+                
             synced_count = result.get('synced_count', 0)
             pieces = result.get('pieces', 0)
             hour = result.get('synced_hour')
@@ -11365,6 +11391,76 @@ def gofo_hourly_sync_job():
 
 # 模块级别初始化 - Gunicorn 导入模块时会执行
 # 这确保数据库在应用启动时被初始化
+@app.route('/api/center_checkin_trend', methods=['GET'])
+def api_center_checkin_trend():
+    """获取所有目的站点的签入数趋势数据（按小时）"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # 获取最近最多48个小时的数据点，拼接 datetime 以供排序
+        cursor.execute("""
+            SELECT DISTINCT record_date, record_hour 
+            FROM gofo_center_checkin_stats 
+            WHERE record_date IS NOT NULL AND record_hour IS NOT NULL
+            ORDER BY record_date ASC, record_hour ASC 
+            LIMIT 48
+        """)
+        dates_result = cursor.fetchall()
+        
+        time_points = []
+        labels = []
+        for row in dates_result:
+            dt_str = f"{row['record_date']} {row['record_hour']}"
+            time_points.append(dt_str)
+            
+            # Label format: "04-08 14:00"
+            date_parts = row['record_date'].split('-')
+            short_date = f"{date_parts[1]}-{date_parts[2]}" if len(date_parts) == 3 else row['record_date']
+            labels.append(f"{short_date} {row['record_hour']}")
+            
+        if not time_points:
+            return jsonify({"success": True, "dates": [], "series": []})
+        
+        # 提取所有 target_site_name
+        cursor.execute("SELECT DISTINCT target_site_name FROM gofo_center_checkin_stats WHERE target_site_name IS NOT NULL")
+        sites_result = cursor.fetchall()
+        sites = [row['target_site_name'] for row in sites_result]
+        
+        # 构建 series
+        series = []
+        for site in sites:
+            cursor.execute("""
+                SELECT record_date, record_hour, check_in_waybill_cnt 
+                FROM gofo_center_checkin_stats 
+                WHERE target_site_name = ? 
+                ORDER BY record_date ASC, record_hour ASC
+            """, (site,))
+            site_data = cursor.fetchall()
+            
+            data_map = {f"{row['record_date']} {row['record_hour']}": row['check_in_waybill_cnt'] for row in site_data}
+            
+            # 补齐每个时间点的数据
+            data_points = []
+            for tp in time_points:
+                data_points.append(data_map.get(tp, 0))
+                
+            series.append({
+                "label": site,
+                "data": data_points
+            })
+            
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "dates": labels, # Use friendly labels for the X-axis
+            "series": series
+        })
+    except Exception as e:
+        print(f"Error fetching center checkin trend: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 print("[模块加载] 开始初始化应用...")
 try:
     initialize_app()

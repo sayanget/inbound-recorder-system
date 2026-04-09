@@ -6,10 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-lang="statistics_title">入库统计</title>
     <link rel="icon" type="image/x-icon" href="/static/in0.ico">
-    <!-- 添加Chart.js核心库 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- 添加Chart.js数据标签插件 -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <!-- Chart.js 3.x 与 chartjs-plugin-datalabels@2 配套；勿用无版本号 chart.js@4 会导致插件不兼容、图表空白 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script>
+        if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+            Chart.register(ChartDataLabels);
+        }
+    </script>
     <link rel="stylesheet" href="/static/css/theme.css">
     <script src="/static/js/theme.js"></script>
     <script src="/static/js/nav_component.js"></script>
@@ -513,6 +517,14 @@
             </div>
         </div>
 
+        <!-- Center Check-in Stats Trend Chart -->
+        <div class="stats-section">
+            <h3 data-lang="center_checkin_trend_chart">CNO.H签入分类</h3>
+            <div class="chart-container" style="height: 400px;">
+                <canvas id="centerCheckinTrendChart"></canvas>
+            </div>
+        </div>
+
         <div class="button-group">
             <button id="refreshData" data-lang="refresh_data">刷新数据</button>
             <button id="exportExcel" data-lang="export_excel">导出表格</button>
@@ -613,7 +625,8 @@
                 sync_success: "同步成功",
                 sync_failed: "同步失败",
                 waybill_trend_title: "各流向每日票数趋势",
-                weekly_waybill_trend_title: "各流向每周票数趋势 (堆叠)"
+                weekly_waybill_trend_title: "各流向每周票数趋势 (堆叠)",
+                center_checkin_trend_chart: "CNO.H签入分类"
             },
             en: {
                 statistics_title: "Inbound Statistics",
@@ -704,7 +717,8 @@
                 sync_success: "Synced",
                 sync_failed: "Sync Failed",
                 waybill_trend_title: "Daily Waybill Trend by Direction (Feishu Data)",
-                weekly_waybill_trend_title: "Weekly Waybill Trend by Direction (Stacked)"
+                weekly_waybill_trend_title: "Weekly Waybill Trend by Direction (Stacked)",
+                center_checkin_trend_chart: "CNO.H check-in breakdown"
             },
             es: {
                 statistics_title: "Estadísticas de Entrada",
@@ -786,7 +800,8 @@
                 vs_last_week: "de la semana pasada",
                 capacity_planning: "Planificación de Capacidad",
                 waybill_trend_title: "Tendencia Diaria de Guías por Dirección",
-                weekly_waybill_trend_title: "Tendencia Semanal de Guías por Dirección (Apilado)"
+                weekly_waybill_trend_title: "Tendencia Semanal de Guías por Dirección (Apilado)",
+                center_checkin_trend_chart: "Clasificación de check-in CNO.H"
             }
         };
 
@@ -2460,24 +2475,21 @@
                 // 处理新的数据结构
                 const currentDay = data.current_day || [];
                 const historicalAvg = data.historical_avg || [];
+                const hasCurrent = Array.isArray(currentDay) && currentDay.length > 0;
+                const hasHistorical = Array.isArray(historicalAvg) && historicalAvg.length > 0;
 
-                // Check if there is data
-                if (!currentDay || currentDay.length === 0) {
+                // 仅当「当日分段」与「历史均值」都无时，才显示空状态（原先 current_day 为空会直接 return，历史折线也不画）
+                if (!hasCurrent && !hasHistorical) {
                     if (!window.palletHourlyChart) {
-                        // If no data, show prompt message on canvas
                         const canvas = document.getElementById('palletHourlyChart');
                         const ctx = canvas.getContext('2d');
-
-                        // Clear canvas
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                        // Draw text on canvas
                         ctx.fillStyle = '#666';
                         ctx.font = '16px Arial';
                         ctx.textAlign = 'center';
                         ctx.fillText(translations[currentLang].no_data || '暂无时段对比数据', canvas.width / 2, canvas.height / 2);
                     } else {
-                        console.log('[Statistics] New pallet data is empty, preserving existing chart.');
+                        console.log('[Statistics] Pallet data empty, preserving existing chart.');
                     }
                     return;
                 }
@@ -2523,12 +2535,9 @@
                     historicalAvgMap.hasOwnProperty(slot) ? historicalAvgMap[slot] : null
                 );
 
-                // Calculate max values for setting y-axis range
-                const maxLoadAmount = Math.max(...currentDayData.filter(v => v !== null), ...historicalAvgData.filter(v => v !== null));
-
-                // Calculate appropriate y-axis max value and step size
-                const loadAmountYAxisMax = Math.ceil(maxLoadAmount / 500) * 500;
-                const loadAmountStepSize = Math.ceil(loadAmountYAxisMax / 5 / 500) * 500;
+                // 避免 Math.max(...[]) 得到 -Infinity 导致后续异常
+                const numericVals = [...currentDayData, ...historicalAvgData].filter(v => v != null && typeof v === 'number' && !isNaN(v));
+                const maxLoadAmount = numericVals.length > 0 ? Math.max(...numericVals) : 0;
 
                 // Detect if it's a mobile device
                 const isMobile = window.innerWidth < 768;
@@ -2917,26 +2926,25 @@
                                 }
                             }
                         },
-                        // Configure data labels plugin - 只在最顶部（周日）显示周总计
+                        // Configure data labels plugin - 叠在最上层柱段（周日）顶端显示该周总和
                         datalabels: {
                             display: function (context) {
-                                // 只在最后一个数据集（周日，索引6）上显示标签
                                 return context.datasetIndex === 6;
                             },
                             anchor: 'end',
                             align: 'top',
-                            offset: 4,
+                            offset: 6,
                             formatter: function (value, context) {
-                                // 显示该周的总托盘数
                                 const weekIndex = context.dataIndex;
                                 const week = data[weekIndex];
                                 return week.week_total_pallets.toLocaleString();
                             },
                             font: {
                                 weight: 'bold',
-                                size: isMobile ? 11 : 13
+                                size: isMobile ? 10 : 12
                             },
-                            color: '#333'
+                            color: '#333',
+                            clamp: true
                         }
                     },
                     scales: {
@@ -2988,13 +2996,14 @@
                     // Adjust layout padding
                     layout: {
                         padding: {
-                            top: isMobile ? 30 : 40,  // 增加顶部padding为标签留空间
+                            top: isMobile ? 36 : 48,  // 柱顶周托盘合计数字
                             right: isMobile ? 10 : 20,
                             left: isMobile ? 10 : 20,
                             bottom: isMobile ? 5 : 10
                         }
                     }
-                }
+                },
+                plugins: [ChartDataLabels]
             });
         }
 
@@ -4009,8 +4018,114 @@
                     }
                 })
                 .catch(err => console.error('获取成本核算权限失败:', err));
+
+            // ====== 载入 CNO.H 签入分类趋势图 ======
+            function loadCenterCheckinTrendData() {
+                fetch('/api/center_checkin_trend')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            console.error('Error loading center checkin trend data:', data.error);
+                            return;
+                        }
+                        renderCenterCheckinTrendChart(data);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching center checkin trend data:', error);
+                    });
+            }
+
+            function renderCenterCheckinTrendChart(data) {
+                const ctx = document.getElementById('centerCheckinTrendChart').getContext('2d');
+
+                if (window.centerCheckinTrendChart && typeof window.centerCheckinTrendChart.destroy === 'function') {
+                    window.centerCheckinTrendChart.destroy();
+                }
+
+                if (!data || !data.dates || data.dates.length === 0 || !data.series || data.series.length === 0) {
+                    const canvas = document.getElementById('centerCheckinTrendChart');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.font = '16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#6c757d';
+                    ctx.fillText(translations[currentLang]?.no_data || '暂无数据', canvas.width / 2, canvas.height / 2);
+                    return;
+                }
+
+                // Preset distinct colors
+                const colors = [
+                    { border: 'rgba(54, 162, 235, 1)', bg: 'rgba(54, 162, 235, 0.2)' },
+                    { border: 'rgba(255, 99, 132, 1)', bg: 'rgba(255, 99, 132, 0.2)' },
+                    { border: 'rgba(75, 192, 192, 1)', bg: 'rgba(75, 192, 192, 0.2)' },
+                    { border: 'rgba(153, 102, 255, 1)', bg: 'rgba(153, 102, 255, 0.2)' },
+                    { border: 'rgba(255, 159, 64, 1)', bg: 'rgba(255, 159, 64, 0.2)' },
+                    { border: 'rgba(255, 206, 86, 1)', bg: 'rgba(255, 206, 86, 0.2)' }
+                ];
+
+                const datasets = data.series.map((s, index) => {
+                    const color = colors[index % colors.length];
+                    return {
+                        label: s.label,
+                        data: s.data,
+                        borderColor: color.border,
+                        backgroundColor: color.bg,
+                        borderWidth: 2,
+                        pointBackgroundColor: color.border,
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: color.border,
+                        tension: 0.4, // 平滑曲线，营造波形图效果
+                        fill: true    // 启用面积填充，典型的波形外观
+                    };
+                });
+
+                window.centerCheckinTrendChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.dates,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            title: {
+                                display: false
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
+                            },
+                            datalabels: {
+                                display: false // 不要在密集的波形图上显示具体数值，否则会很乱
+                            }
+                        },
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: '日期'
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: '签入运单数'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Trigger Load
+            loadCenterCheckinTrendData();
         });
     </script>
 </body>
-
 </html>

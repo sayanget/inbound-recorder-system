@@ -908,11 +908,38 @@
             return sum;
         }
 
+        /** 生产人工飞书链接：持久化到浏览器，避免刷新后仍显示旧地址 */
+        const LS_COST_LABOR_SHEET = 'cost_accounting_labor_sheet_link';
+
+        function saveLaborSheetLinkToStorage() {
+            try {
+                const el = document.getElementById('laborSheetLink');
+                if (!el) return;
+                localStorage.setItem(LS_COST_LABOR_SHEET, (el.value || '').trim());
+            } catch (e) { /* 隐私模式等 */ }
+        }
+
+        function loadLaborSheetLinkFromStorage() {
+            try {
+                const el = document.getElementById('laborSheetLink');
+                if (!el) return;
+                const s = localStorage.getItem(LS_COST_LABOR_SHEET);
+                if (s != null) el.value = s;
+            } catch (e) { }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             initUserData();
             initDates();
             loadHistory();
             initCharts();
+
+            loadLaborSheetLinkFromStorage();
+            const laborLinkEl = document.getElementById('laborSheetLink');
+            if (laborLinkEl) {
+                laborLinkEl.addEventListener('blur', saveLaborSheetLinkToStorage);
+                laborLinkEl.addEventListener('change', saveLaborSheetLinkToStorage);
+            }
 
             // 自动加载本地备用的飞书数据
             fetchFeishuData();
@@ -1016,6 +1043,7 @@
             btn.disabled = true;
 
             const link = (document.getElementById('laborSheetLink')?.value || '').trim();
+            saveLaborSheetLinkToStorage();
             fetch('/api/admin/labor/sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
