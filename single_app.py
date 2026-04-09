@@ -1724,6 +1724,54 @@ def api_schedule_vs_packaging():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/statistics/daily_packing_split', methods=['GET'])
+def api_statistics_daily_packing_split():
+    """按运营日 06:00–次日 06:00（LA）聚合每日人工/设备集包件数；供入库统计页堆叠图使用。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    days = request.args.get('days', type=int)
+    if days is None or days < 1:
+        days = 14
+    days = min(days, 90)
+    try:
+        end_date = datetime.now(LA_TZ).date()
+        start_date = end_date - timedelta(days=days - 1)
+        conn = get_db()
+        cursor = conn.cursor()
+        dates = []
+        manual = []
+        device = []
+        total_pieces = []
+        d = start_date
+        while d <= end_date:
+            dates.append(d.strftime('%Y-%m-%d'))
+            next_d = d + timedelta(days=1)
+            cursor.execute(convert_query_placeholders("""
+                SELECT COALESCE(SUM(manual_count), 0), COALESCE(SUM(device_count), 0), COALESCE(SUM(pieces), 0)
+                FROM sorting_records
+                WHERE (sorting_time = ? AND time_slot >= '06:00')
+                   OR (sorting_time = ? AND time_slot < '06:00')
+            """), (d.strftime('%Y-%m-%d'), next_d.strftime('%Y-%m-%d')))
+            r = cursor.fetchone()
+            manual.append(int(r[0]) if r and r[0] is not None else 0)
+            device.append(int(r[1]) if r and r[1] is not None else 0)
+            total_pieces.append(int(r[2]) if r and r[2] is not None else 0)
+            d += timedelta(days=1)
+        conn.close()
+        return jsonify({
+            'dates': dates,
+            'manual': manual,
+            'device': device,
+            'total_pieces': total_pieces,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/consumables')
 def consumables():
     # 检查用户权限
@@ -4620,6 +4668,169 @@ def perform_gofo_hourly_sync():
         "manual_today": collect_art,
         "device_today": collect_device
     }
+
+
+def perform_gofo_backfill_range(start_date_str, end_date_str):
+    """按日历日从 Gofo 拉取 chart_v2 整点列表，再逐小时 overview 回填 sorting_records（与 perform_gofo_hourly_sync 同源逻辑）。
+    用于更正某区间内人工/设备/件数与源站不一致的问题（例如统计图某日异常后重抓）。"""
+    try:
+        d0 = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        d1 = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        raise ValueError('日期须为 YYYY-MM-DD')
+    if d0 > d1:
+        raise ValueError('开始日期不能晚于结束日期')
+
+    from gofo_config import get_gofo_token
+    token = get_gofo_token()
+    BASE_HEADERS = {
+        "Admin-Token": token,
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        "channel-id": "us",
+        "lang": "zh",
+    }
+    overview_url = "https://dms.gofoexpress.com/prod-api/dbu_report/common/magic/center/board/overview"
+    chart_url = "https://dms.gofoexpress.com/prod-api/dbu_report/common/magic/center/board/operation/chart_v2"
+    la_tz = pytz.timezone('America/Los_Angeles')
+    now_la = datetime.now(la_tz)
+    current_la_time_str = now_la.strftime('%Y-%m-%d %H:%M:%S')
+    remark = f"Gofo backfill {start_date_str}~{end_date_str} ({now_la.strftime('%m-%d %H:%M')})"
+
+    def parse_hourly_cnt(val):
+        if val is None:
+            return 0
+        if isinstance(val, (int, float)):
+            return int(val)
+        if not isinstance(val, str) or not val.strip():
+            return 0
+        if '/' in val:
+            try:
+                return int(val.split('/')[-1].replace(',', '').strip())
+            except Exception:
+                return 0
+        try:
+            return int(val.replace(',', '').strip())
+        except Exception:
+            return 0
+
+    max_retries = 3
+    hourly_results = []
+    d = d0
+    while d <= d1:
+        date_str = d.strftime('%Y-%m-%d')
+        trend_payload = {
+            "centerIds": [596],
+            "startTime": f"{date_str} 00:00:00",
+            "endTime": f"{date_str} 23:59:59",
+            "groupType": 2,
+        }
+        chart_json = {}
+        for attempt in range(max_retries):
+            try:
+                chart_res = requests.post(chart_url, headers=BASE_HEADERS, json=trend_payload, timeout=30)
+                chart_json = chart_res.json()
+                break
+            except requests.exceptions.RequestException as e:
+                if attempt == max_retries - 1:
+                    raise Exception(f"Gofo chart_v2 请求失败 ({date_str}): {e}") from e
+                time.sleep(1)
+        if chart_json.get('code') == 401:
+            raise Exception("Gofo API 登录失效 (Token Expired). 请更新 Token。")
+        chart_data = chart_json.get('data') or []
+        if not chart_data:
+            print(f"[Gofo backfill] 无趋势数据: {date_str}")
+
+        for i in range(len(chart_data)):
+            item = chart_data[i]
+            report_hour_str = item.get('hour')
+            if not report_hour_str:
+                continue
+            try:
+                hour_start = f"{report_hour_str}:00:00"
+                hour_end = f"{report_hour_str}:59:59"
+                hour_overview_payload = {
+                    "centerIds": [596],
+                    "startTime": hour_start,
+                    "endTime": hour_end,
+                    "groupType": 2,
+                }
+                hour_json = {}
+                for attempt in range(max_retries):
+                    try:
+                        hour_res = requests.post(overview_url, headers=BASE_HEADERS, json=hour_overview_payload, timeout=15)
+                        if not hour_res.ok:
+                            break
+                        hour_json = hour_res.json()
+                        break
+                    except requests.exceptions.RequestException:
+                        if attempt < max_retries - 1:
+                            time.sleep(1)
+                if not hour_json or hour_json.get('code') == 401:
+                    continue
+                hour_overview = hour_json.get('data') or {}
+                if not hour_overview:
+                    continue
+                hourly_pieces = parse_hourly_cnt(hour_overview.get('collectTotalCnt'))
+                hourly_manual = parse_hourly_cnt(hour_overview.get('collectTotalCntArtificial'))
+                hourly_device = parse_hourly_cnt(hour_overview.get('collectTotalCntDevice'))
+                if hourly_pieces == 0 and (hourly_manual > 0 or hourly_device > 0):
+                    hourly_pieces = hourly_manual + hourly_device
+                report_dt = datetime.strptime(report_hour_str, '%Y-%m-%d %H')
+                target_date = report_dt.strftime('%Y-%m-%d')
+                target_slot = report_dt.strftime('%H:00')
+                hourly_results.append({
+                    "date": target_date,
+                    "slot": target_slot,
+                    "pieces": hourly_pieces,
+                    "manual": hourly_manual,
+                    "device": hourly_device,
+                    "report_hour": report_hour_str,
+                })
+            except Exception as e:
+                print(f"[Gofo backfill] hour {report_hour_str}: {e}")
+
+        d += timedelta(days=1)
+        time.sleep(0.25)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    synced_count = 0
+    try:
+        for res in hourly_results:
+            cursor.execute("""
+                SELECT id FROM sorting_records
+                WHERE sorting_time = ? AND time_slot = ?
+            """, (res["date"], res["slot"]))
+            row = cursor.fetchone()
+            if row:
+                rid = row['id'] if USE_POSTGRES else row[0]
+                cursor.execute("""
+                    UPDATE sorting_records SET pieces = ?, manual_count = ?, device_count = ?, remark = ?
+                    WHERE id = ?
+                """, (res["pieces"], res["manual"], res["device"], remark, rid))
+            else:
+                cursor.execute("""
+                    INSERT INTO sorting_records (sorting_time, pieces, remark, time_slot, created_at, manual_count, device_count)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (res["date"], res["pieces"], remark, res["slot"], current_la_time_str, res["manual"], res["device"]))
+            synced_count += 1
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "synced_count": synced_count,
+        "start_date": start_date_str,
+        "end_date": end_date_str,
+        "hour_slots": len(hourly_results),
+    }
+
 
 @app.route('/api/gofo/sync_hourly', methods=['POST'])
 def sync_gofo_hourly():
@@ -9117,6 +9328,33 @@ def sync_gofo_piece_rate():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@app.route('/api/admin/gofo/backfill_sorting_range', methods=['POST'])
+def admin_gofo_backfill_sorting_range():
+    """按日期区间从 Gofo 重抓 hourly 集包数据并写回 sorting_records（更正统计图等）。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录', 'success': False}), 401
+    conn = get_db()
+    cursor = conn.cursor()
+    if not require_admin(cursor):
+        conn.close()
+        return jsonify({'error': '无权访问', 'success': False}), 403
+    conn.close()
+
+    data = request.json or {}
+    start_date = (data.get('start_date') or '').strip()
+    end_date = (data.get('end_date') or '').strip()
+    if not start_date or not end_date:
+        return jsonify({'success': False, 'error': '请提供 start_date 与 end_date（YYYY-MM-DD）'}), 400
+    try:
+        result = perform_gofo_backfill_range(start_date, end_date)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/admin/outsource/export', methods=['GET'])
 def export_outsource_data():
     if 'user_id' not in session: return jsonify({'error': '未登录', 'success': False}), 401
@@ -11460,6 +11698,38 @@ def api_center_checkin_trend():
     except Exception as e:
         print(f"Error fetching center checkin trend: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/center_checkin/sync', methods=['POST'])
+def api_admin_center_checkin_sync():
+    """从 GoFO DMS 拉取 CNO.H 签入看板数据并写入 gofo_center_checkin_stats（管理员）。"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': '未登录'}), 401
+    conn = get_db()
+    cursor = conn.cursor()
+    if not require_admin(cursor):
+        conn.close()
+        return jsonify({'success': False, 'error': '无权访问'}), 403
+    conn.close()
+    payload = request.get_json(silent=True) or {}
+    date_str = (payload.get('date') or '').strip()
+    if not date_str:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    try:
+        import sync_center_checkin
+        result = sync_center_checkin.fetch_center_checkin_data(date_str)
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'message': result.get('message', ''),
+                'count': result.get('count', 0),
+            })
+        return jsonify({'success': False, 'error': result.get('error', '同步失败')}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 print("[模块加载] 开始初始化应用...")
 try:

@@ -159,8 +159,9 @@ def fetch_center_checkin_data(target_date_str=None):
     
     final_df = df[existing_cols].rename(columns=rename_map)
 
-    # Archive to Database
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inbound.db')
+    # Archive to Database（与主应用 DATABASE_PATH 一致，便于同库读写）
+    _root = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.environ.get("DATABASE_PATH") or os.path.join(_root, "inbound.db")
     table_name = 'gofo_center_checkin_stats'
     
     logging.info(f"⏳ Saving {len(final_df)} check-in records to local DB: {table_name}")

@@ -493,6 +493,16 @@
             </div>
         </div>
 
+        <!-- Daily packing: manual vs device (stacked) -->
+        <div class="stats-section">
+            <h3 data-lang="daily_packing_split_chart">每日集包（人工 / 设备）</h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
+                data-lang="daily_packing_split_hint">按 LA 运营日 06:00–次日 06:00 统计最近 14 天</p>
+            <div class="chart-container" style="height: 380px;">
+                <canvas id="dailyPackingSplitChart"></canvas>
+            </div>
+        </div>
+
         <!-- Pallet hourly chart -->
         <div class="stats-section">
             <h3 data-lang="pallet_hourly_comparison">托盘时段统计</h3>
@@ -519,7 +529,17 @@
 
         <!-- Center Check-in Stats Trend Chart -->
         <div class="stats-section">
-            <h3 data-lang="center_checkin_trend_chart">CNO.H签入分类</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+                <h3 style="margin:0;" data-lang="center_checkin_trend_chart">CNO.H签入分类</h3>
+                <div id="centerCheckinSyncWrap" style="display:none; align-items:center; gap:10px;">
+                    <button type="button" id="centerCheckinSyncBtn" class="nav-btn"
+                        style="padding:6px 14px; font-size:13px; cursor:pointer; background:var(--primary-color); color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="center_checkin_sync_btn">更新签入数据</span>
+                    </button>
+                    <span id="centerCheckinSyncStatus" style="font-size:12px; color:var(--text-muted); max-width:220px;"></span>
+                </div>
+            </div>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="centerCheckinTrendChart"></canvas>
             </div>
@@ -610,6 +630,11 @@
                 save_failed: "保存失败",
                 logout: "登出",
                 daily_trend_chart: "物资统计图",
+                daily_packing_split_chart: "每日集包（人工 / 设备）",
+                daily_packing_split_hint: "按 LA 运营日 06:00–次日 06:00 统计最近 14 天",
+                packing_manual: "人工集包",
+                packing_device: "设备集包",
+                packing_sum_label: "日合计",
                 week_comparison_chart: "周环比对比",
                 current_week: "本周",
                 previous_week: "上周",
@@ -626,7 +651,9 @@
                 sync_failed: "同步失败",
                 waybill_trend_title: "各流向每日票数趋势",
                 weekly_waybill_trend_title: "各流向每周票数趋势 (堆叠)",
-                center_checkin_trend_chart: "CNO.H签入分类"
+                center_checkin_trend_chart: "CNO.H签入分类",
+                center_checkin_sync_btn: "更新签入数据",
+                center_checkin_syncing: "正在从 GoFO 同步…"
             },
             en: {
                 statistics_title: "Inbound Statistics",
@@ -702,6 +729,11 @@
                 save_failed: "Save failed",
                 logout: "Logout",
                 daily_trend_chart: "Material Statistics",
+                daily_packing_split_chart: "Daily packing (manual / device)",
+                daily_packing_split_hint: "LA business day 06:00–06:00, last 14 days",
+                packing_manual: "Manual packing",
+                packing_device: "Device packing",
+                packing_sum_label: "Daily total",
                 week_comparison_chart: "Week-over-Week Comparison",
                 current_week: "Current Week",
                 previous_week: "Previous Week",
@@ -718,7 +750,9 @@
                 sync_failed: "Sync Failed",
                 waybill_trend_title: "Daily Waybill Trend by Direction (Feishu Data)",
                 weekly_waybill_trend_title: "Weekly Waybill Trend by Direction (Stacked)",
-                center_checkin_trend_chart: "CNO.H check-in breakdown"
+                center_checkin_trend_chart: "CNO.H check-in breakdown",
+                center_checkin_sync_btn: "Refresh check-in data",
+                center_checkin_syncing: "Syncing from GoFO…"
             },
             es: {
                 statistics_title: "Estadísticas de Entrada",
@@ -789,6 +823,11 @@
                 save_failed: "Error al guardar",
                 logout: "Cerrar sesión",
                 daily_trend_chart: "Estadísticas de Materiales",
+                daily_packing_split_chart: "Empaque diario (manual / dispositivo)",
+                daily_packing_split_hint: "Día operativo LA 06:00–06:00, últimos 14 días",
+                packing_manual: "Empaque manual",
+                packing_device: "Empaque por dispositivo",
+                packing_sum_label: "Total diario",
                 week_comparison_chart: "Comparación Semanal",
                 current_week: "Semana Actual",
                 previous_week: "Semana Anterior",
@@ -801,7 +840,9 @@
                 capacity_planning: "Planificación de Capacidad",
                 waybill_trend_title: "Tendencia Diaria de Guías por Dirección",
                 weekly_waybill_trend_title: "Tendencia Semanal de Guías por Dirección (Apilado)",
-                center_checkin_trend_chart: "Clasificación de check-in CNO.H"
+                center_checkin_trend_chart: "Clasificación de check-in CNO.H",
+                center_checkin_sync_btn: "Actualizar datos de ingreso",
+                center_checkin_syncing: "Sincronizando desde GoFO…"
             }
         };
 
@@ -838,6 +879,13 @@
             // Re-render chart if it exists
             if (window.hourlyChart) {
                 loadHourlyComparisonData();
+            }
+            if (window.dailyPackingSplitChart && window.dailyPackingSplitChart.data && window.dailyPackingSplitChart.data.datasets) {
+                const ds = window.dailyPackingSplitChart.data.datasets;
+                const t = translations[lang];
+                if (ds[0]) ds[0].label = t.packing_manual || '人工集包';
+                if (ds[1]) ds[1].label = t.packing_device || '设备集包';
+                window.dailyPackingSplitChart.update();
             }
         }
 
@@ -1194,6 +1242,9 @@
         if (refreshDataEl) {
             refreshDataEl.addEventListener('click', function () {
                 loadData();
+                if (typeof window.loadCenterCheckinTrendData === 'function') {
+                    window.loadCenterCheckinTrendData();
+                }
             });
         }
 
@@ -1288,6 +1339,7 @@
 
         // Load statistics data
         function loadData() {
+            if (typeof loadDailyPackingSplitData === 'function') loadDailyPackingSplitData();
             console.log('Loading data for date:', currentDate);
             // Get statistics data
             let url = '/api/stats';
@@ -2737,6 +2789,173 @@
             }
         }
 
+        function loadDailyPackingSplitData() {
+            fetch('/api/statistics/daily_packing_split?days=14')
+                .then(r => {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        console.error('daily_packing_split:', data.error);
+                        renderDailyPackingSplitChart(null);
+                        return;
+                    }
+                    renderDailyPackingSplitChart(data);
+                })
+                .catch(err => {
+                    console.error('loadDailyPackingSplitData', err);
+                    renderDailyPackingSplitChart(null);
+                });
+        }
+
+        function renderDailyPackingSplitChart(data) {
+            const canvas = document.getElementById('dailyPackingSplitChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            if (window.dailyPackingSplitChart && typeof window.dailyPackingSplitChart.destroy === 'function') {
+                window.dailyPackingSplitChart.destroy();
+            }
+
+            if (!data || !data.dates || data.dates.length === 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText(translations[currentLang].no_data || '暂无数据', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            const labels = data.dates.map(s => s.substring(5));
+            const manual = data.manual || [];
+            const device = data.device || [];
+            const totalPieces = data.total_pieces || [];
+            const isMobile = window.innerWidth < 768;
+
+            window.dailyPackingSplitChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: translations[currentLang].packing_manual || '人工集包',
+                            data: manual,
+                            backgroundColor: 'rgba(54, 162, 235, 0.85)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                            stack: 'pack',
+                            datalabels: {
+                                display: function (context) {
+                                    const v = Number(context.dataset.data[context.dataIndex]) || 0;
+                                    return v > 0;
+                                },
+                                color: '#fff',
+                                anchor: 'center',
+                                align: 'center',
+                                formatter: function (value) {
+                                    const v = Number(value) || 0;
+                                    return v > 0 ? v.toLocaleString() : '';
+                                },
+                                font: { size: isMobile ? 9 : 11, weight: '600' }
+                            }
+                        },
+                        {
+                            label: translations[currentLang].packing_device || '设备集包',
+                            data: device,
+                            backgroundColor: 'rgba(255, 159, 64, 0.85)',
+                            borderColor: 'rgba(255, 159, 64, 1)',
+                            borderWidth: 1,
+                            stack: 'pack',
+                            datalabels: {
+                                labels: {
+                                    segment: {
+                                        display: function (context) {
+                                            const v = Number(context.dataset.data[context.dataIndex]) || 0;
+                                            return v > 0;
+                                        },
+                                        color: '#fff',
+                                        anchor: 'center',
+                                        align: 'center',
+                                        formatter: function (value) {
+                                            const v = Number(value) || 0;
+                                            return v > 0 ? v.toLocaleString() : '';
+                                        },
+                                        font: { size: isMobile ? 9 : 11, weight: '600' }
+                                    },
+                                    sumTop: {
+                                        display: function (context) {
+                                            const i = context.dataIndex;
+                                            const sum = (Number(manual[i]) || 0) + (Number(device[i]) || 0);
+                                            return sum > 0;
+                                        },
+                                        color: '#333',
+                                        anchor: 'end',
+                                        align: 'top',
+                                        offset: 4,
+                                        formatter: function (_value, context) {
+                                            const i = context.dataIndex;
+                                            const sum = (Number(manual[i]) || 0) + (Number(device[i]) || 0);
+                                            return sum > 0 ? sum.toLocaleString() : '';
+                                        },
+                                        font: { size: isMobile ? 10 : 12, weight: '700' }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                afterBody: function (items) {
+                                    if (!items || !items.length) return [];
+                                    const i = items[0].dataIndex;
+                                    const m = Number(manual[i]) || 0;
+                                    const d = Number(device[i]) || 0;
+                                    const p = Number(totalPieces[i]) || 0;
+                                    const sum = m + d;
+                                    const lbl = translations[currentLang].packing_sum_label || '日合计';
+                                    const lines = [lbl + ': ' + sum.toLocaleString()];
+                                    if (p !== sum) {
+                                        lines.push('Σ pieces: ' + p.toLocaleString());
+                                    }
+                                    return lines;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: isMobile ? 45 : 0,
+                                font: { size: isMobile ? 9 : 11 }
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function (v) {
+                                    return Number(v).toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    interaction: { mode: 'index', intersect: false }
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
         // Export to CSV function
         function exportToExcel() {
             try {
@@ -4034,6 +4253,66 @@
                         console.error('Error fetching center checkin trend data:', error);
                     });
             }
+
+            window.loadCenterCheckinTrendData = loadCenterCheckinTrendData;
+
+            async function manualCenterCheckinSync() {
+                const btn = document.getElementById('centerCheckinSyncBtn');
+                const status = document.getElementById('centerCheckinSyncStatus');
+                const label = btn ? btn.querySelector('[data-lang="center_checkin_sync_btn"]') : null;
+                if (!btn || btn.disabled) return;
+                const origText = label ? label.textContent : '';
+                btn.disabled = true;
+                if (status) {
+                    status.textContent = translations[currentLang].center_checkin_syncing || '…';
+                    status.style.color = '#6c757d';
+                }
+                try {
+                    const res = await fetch('/api/admin/center_checkin/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({})
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        const n = data.count != null ? data.count : '?';
+                        if (status) {
+                            status.textContent = (translations[currentLang].sync_success || '同步成功') + ` (${n})`;
+                            status.style.color = '#28a745';
+                        }
+                        loadCenterCheckinTrendData();
+                        if (typeof showMessage === 'function') {
+                            showMessage(data.message || (translations[currentLang].sync_success || '同步成功'), 'success');
+                        }
+                    } else {
+                        throw new Error(data.error || 'sync failed');
+                    }
+                } catch (e) {
+                    console.error('Center checkin sync:', e);
+                    if (status) {
+                        status.textContent = (translations[currentLang].sync_failed || '失败') + ': ' + e.message;
+                        status.style.color = '#dc3545';
+                    }
+                    if (typeof showMessage === 'function') showMessage(e.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                    if (label) label.textContent = translations[currentLang].center_checkin_sync_btn || origText;
+                }
+            }
+
+            fetch('/api/check_login')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.logged_in && d.user && (d.user.role === 'admin' || d.user.role === 'boss')) {
+                        const w = document.getElementById('centerCheckinSyncWrap');
+                        if (w) w.style.display = 'flex';
+                    }
+                })
+                .catch(() => {});
+
+            const centerSyncBtn = document.getElementById('centerCheckinSyncBtn');
+            if (centerSyncBtn) centerSyncBtn.addEventListener('click', manualCenterCheckinSync);
 
             function renderCenterCheckinTrendChart(data) {
                 const ctx = document.getElementById('centerCheckinTrendChart').getContext('2d');
