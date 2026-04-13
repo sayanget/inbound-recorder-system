@@ -11,6 +11,55 @@ from gofo_config import get_gofo_token
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
+def _parse_record_slot_from_api_row(row: dict, target_date_str: str) -> tuple:
+    """
+    从 details_v2 单行解析 (record_date YYYY-MM-DD, record_hour HH:00)。
+    若接口未给时间维度，则使用 target_date_str + 当前整点（与旧逻辑兼容）。
+    """
+    rd = target_date_str
+    rh = datetime.now().strftime("%H:00")
+    if not isinstance(row, dict):
+        return rd, rh
+    for key in ("statDate", "bizDate", "reportDate", "date", "statTimeDate"):
+        v = row.get(key)
+        if v:
+            s = str(v).strip()
+            if len(s) >= 10 and s[4] == "-":
+                rd = s[:10]
+                break
+    for key in ("reportHour", "statHour", "hour", "timeSlot", "hourStr", "timeHour"):
+        v = row.get(key)
+        if v is None or str(v).strip() == "":
+            continue
+        s = str(v).strip()
+        try:
+            if ":" in s:
+                parts = s.split(":")
+                h = int(parts[0]) % 24
+                rh = f"{h:02d}:00"
+            elif s.isdigit() and len(s) <= 2:
+                rh = f"{int(s) % 24:02d}:00"
+            else:
+                continue
+            break
+        except (ValueError, IndexError):
+            continue
+    for key in ("createTime", "updateTime", "statTime", "reportTime"):
+        v = row.get(key)
+        if not v:
+            continue
+        try:
+            s = str(v).replace("Z", "+00:00").replace("T", " ")
+            if len(s) >= 16:
+                t = datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S")
+                rd = t.strftime("%Y-%m-%d")
+                rh = t.strftime("%H:00")
+                break
+        except (ValueError, TypeError):
+            continue
+    return rd, rh
+
 URL = "https://dms.gofoexpress.com/prod-api/dbu_report/common/magic/center/board/status/details_v2"
 
 def fetch_center_checkin_data(target_date_str=None):
@@ -131,14 +180,13 @@ def fetch_center_checkin_data(target_date_str=None):
         logging.info(msg)
         return {"success": True, "message": msg, "count": 0}
 
-    # Format Data
+    # Format Data（每行独立 record_date / record_hour，便于历史多日写入与图表横轴）
     df = pd.DataFrame(all_rows)
-    
-    # Add metadata
-    df['record_date'] = target_date_str
-    df['record_hour'] = datetime.now().strftime("%H:00")
-    df['start_time'] = start_time_str
-    df['end_time'] = end_time_str
+    slots = [_parse_record_slot_from_api_row(dict(r) if not isinstance(r, dict) else r, target_date_str) for r in all_rows]
+    df["record_date"] = [s[0] for s in slots]
+    df["record_hour"] = [s[1] for s in slots]
+    df["start_time"] = start_time_str
+    df["end_time"] = end_time_str
 
     # Select and rename columns mapping 
     rename_map = {

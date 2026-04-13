@@ -471,6 +471,9 @@
         <!-- Hourly comparison chart -->
         <div class="stats-section">
             <h3 data-lang="inbound_sorting_comparison">入库与分拣时段对比</h3>
+            <p data-lang="inbound_sorting_comparison_sub" style="font-size: 12px; color: #666; margin: 4px 0 10px; line-height: 1.4;">
+                「入库」系列 = 各时段（人工集包 + 设备集包）− CNO01 集包运单数（与分拣分时数据同源）。
+            </p>
             <div class="chart-container">
                 <canvas id="hourlyComparisonChart"></canvas>
             </div>
@@ -497,7 +500,7 @@
         <div class="stats-section">
             <h3 data-lang="daily_packing_split_chart">每日集包（人工 / 设备）</h3>
             <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
-                data-lang="daily_packing_split_hint">按 LA 运营日 06:00–次日 06:00 统计最近 14 天</p>
+                data-lang="daily_packing_split_hint">按 LA 运营日 06:00–次日 06:00 统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。</p>
             <div class="chart-container" style="height: 380px;">
                 <canvas id="dailyPackingSplitChart"></canvas>
             </div>
@@ -530,7 +533,7 @@
         <!-- Center Check-in Stats Trend Chart -->
         <div class="stats-section">
             <div
-                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
                 <h3 style="margin:0;" data-lang="center_checkin_trend_chart">CNO.H签入分类</h3>
                 <div id="centerCheckinSyncWrap" style="display:none; align-items:center; gap:10px;">
                     <button type="button" id="centerCheckinSyncBtn" class="nav-btn"
@@ -540,6 +543,8 @@
                     <span id="centerCheckinSyncStatus" style="font-size:12px; color:var(--text-muted); max-width:220px;"></span>
                 </div>
             </div>
+            <p style="font-size:12px; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;"
+                data-lang="center_checkin_chart_hint">仅展示当前所选统计日期的签入数据。</p>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="centerCheckinTrendChart"></canvas>
             </div>
@@ -589,6 +594,7 @@
                 vehicles_20_21_by_type: "20:00-21:00各车型到车统计",
                 vehicle_arrival_count: "到车数量",
                 inbound_sorting_comparison: "入库与分拣时段对比",
+                inbound_sorting_comparison_sub: "「入库」系列 = 各时段（人工集包 + 设备集包）− CNO01 集包运单数（与分拣分时数据同源）。",
                 sorting_capacity_chart: "集包产能分时图",
                 manual_capacity: "人工集包产能",
                 device_capacity: "设备集包产能",
@@ -610,13 +616,13 @@
                 render_capacity_error: "渲染集包产能图表出错:",
                 pallet_pieces: "托盘件数",
                 pallet_count: "托盘车次",
-                inbound_pieces: "入库件数",
+                inbound_pieces: "集包净入(−CNO01)",
                 sorting_pieces: "分拣件数",
                 inbound_avg_line: "入库分时均值",
                 sorting_avg_line: "分拣分时均值",
                 difference_value: "差异值",
                 inbound_sorting_difference: "入库与分拣差异",
-                inbound_sorting_comparison_chart_title: "入库件数与分拣件数时段对比",
+                inbound_sorting_comparison_chart_title: "集包净入与分拣件数时段对比",
                 sorting_capacity_chart_title: "集包产能分时图",
                 pieces: "件数",
                 time_slot: "时间段",
@@ -632,7 +638,8 @@
                 logout: "登出",
                 daily_trend_chart: "物资统计图",
                 daily_packing_split_chart: "每日集包（人工 / 设备）",
-                daily_packing_split_hint: "按 LA 运营日 06:00–次日 06:00 统计最近 14 天",
+                daily_packing_split_hint: "按 LA 运营日 06:00–次日 06:00 统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
+                daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
                 packing_manual: "人工集包",
                 packing_device: "设备集包",
                 packing_sum_label: "日合计",
@@ -653,6 +660,7 @@
                 waybill_trend_title: "各流向每日票数趋势",
                 weekly_waybill_trend_title: "各流向每周票数趋势 (堆叠)",
                 center_checkin_trend_chart: "CNO.H签入分类",
+                center_checkin_chart_hint: "仅展示当前统计日期（与上方所选日期一致）的签入分时；库内仍保留全部历史。查看多日可调用 API：days=all 或 days=数字。",
                 center_checkin_sync_btn: "更新签入数据",
                 center_checkin_syncing: "正在从 GoFO 同步…"
             },
@@ -689,6 +697,7 @@
                 vehicles_20_21_by_type: "20:00-21:00 Arrivals by Type",
                 vehicle_arrival_count: "Arrival Count",
                 inbound_sorting_comparison: "Inbound vs Sorting Comparison",
+                inbound_sorting_comparison_sub: "“Inbound” series = (manual pack + device pack) − CNO01 collect waybills per slot (same source as sorting hourly).",
                 sorting_capacity_chart: "Sorting Capacity Distribution",
                 manual_capacity: "Manual Capacity",
                 device_capacity: "Device Capacity",
@@ -710,13 +719,13 @@
                 render_capacity_error: "Error rendering capacity chart:",
                 pallet_pieces: "Pallet Pieces",
                 pallet_count: "Pallet Count",
-                inbound_pieces: "Inbound Pieces",
+                inbound_pieces: "Pack net (-CNO01)",
                 sorting_pieces: "Sorted Pieces",
                 inbound_avg_line: "Inbound Avg by Slot",
                 sorting_avg_line: "Sorting Avg by Slot",
                 difference_value: "Difference",
                 inbound_sorting_difference: "Inbound vs Sorting Diff.",
-                inbound_sorting_comparison_chart_title: "Inbound vs Sorted Comparison Chart",
+                inbound_sorting_comparison_chart_title: "Net pack-in vs sorted pieces by hour",
                 sorting_capacity_chart_title: "Sorting Capacity Hourly Chart",
                 pieces: "Pieces",
                 time_slot: "Time Slot",
@@ -732,7 +741,8 @@
                 logout: "Logout",
                 daily_trend_chart: "Material Statistics",
                 daily_packing_split_chart: "Daily packing (manual / device)",
-                daily_packing_split_hint: "LA business day 06:00–06:00, last 14 days",
+                daily_packing_split_hint: "LA business day 06:00–06:00, last 14 days; bar height = daily total (manual+device); segment labels show share.",
+                daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
                 packing_manual: "Manual packing",
                 packing_device: "Device packing",
                 packing_sum_label: "Daily total",
@@ -753,6 +763,7 @@
                 waybill_trend_title: "Daily Waybill Trend by Direction (Feishu Data)",
                 weekly_waybill_trend_title: "Weekly Waybill Trend by Direction (Stacked)",
                 center_checkin_trend_chart: "CNO.H check-in breakdown",
+                center_checkin_chart_hint: "Only the selected statistics date (same as date picker). Full history stays in DB. For multi-day, use API days=all or days=N.",
                 center_checkin_sync_btn: "Refresh check-in data",
                 center_checkin_syncing: "Syncing from GoFO…"
             },
@@ -784,6 +795,7 @@
                 vehicles_20_21_by_type: "Vehículos 20:00-21:00 por Tipo",
                 vehicle_arrival_count: "Conteo de Llegadas",
                 inbound_sorting_comparison: "Comparación Horaria de Entrada y Clasificación",
+                inbound_sorting_comparison_sub: "La serie «entrada» = (empaque manual + empaque equipo) − guías CNO01 por franja (misma fuente que clasificación horaria).",
                 pallet_hourly_comparison: "Estadísticas Horarias de Palets",
                 refresh_data: "Actualizar Datos",
                 export_excel: "Exportar Tabla",
@@ -800,13 +812,13 @@
                 render_capacity_error: "Error al renderizar gráfico de capacidad de clasificación:",
                 pallet_pieces: "Piezas de Palet",
                 pallet_count: "Conteo de Palets",
-                inbound_pieces: "Piezas de Entrada",
+                inbound_pieces: "Empaque neto (-CNO01)",
                 sorting_pieces: "Piezas de Clasificación",
                 inbound_avg_line: "Promedio por Franja (Entrada)",
                 sorting_avg_line: "Promedio por Franja (Clasificación)",
                 difference_value: "Valor de Diferencia",
                 inbound_sorting_difference: "Diferencia entre Entrada y Clasificación",
-                inbound_sorting_comparison_chart_title: "Comparación Horaria de Piezas de Entrada y Clasificación",
+                inbound_sorting_comparison_chart_title: "Empaque neto vs piezas clasificadas por hora",
                 sorting_capacity_chart: "Capacidad horaria de empaquetado",
                 manual_capacity: "Capacidad manual",
                 device_capacity: "Capacidad de equipo",
@@ -827,7 +839,8 @@
                 logout: "Cerrar sesión",
                 daily_trend_chart: "Estadísticas de Materiales",
                 daily_packing_split_chart: "Empaque diario (manual / dispositivo)",
-                daily_packing_split_hint: "Día operativo LA 06:00–06:00, últimos 14 días",
+                daily_packing_split_hint: "Día operativo LA 06:00–06:00, últimos 14 días; altura = total diario (manual+dispositivo); etiquetas = proporción.",
+                daily_packing_split_tooltip_footer: "(Proporción respecto al total manual+dispositivo del día)",
                 packing_manual: "Empaque manual",
                 packing_device: "Empaque por dispositivo",
                 packing_sum_label: "Total diario",
@@ -844,6 +857,7 @@
                 waybill_trend_title: "Tendencia Diaria de Guías por Dirección",
                 weekly_waybill_trend_title: "Tendencia Semanal de Guías por Dirección (Apilado)",
                 center_checkin_trend_chart: "Clasificación de check-in CNO.H",
+                center_checkin_chart_hint: "Solo la fecha seleccionada en estadísticas. El historial completo sigue en BD. API: days=all o days=N.",
                 center_checkin_sync_btn: "Actualizar datos de ingreso",
                 center_checkin_syncing: "Sincronizando desde GoFO…"
             }
@@ -1537,11 +1551,17 @@
                             document.getElementById('pickupForecast').value = forecastAmount;
 
                             loadHourlyComparisonData();
+                            if (typeof window.loadCenterCheckinTrendData === 'function') {
+                                window.loadCenterCheckinTrendData();
+                            }
                         })
                         .catch(e => {
                             console.error('Error loading forecast:', e);
                             // Still load hourly data even if forecast fails
                             loadHourlyComparisonData();
+                            if (typeof window.loadCenterCheckinTrendData === 'function') {
+                                window.loadCenterCheckinTrendData();
+                            }
                         });
                 })
                 .catch(error => {
@@ -1655,23 +1675,15 @@
 
         // Load hourly comparison data
         function loadHourlyComparisonData() {
-            // Get inbound and sorting data grouped by hour
-            let inboundUrl = '/api/inbound_hourly';
+            // 入库与分拣对比：入库系列来自分拣分时 (人工集包+设备集包−CNO01)，不再请求 inbound_hourly
             let sortingUrl = '/api/sorting_hourly';
             let inboundAvgUrl = '/api/inbound_hourly_avg';
             let sortingAvgUrl = '/api/sorting_hourly_avg';
             if (currentDate) {
-                inboundUrl += '?date=' + encodeURIComponent(currentDate);
                 sortingUrl += '?date=' + encodeURIComponent(currentDate);
             }
 
             Promise.all([
-                fetch(inboundUrl).then(response => {
-                    if (!response.ok) {
-                        throw new Error('Inbound data loading failed: ' + response.status);
-                    }
-                    return response.json();
-                }),
                 fetch(sortingUrl).then(response => {
                     if (!response.ok) {
                         throw new Error('Sorting data loading failed: ' + response.status);
@@ -1691,9 +1703,9 @@
                     return response.json();
                 }),
             ])
-                .then(([inboundData, sortingData, inboundAvgData, sortingAvgData]) => {
+                .then(([sortingData, inboundAvgData, sortingAvgData]) => {
                     // Process data and generate chart
-                    const hourlyData = processHourlyDataByTimeSlot(inboundData, sortingData, inboundAvgData, sortingAvgData);
+                    const hourlyData = processHourlyDataByTimeSlot(sortingData, inboundAvgData, sortingAvgData);
                     renderHourlyComparisonChart(hourlyData);
 
                     // Process data for sorting capacity chart
@@ -1733,7 +1745,7 @@
         }
 
         // Process data grouped by time slot
-        function processHourlyDataByTimeSlot(inboundData, sortingData, inboundAvgData, sortingAvgData) {
+        function processHourlyDataByTimeSlot(sortingData, inboundAvgData, sortingAvgData) {
             try {
                 const normalizeSlot = (val) => {
                     let timeSlot = val || translations[currentLang].unknown || '未知';
@@ -1751,30 +1763,7 @@
                 // Create a map to store data for each time slot
                 const timeSlotMap = {};
 
-                // Process inbound data
-                if (Array.isArray(inboundData)) {
-                    inboundData.forEach(record => {
-                        if (record && typeof record === 'object') {
-                            const timeSlot = normalizeSlot(record.time_slot);
-
-                            if (!timeSlotMap[timeSlot]) {
-                                timeSlotMap[timeSlot] = {
-                                    timeSlot: timeSlot,
-                                    inboundPieces: 0,  // 入库件数
-                                    sortingPieces: 0,
-                                    inboundAvgPieces: 0,
-                                    sortingAvgPieces: 0,
-                                };
-                            }
-                            // 累加入库件数
-                            if (record.total_pieces !== undefined) {
-                                timeSlotMap[timeSlot].inboundPieces += (parseInt(record.total_pieces) || 0);
-                            }
-                        }
-                    });
-                }
-
-                // Process sorting data
+                // Process sorting data：分拣件数 + 入库对比系列 = 各时段(人工集包+设备集包)−CNO01 运单数
                 if (Array.isArray(sortingData)) {
                     sortingData.forEach(record => {
                         if (record && typeof record === 'object') {
@@ -1783,13 +1772,17 @@
                             if (!timeSlotMap[timeSlot]) {
                                 timeSlotMap[timeSlot] = {
                                     timeSlot: timeSlot,
-                                    inboundPieces: 0,  // 入库件数
+                                    inboundPieces: 0,
                                     sortingPieces: 0,
                                     inboundAvgPieces: 0,
                                     sortingAvgPieces: 0,
                                 };
                             }
-                            timeSlotMap[timeSlot].sortingPieces += (parseInt(record.total_pieces) || 0);
+                            const manual = parseInt(record.manual_count, 10) || 0;
+                            const device = parseInt(record.device_count, 10) || 0;
+                            const cno01 = parseInt(record.cno01_waybill, 10) || 0;
+                            timeSlotMap[timeSlot].inboundPieces += (manual + device - cno01);
+                            timeSlotMap[timeSlot].sortingPieces += (parseInt(record.total_pieces, 10) || 0);
                         }
                     });
                 }
@@ -2850,10 +2843,26 @@
             }
 
             const labels = data.dates.map(s => s.substring(5));
-            const manual = data.manual || [];
-            const device = data.device || [];
-            const totalPieces = data.total_pieces || [];
+            const manualRaw = (data.manual || []).map(v => Number(v) || 0);
+            const deviceRaw = (data.device || []).map(v => Number(v) || 0);
             const isMobile = window.innerWidth < 768;
+
+            function dayTotal(i) {
+                return (manualRaw[i] || 0) + (deviceRaw[i] || 0);
+            }
+
+            function pctOfDay(raw, i) {
+                const t = dayTotal(i);
+                if (t <= 0) return 0;
+                return (Number(raw) || 0) / t * 100;
+            }
+
+            function formatPctFromContext(value, context) {
+                const i = context.dataIndex;
+                const p = pctOfDay(value, i);
+                if (p < 0.5) return '';
+                return p.toFixed(1).replace(/\.0$/, '') + '%';
+            }
 
             window.dailyPackingSplitChart = new Chart(ctx, {
                 type: 'bar',
@@ -2862,7 +2871,7 @@
                     datasets: [
                         {
                             label: translations[currentLang].packing_manual || '人工集包',
-                            data: manual,
+                            data: manualRaw,
                             backgroundColor: 'rgba(54, 162, 235, 0.85)',
                             borderColor: 'rgba(54, 162, 235, 1)',
                             borderWidth: 1,
@@ -2870,45 +2879,39 @@
                             datalabels: {
                                 display: function (context) {
                                     const v = Number(context.dataset.data[context.dataIndex]) || 0;
-                                    return v > 0;
+                                    return pctOfDay(v, context.dataIndex) >= 0.5;
                                 },
                                 color: '#fff',
                                 anchor: 'center',
                                 align: 'center',
-                                formatter: function (value) {
-                                    const v = Number(value) || 0;
-                                    return v > 0 ? v.toLocaleString() : '';
-                                },
+                                formatter: formatPctFromContext,
                                 font: { size: isMobile ? 9 : 11, weight: '600' }
                             }
                         },
                         {
                             label: translations[currentLang].packing_device || '设备集包',
-                            data: device,
+                            data: deviceRaw,
                             backgroundColor: 'rgba(255, 159, 64, 0.85)',
                             borderColor: 'rgba(255, 159, 64, 1)',
                             borderWidth: 1,
                             stack: 'pack',
                             datalabels: {
                                 labels: {
-                                    segment: {
+                                    segmentPct: {
                                         display: function (context) {
                                             const v = Number(context.dataset.data[context.dataIndex]) || 0;
-                                            return v > 0;
+                                            return pctOfDay(v, context.dataIndex) >= 0.5;
                                         },
                                         color: '#fff',
                                         anchor: 'center',
                                         align: 'center',
-                                        formatter: function (value) {
-                                            const v = Number(value) || 0;
-                                            return v > 0 ? v.toLocaleString() : '';
-                                        },
+                                        formatter: formatPctFromContext,
                                         font: { size: isMobile ? 9 : 11, weight: '600' }
                                     },
-                                    sumTop: {
+                                    totalAbove: {
                                         display: function (context) {
                                             const i = context.dataIndex;
-                                            const sum = (Number(manual[i]) || 0) + (Number(device[i]) || 0);
+                                            const sum = (manualRaw[i] || 0) + (deviceRaw[i] || 0);
                                             return sum > 0;
                                         },
                                         color: '#333',
@@ -2917,7 +2920,7 @@
                                         offset: 4,
                                         formatter: function (_value, context) {
                                             const i = context.dataIndex;
-                                            const sum = (Number(manual[i]) || 0) + (Number(device[i]) || 0);
+                                            const sum = (manualRaw[i] || 0) + (deviceRaw[i] || 0);
                                             return sum > 0 ? sum.toLocaleString() : '';
                                         },
                                         font: { size: isMobile ? 10 : 12, weight: '700' }
@@ -2936,19 +2939,21 @@
                             mode: 'index',
                             intersect: false,
                             callbacks: {
-                                afterBody: function (items) {
-                                    if (!items || !items.length) return [];
+                                title: function (items) {
+                                    if (!items || !items.length) return '';
                                     const i = items[0].dataIndex;
-                                    const m = Number(manual[i]) || 0;
-                                    const d = Number(device[i]) || 0;
-                                    const p = Number(totalPieces[i]) || 0;
-                                    const sum = m + d;
-                                    const lbl = translations[currentLang].packing_sum_label || '日合计';
-                                    const lines = [lbl + ': ' + sum.toLocaleString()];
-                                    if (p !== sum) {
-                                        lines.push('Σ pieces: ' + p.toLocaleString());
-                                    }
-                                    return lines;
+                                    return (data.dates && data.dates[i]) ? String(data.dates[i]) : '';
+                                },
+                                label: function (context) {
+                                    const i = context.dataIndex;
+                                    const raw = Number(context.parsed.y) || 0;
+                                    const t = dayTotal(i);
+                                    const pct = t > 0 ? (raw / t) * 100 : 0;
+                                    const name = context.dataset.label || '';
+                                    return name + ': ' + pct.toFixed(1).replace(/\.0$/, '') + '% (' + raw.toLocaleString() + ')';
+                                },
+                                footer: function () {
+                                    return translations[currentLang].daily_packing_split_tooltip_footer || '';
                                 }
                             }
                         }
@@ -4262,7 +4267,12 @@
 
             // ====== 载入 CNO.H 签入分类趋势图 ======
             function loadCenterCheckinTrendData() {
-                fetch('/api/center_checkin_trend')
+                let url = '/api/center_checkin_trend';
+                const d = currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value);
+                if (d) {
+                    url += '?date=' + encodeURIComponent(d);
+                }
+                fetch(url)
                     .then(response => response.json())
                     .then(data => {
                         if (data.error) {
@@ -4425,7 +4435,6 @@
             }
             
             // Trigger Load
-            loadCenterCheckinTrendData();
         });
     </script>
 </body>

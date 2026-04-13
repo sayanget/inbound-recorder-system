@@ -11910,54 +11910,203 @@ def gofo_hourly_sync_job():
 
 # 模块级别初始化 - Gunicorn 导入模块时会执行
 # 这确保数据库在应用启动时被初始化
+def _cc_norm_date(v):
+    if v is None:
+        return ""
+    if hasattr(v, "strftime"):
+        return v.strftime("%Y-%m-%d")
+    s = str(v).strip()
+    if len(s) >= 10 and len(s) > 4 and s[4] == "-":
+        return s[:10]
+    return s
+
+
+def _cc_norm_hour_slot(v):
+    """统一为 HH:00，避免 9:00 / 09:00 与库内键不一致导致缺数。"""
+    if v is None:
+        return "00:00"
+    s = str(v).strip()
+    if not s:
+        return "00:00"
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            h = int(parts[0]) % 24
+            return f"{h:02d}:00"
+        except ValueError:
+            return s
+    if s.isdigit():
+        return f"{int(s) % 24:02d}:00"
+    return s
+
+
+def _cc_time_point_key(rd, rh):
+    return f"{_cc_norm_date(rd)} {_cc_norm_hour_slot(rh)}"
+
+
 @app.route('/api/center_checkin_trend', methods=['GET'])
 def api_center_checkin_trend():
-    """获取所有目的站点的签入数趋势数据（按小时）"""
+    """获取所有目的站点的签入数趋势数据（按小时）。
+
+    查询参数：
+      默认（无 date、无 days）：仅 **洛杉矶日历日当天** record_date。
+      date: YYYY-MM-DD，只显示该日各时点。
+      days: all/full/0 — 库内最近 max_points 个时间点；正整数 — record_date >= 今天−days（回溯若干天）。
+      max_points: 仅在 days=all 或按天回溯模式下限制横轴点数，默认 10000，上限 20000。
+    """
     try:
         conn = get_db()
         cursor = conn.cursor()
-        
-        # 获取最近最多48个小时的数据点，拼接 datetime 以供排序
-        cursor.execute("""
-            SELECT DISTINCT record_date, record_hour 
-            FROM gofo_center_checkin_stats 
-            WHERE record_date IS NOT NULL AND record_hour IS NOT NULL
-            ORDER BY record_date ASC, record_hour ASC 
-            LIMIT 48
-        """)
-        dates_result = cursor.fetchall()
+
+        date_param = (request.args.get("date") or "").strip()
+        days_raw = (request.args.get("days") or "").strip().lower()
+        try:
+            max_points = int(request.args.get("max_points", "10000"))
+        except ValueError:
+            max_points = 10000
+        max_points = min(max(max_points, 10), 20000)
+
+        filter_date = None  # 单日筛选时非 None，仅查该日
+        dates_result = []
+
+        if days_raw in ("all", "full", "0"):
+            cursor.execute(
+                convert_query_placeholders(
+                    """
+                SELECT DISTINCT record_date, record_hour 
+                FROM gofo_center_checkin_stats 
+                WHERE record_date IS NOT NULL AND record_hour IS NOT NULL
+                ORDER BY record_date DESC, record_hour DESC 
+                LIMIT ?
+                """
+                ),
+                (max_points,),
+            )
+            dates_result = list(reversed(cursor.fetchall()))
+        elif date_param:
+            try:
+                datetime.strptime(date_param, "%Y-%m-%d")
+            except ValueError:
+                conn.close()
+                return jsonify({"success": False, "error": "日期格式无效，请使用 YYYY-MM-DD"}), 400
+            filter_date = date_param
+            cursor.execute(
+                convert_query_placeholders(
+                    """
+                SELECT DISTINCT record_date, record_hour 
+                FROM gofo_center_checkin_stats 
+                WHERE record_date IS NOT NULL AND record_hour IS NOT NULL
+                  AND record_date = ?
+                ORDER BY record_hour ASC
+                """
+                ),
+                (filter_date,),
+            )
+            dates_result = cursor.fetchall()
+        elif days_raw.isdigit():
+            days = int(days_raw)
+            days = min(max(days, 1), 3650)
+            cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            cursor.execute(
+                convert_query_placeholders(
+                    """
+                SELECT DISTINCT record_date, record_hour 
+                FROM gofo_center_checkin_stats 
+                WHERE record_date IS NOT NULL AND record_hour IS NOT NULL
+                  AND record_date >= ?
+                ORDER BY record_date ASC, record_hour ASC
+                """
+                ),
+                (cutoff,),
+            )
+            dates_result = cursor.fetchall()
+            if len(dates_result) > max_points:
+                dates_result = dates_result[-max_points:]
+        else:
+            la_tz = pytz.timezone("America/Los_Angeles")
+            filter_date = datetime.now(la_tz).strftime("%Y-%m-%d")
+            cursor.execute(
+                convert_query_placeholders(
+                    """
+                SELECT DISTINCT record_date, record_hour 
+                FROM gofo_center_checkin_stats 
+                WHERE record_date IS NOT NULL AND record_hour IS NOT NULL
+                  AND record_date = ?
+                ORDER BY record_hour ASC
+                """
+                ),
+                (filter_date,),
+            )
+            dates_result = cursor.fetchall()
         
         time_points = []
         labels = []
         for row in dates_result:
-            dt_str = f"{row['record_date']} {row['record_hour']}"
+            rd = _cc_norm_date(row["record_date"])
+            rh = _cc_norm_hour_slot(row["record_hour"])
+            dt_str = _cc_time_point_key(row["record_date"], row["record_hour"])
             time_points.append(dt_str)
-            
+
             # Label format: "04-08 14:00"
-            date_parts = row['record_date'].split('-')
-            short_date = f"{date_parts[1]}-{date_parts[2]}" if len(date_parts) == 3 else row['record_date']
-            labels.append(f"{short_date} {row['record_hour']}")
+            dp = rd.split("-")
+            short_date = f"{dp[1]}-{dp[2]}" if len(dp) == 3 else rd
+            labels.append(f"{short_date} {rh}")
             
         if not time_points:
             return jsonify({"success": True, "dates": [], "series": []})
         
-        # 提取所有 target_site_name
-        cursor.execute("SELECT DISTINCT target_site_name FROM gofo_center_checkin_stats WHERE target_site_name IS NOT NULL")
+        # 提取目的站点（单日模式只取当天有数据的站点）
+        if filter_date:
+            cursor.execute(
+                convert_query_placeholders(
+                    """
+                SELECT DISTINCT target_site_name FROM gofo_center_checkin_stats 
+                WHERE target_site_name IS NOT NULL AND record_date = ?
+                """
+                ),
+                (filter_date,),
+            )
+        else:
+            cursor.execute(
+                "SELECT DISTINCT target_site_name FROM gofo_center_checkin_stats WHERE target_site_name IS NOT NULL"
+            )
         sites_result = cursor.fetchall()
-        sites = [row['target_site_name'] for row in sites_result]
+        sites = [row["target_site_name"] for row in sites_result]
         
         # 构建 series
         series = []
         for site in sites:
-            cursor.execute("""
+            if filter_date:
+                cursor.execute(
+                    convert_query_placeholders(
+                        """
+                SELECT record_date, record_hour, check_in_waybill_cnt 
+                FROM gofo_center_checkin_stats 
+                WHERE target_site_name = ? AND record_date = ?
+                ORDER BY record_hour ASC
+                """
+                    ),
+                    (site, filter_date),
+                )
+            else:
+                cursor.execute(
+                    convert_query_placeholders(
+                        """
                 SELECT record_date, record_hour, check_in_waybill_cnt 
                 FROM gofo_center_checkin_stats 
                 WHERE target_site_name = ? 
                 ORDER BY record_date ASC, record_hour ASC
-            """, (site,))
+                """
+                    ),
+                    (site,),
+                )
             site_data = cursor.fetchall()
-            
-            data_map = {f"{row['record_date']} {row['record_hour']}": row['check_in_waybill_cnt'] for row in site_data}
+
+            data_map = {}
+            for row in site_data:
+                k = _cc_time_point_key(row["record_date"], row["record_hour"])
+                v = int(row["check_in_waybill_cnt"] or 0)
+                data_map[k] = data_map.get(k, 0) + v
             
             # 补齐每个时间点的数据
             data_points = []
