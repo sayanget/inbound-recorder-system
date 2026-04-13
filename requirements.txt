@@ -13,6 +13,7 @@ pytz==2023.3
 schedule==1.2.0
 python-dotenv==1.0.0
 requests>=2.31.0,<3
+pycryptodome>=3.20.0,<4
 
 # 与 single_app 同进程加载的 calc_outsource_finance 需要
 pandas>=2.0.0,<3

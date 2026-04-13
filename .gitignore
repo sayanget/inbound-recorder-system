@@ -131,6 +131,7 @@ early_morning_results.txt
 gf_0301_dump.txt
 git_status.txt
 gofo_keepalive.log
+gofo_token.txt
 import_log.txt
 inspection.txt
 migration_log.txt
@@ -176,3 +177,6 @@ neon_sync.env
 
 # Optional GitHub telemetry state (local)
 .telemetry_github_state.json
+
+# Machine-specific gbrain repo path (optional dot-source for scripts/brain_gbrain_sync.ps1)
+scripts/brain_gbrain_sync.local.ps1

@@ -1,0 +1,14 @@
+---
+description: Personal knowledge — local Markdown brain + gbrain + Notion backup only (no OpenClaw)
+alwaysApply: false
+---
+
+# Personal brain (this user)
+
+- **Brain repo (local)**: `E:\Project\gbrain`
+- **Brain repo (GitHub)**: https://github.com/sayanget/gbrain-notes.git
+- **Source of truth**: Git-tracked Markdown in that brain repo (not this application repo unless explicitly chosen).
+- **Index / search**: **gbrain** (PGLite or Postgres), **keyword / full-text only**—no vector embeddings and no `OPENAI_API_KEY`. After editing notes, run `gbrain sync --repo <brain>` (or `scripts/brain_gbrain_sync.ps1`, which skips `embed` by default).
+- **Notion**: **Backup / read-only mirror only**. Hub page (under **工作**): https://www.notion.so/gbrain-34119bf04d1680b4a5c2c31ffa07a986 — push **local → Notion** on a schedule; do not treat Notion as the editor of record. Resolve conflicts in favor of local.
+- **OpenClaw**: Not part of this workflow; do not assume or recommend it for this stack.
+- **Cursor**: When the user asks about notes, architecture decisions, or runbooks stored in the brain, prefer **gbrain MCP / local brain paths** they provide—not Notion as canonical text.

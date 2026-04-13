@@ -593,6 +593,7 @@
                 manual_capacity: "人工集包产能",
                 device_capacity: "设备集包产能",
                 combined_capacity: "人工+设备综合",
+                cno01_collect_waybills: "CNO01 集包运单数",
                 pallet_hourly_comparison: "托盘时段统计",
                 refresh_data: "刷新数据",
                 export_excel: "导出表格",
@@ -692,6 +693,7 @@
                 manual_capacity: "Manual Capacity",
                 device_capacity: "Device Capacity",
                 combined_capacity: "Manual + Device (Total)",
+                cno01_collect_waybills: "CNO01 collect waybills",
                 pallet_hourly_comparison: "Pallet Hourly Stats",
                 refresh_data: "Refresh",
                 export_excel: "Export",
@@ -809,6 +811,7 @@
                 manual_capacity: "Capacidad manual",
                 device_capacity: "Capacidad de equipo",
                 combined_capacity: "Manual + equipo (total)",
+                cno01_collect_waybills: "CNO01 empaquetado (guías)",
                 sorting_capacity_chart_title: "Gráfico Horario de Capacidad de Clasificación",
                 pieces: "Piezas",
                 time_slot: "Franja Horaria",
@@ -1877,12 +1880,14 @@
                                 timeSlotMap[timeSlot] = {
                                     timeSlot: timeSlot,
                                     manualCount: 0,
-                                    deviceCount: 0
+                                    deviceCount: 0,
+                                    cno01Count: 0
                                 };
                             }
                             // 累加分拣件数
                             timeSlotMap[timeSlot].manualCount += (parseInt(record.manual_count) || 0);
                             timeSlotMap[timeSlot].deviceCount += (parseInt(record.device_count) || 0);
+                            timeSlotMap[timeSlot].cno01Count += (parseInt(record.cno01_waybill) || 0);
                         }
                     });
                 }
@@ -2208,7 +2213,8 @@
                 const maxDevice = Math.max(0, ...data.map(item => item.deviceCount || 0));
                 const combinedSeries = data.map(item => (item.manualCount || 0) + (item.deviceCount || 0));
                 const maxCombined = combinedSeries.length ? Math.max(...combinedSeries) : 0;
-                const maxValue = Math.max(maxManual, maxDevice, maxCombined);
+                const maxCno01 = data.length ? Math.max(0, ...data.map(item => item.cno01Count || 0)) : 0;
+                const maxValue = Math.max(maxManual, maxDevice, maxCombined, maxCno01);
 
                 // Calculate appropriate y-axis max value and step size
                 const yAxisMax = maxValue > 0 ? Math.ceil(maxValue / 1000) * 1000 + 1000 : 1000;
@@ -2260,6 +2266,22 @@
                                 pointRadius: 5,
                                 pointHoverRadius: 7,
                                 order: 10,
+                                datalabels: {
+                                    display: false
+                                }
+                            },
+                            {
+                                label: translations[currentLang].cno01_collect_waybills || 'CNO01 集包运单数',
+                                data: data.map(item => item.cno01Count || 0),
+                                borderColor: 'rgba(155, 89, 182, 1)',
+                                backgroundColor: 'rgba(155, 89, 182, 0.06)',
+                                borderWidth: 2,
+                                borderDash: [6, 4],
+                                fill: false,
+                                tension: 0.35,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                order: 8,
                                 datalabels: {
                                     display: false
                                 }

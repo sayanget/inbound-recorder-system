@@ -14,6 +14,7 @@ python-dotenv==1.0.0
 
 # HTTP / 飞书等（single_app、calc_outsource_finance 使用）
 requests>=2.31.0,<3
+pycryptodome>=3.20.0,<4
 
 # calc_outsource_finance 与 single_app 同进程加载，生产必须安装
 pandas>=2.0.0,<3

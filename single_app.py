@@ -34,7 +34,10 @@ from queue import Queue
 import calc_outsource_finance # 导入生产人工同步逻辑
 import requests
 
-
+try:
+    import gofo_dms_auth as _gofo_dms_auth
+except ImportError:
+    _gofo_dms_auth = None
 
 try:
     import psycopg2
@@ -747,6 +750,19 @@ def init_db():
             else:
                 cursor.execute("ALTER TABLE gofo_sync_history ADD COLUMN manual_count INTEGER DEFAULT 0")
                 cursor.execute("ALTER TABLE gofo_sync_history ADD COLUMN device_count INTEGER DEFAULT 0")
+
+        # CNO01（或指定目的站）按小时集包运单/袋数（popover 口径，供统计页曲线）
+        sql = convert_sql("""CREATE TABLE IF NOT EXISTS gofo_collect_destin_hourly (
+            sorting_time TEXT NOT NULL,
+            time_slot TEXT NOT NULL,
+            destin_site TEXT NOT NULL,
+            destin_id INTEGER,
+            waybill_no_total INTEGER DEFAULT 0,
+            package_no_total INTEGER DEFAULT 0,
+            updated_at TEXT,
+            PRIMARY KEY (sorting_time, time_slot, destin_site)
+        );""")
+        cursor.execute(sql)
 
         # DMS 运单管理查询（WaybillManageQuery）导入
         sql = convert_sql("""CREATE TABLE IF NOT EXISTS gofo_waybill_manage_import (
@@ -3858,6 +3874,35 @@ def sorting_hourly_data():
         "manual_count": int(r[2]) if r[2] else 0,
         "device_count": int(r[3]) if r[3] else 0
     } for r in cur.fetchall()]
+    _cno_site = os.environ.get("GOFO_CNO01_SITE", "CNO01").strip() or "CNO01"
+    try:
+        cur.execute(
+            """SELECT time_slot, COALESCE(waybill_no_total, 0)
+               FROM gofo_collect_destin_hourly
+               WHERE destin_site = ?
+                 AND ((sorting_time = ? AND time_slot >= '06:00')
+                   OR (sorting_time = ? AND time_slot < '06:00'))""",
+            (_cno_site, request_date.strftime("%Y-%m-%d"), next_date.strftime("%Y-%m-%d")),
+        )
+        cno_map = {r[0]: int(r[1]) for r in cur.fetchall()}
+    except Exception:
+        cno_map = {}
+    for row in rows:
+        row["cno01_waybill"] = int(cno_map.get(row["time_slot"], 0))
+    _have_slots = {r["time_slot"] for r in rows}
+    for _slot, _w in cno_map.items():
+        if _slot not in _have_slots:
+            rows.append(
+                {
+                    "time_slot": _slot,
+                    "total_pieces": 0,
+                    "manual_count": 0,
+                    "device_count": 0,
+                    "cno01_waybill": int(_w),
+                }
+            )
+            _have_slots.add(_slot)
+    conn.close()
     return jsonify(rows)
 
 
@@ -4432,6 +4477,186 @@ def add_sorting_record():
     conn.close()
     return jsonify({"success":True})
 
+
+def _enrich_hourly_results_gofo_popover(hourly_results):
+    """用 popover 覆盖 pieces 并写入 CNO01 字段（与 perform_gofo_hourly_sync 一致）。"""
+    _use_popover = os.environ.get("GOFO_USE_POPOVER_HOURLY", "1").strip().lower() not in ("0", "false", "no")
+    if not _use_popover:
+        return
+    try:
+        from gofo_popover_collect import (
+            la_hour_window_strings,
+            popover_destin_hour_totals,
+            sum_popover_collect_for_window,
+        )
+
+        _cno_destin_id = int(os.environ.get("GOFO_CNO01_DESTIN_ID", "17"))
+        for res in hourly_results:
+            try:
+                hs, he = la_hour_window_strings(res["date"], res["slot"])
+                pop = sum_popover_collect_for_window(hs, he)
+                if pop is not None:
+                    wsum, psum = pop
+                    wsum = int(wsum)
+                    psum = int(psum)
+                    res["pieces"] = wsum
+                    res["popover_pkg"] = psum
+                    m, d = int(res["manual"]), int(res["device"])
+                    split = m + d
+                    if split > 0:
+                        res["manual"] = int(round(wsum * m / split))
+                        res["device"] = wsum - res["manual"]
+                    else:
+                        res["manual"] = wsum
+                        res["device"] = 0
+                else:
+                    res["popover_pkg"] = None
+                cno = popover_destin_hour_totals(hs, he, _cno_destin_id)
+                if cno is not None:
+                    res["cno01_waybill"] = int(cno[0])
+                    res["cno01_pkg"] = int(cno[1])
+                else:
+                    res["cno01_waybill"] = None
+                    res["cno01_pkg"] = None
+            except Exception as ex:
+                print(f"[GofoPopover] hour {res.get('slot')} skip: {ex}")
+                res["popover_pkg"] = None
+                res["cno01_waybill"] = None
+    except Exception as ex:
+        print(f"[GofoPopover] module skip: {ex}")
+
+
+def _write_hourly_results_sorting_and_cno(
+    hourly_results,
+    remark,
+    current_la_time_str,
+    *,
+    gofo_hourly_stats=None,
+):
+    """
+    写入 sorting_records 与 gofo_collect_destin_hourly。
+    gofo_hourly_stats: None，或 dict(report_hour, collect_total, collect_artificial, collect_device) 以插入 gofo_hourly_stats。
+    返回 {synced_count, synced_hour, pieces}
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    synced_count = 0
+    last_hour_saved = ""
+    last_pieces_saved = 0
+    _cno_site = os.environ.get("GOFO_CNO01_SITE", "CNO01").strip() or "CNO01"
+    _cno_destin_id = int(os.environ.get("GOFO_CNO01_DESTIN_ID", "17"))
+    try:
+        if gofo_hourly_stats is not None:
+            cursor.execute(
+                """
+                INSERT INTO gofo_hourly_stats (report_hour, collect_total, collect_artificial, collect_device)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    gofo_hourly_stats["report_hour"],
+                    gofo_hourly_stats["collect_total"],
+                    gofo_hourly_stats["collect_artificial"],
+                    gofo_hourly_stats["collect_device"],
+                ),
+            )
+        for res in hourly_results:
+            rmk = remark
+            if res.get("popover_pkg") is not None:
+                rmk += f" popoverPkg={res['popover_pkg']}"
+            cursor.execute(
+                """
+                SELECT id FROM sorting_records
+                WHERE sorting_time = ? AND time_slot = ?
+                """,
+                (res["date"], res["slot"]),
+            )
+            row = cursor.fetchone()
+            if row:
+                cursor.execute(
+                    """
+                    UPDATE sorting_records SET pieces = ?, manual_count = ?, device_count = ?, remark = ?
+                    WHERE id = ?
+                    """,
+                    (res["pieces"], res["manual"], res["device"], rmk, row[0]),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO sorting_records (sorting_time, pieces, remark, time_slot, created_at, manual_count, device_count)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        res["date"],
+                        res["pieces"],
+                        rmk,
+                        res["slot"],
+                        current_la_time_str,
+                        res["manual"],
+                        res["device"],
+                    ),
+                )
+
+            if res.get("cno01_waybill") is not None:
+                try:
+                    if USE_POSTGRES:
+                        cursor.execute(
+                            """
+                            INSERT INTO gofo_collect_destin_hourly
+                            (sorting_time, time_slot, destin_site, destin_id, waybill_no_total, package_no_total, updated_at)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s)
+                            ON CONFLICT (sorting_time, time_slot, destin_site) DO UPDATE SET
+                            waybill_no_total = EXCLUDED.waybill_no_total,
+                            package_no_total = EXCLUDED.package_no_total,
+                            updated_at = EXCLUDED.updated_at
+                            """,
+                            (
+                                res["date"],
+                                res["slot"],
+                                _cno_site,
+                                _cno_destin_id,
+                                res["cno01_waybill"],
+                                res.get("cno01_pkg") or 0,
+                                current_la_time_str,
+                            ),
+                        )
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT OR REPLACE INTO gofo_collect_destin_hourly
+                            (sorting_time, time_slot, destin_site, destin_id, waybill_no_total, package_no_total, updated_at)
+                            VALUES (?,?,?,?,?,?,?)
+                            """,
+                            (
+                                res["date"],
+                                res["slot"],
+                                _cno_site,
+                                _cno_destin_id,
+                                res["cno01_waybill"],
+                                res.get("cno01_pkg") or 0,
+                                current_la_time_str,
+                            ),
+                        )
+                except Exception as _e:
+                    print(f"[gofo_collect_destin_hourly] upsert skip: {_e}")
+
+            synced_count += 1
+            last_hour_saved = res["slot"]
+            last_pieces_saved = res["pieces"]
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+    return {
+        "synced_count": synced_count,
+        "synced_hour": last_hour_saved,
+        "pieces": last_pieces_saved,
+    }
+
+
 def perform_gofo_hourly_sync():
     """核心同步逻辑：从 Gofo 抓取每小时集包数据并存入数据库"""
     from gofo_config import get_gofo_token
@@ -4610,69 +4835,34 @@ def perform_gofo_hourly_sync():
         except Exception as e:
             print(f"Error fetching data for hour {report_hour_str}: {e}")
 
-    # 4. Save everything to database in a single fast transaction
-    conn = get_db()
-    cursor = conn.cursor()
-    synced_count = 0
-    last_hour_saved = ""
-    last_pieces_saved = 0
-    
-    try:
-        # Save latest capture to gofo_hourly_stats
-        latest_report = chart_data[-1]
-        report_hour = latest_report.get('hour')
-        
-        cursor.execute("""
-            INSERT INTO gofo_hourly_stats (report_hour, collect_total, collect_artificial, collect_device)
-            VALUES (?, ?, ?, ?)
-        """, (report_hour, collect_total, collect_art, collect_device))
-        
-        # Save hourly records
-        remark = f"Auto-synced from Gofo ({now_la.strftime('%H:%M')})"
-        current_la_time_str = now_la.strftime('%Y-%m-%d %H:%M:%S')
-        
-        for res in hourly_results:
-            cursor.execute("""
-                SELECT id FROM sorting_records 
-                WHERE sorting_time = ? AND time_slot = ?
-            """, (res["date"], res["slot"]))
-            
-            row = cursor.fetchone()
-            if row:
-                cursor.execute("""
-                    UPDATE sorting_records SET pieces = ?, manual_count = ?, device_count = ?, remark = ?
-                    WHERE id = ?
-                """, (res["pieces"], res["manual"], res["device"], remark, row[0]))
-            else:
-                cursor.execute("""
-                    INSERT INTO sorting_records (sorting_time, pieces, remark, time_slot, created_at, manual_count, device_count)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (res["date"], res["pieces"], remark, res["slot"], current_la_time_str, res["manual"], res["device"]))
-            
-            synced_count += 1
-            last_hour_saved = res["slot"]
-            last_pieces_saved = res["pieces"]
-            
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
-    
+    _enrich_hourly_results_gofo_popover(hourly_results)
+
+    latest_report = chart_data[-1]
+    report_hour = latest_report.get("hour")
+    base_remark = f"Auto-synced from Gofo ({now_la.strftime('%H:%M')})"
+    current_la_time_str = now_la.strftime("%Y-%m-%d %H:%M:%S")
+    wr = _write_hourly_results_sorting_and_cno(
+        hourly_results,
+        base_remark,
+        current_la_time_str,
+        gofo_hourly_stats={
+            "report_hour": report_hour,
+            "collect_total": collect_total,
+            "collect_artificial": collect_art,
+            "collect_device": collect_device,
+        },
+    )
     return {
-        "synced_count": synced_count,
-        "synced_hour": last_hour_saved,
-        "pieces": last_pieces_saved,
+        **wr,
         "total_today": collect_total,
         "manual_today": collect_art,
-        "device_today": collect_device
+        "device_today": collect_device,
     }
 
 
 def perform_gofo_backfill_range(start_date_str, end_date_str):
-    """按日历日从 Gofo 拉取 chart_v2 整点列表，再逐小时 overview 回填 sorting_records（与 perform_gofo_hourly_sync 同源逻辑）。
-    用于更正某区间内人工/设备/件数与源站不一致的问题（例如统计图某日异常后重抓）。"""
+    """按日历日从 Gofo 拉取 chart_v2 + 逐小时 overview，可选 popover 覆盖件数并写 CNO01（与 perform_gofo_hourly_sync 一致），
+    回填 sorting_records 与 gofo_collect_destin_hourly。用于更正统计图某区间或补今天数据。"""
     try:
         d0 = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         d1 = datetime.strptime(end_date_str, '%Y-%m-%d').date()
@@ -4794,42 +4984,30 @@ def perform_gofo_backfill_range(start_date_str, end_date_str):
         d += timedelta(days=1)
         time.sleep(0.25)
 
-    conn = get_db()
-    cursor = conn.cursor()
-    synced_count = 0
-    try:
-        for res in hourly_results:
-            cursor.execute("""
-                SELECT id FROM sorting_records
-                WHERE sorting_time = ? AND time_slot = ?
-            """, (res["date"], res["slot"]))
-            row = cursor.fetchone()
-            if row:
-                rid = row['id'] if USE_POSTGRES else row[0]
-                cursor.execute("""
-                    UPDATE sorting_records SET pieces = ?, manual_count = ?, device_count = ?, remark = ?
-                    WHERE id = ?
-                """, (res["pieces"], res["manual"], res["device"], remark, rid))
-            else:
-                cursor.execute("""
-                    INSERT INTO sorting_records (sorting_time, pieces, remark, time_slot, created_at, manual_count, device_count)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (res["date"], res["pieces"], remark, res["slot"], current_la_time_str, res["manual"], res["device"]))
-            synced_count += 1
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    _enrich_hourly_results_gofo_popover(hourly_results)
+    wr = _write_hourly_results_sorting_and_cno(
+        hourly_results,
+        remark,
+        current_la_time_str,
+        gofo_hourly_stats=None,
+    )
 
     return {
         "success": True,
-        "synced_count": synced_count,
+        "synced_count": wr["synced_count"],
         "start_date": start_date_str,
         "end_date": end_date_str,
         "hour_slots": len(hourly_results),
+        "synced_hour": wr.get("synced_hour"),
+        "pieces": wr.get("pieces"),
     }
+
+
+def perform_gofo_backfill_today():
+    """按洛杉矶「今天」的日历日重拉 chart_v2 + 每小时 overview + popover/CNO01，写 sorting_records 与 gofo_collect_destin_hourly。"""
+    la_tz = pytz.timezone("America/Los_Angeles")
+    today_str = datetime.now(la_tz).strftime("%Y-%m-%d")
+    return perform_gofo_backfill_range(today_str, today_str)
 
 
 @app.route('/api/gofo/sync_hourly', methods=['POST'])
@@ -7788,6 +7966,113 @@ def update_system_config():
         return jsonify({'success': True, 'message': '配置已更新'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _admin_gofo_dms_guard():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if session.get('role') not in ('admin', 'boss'):
+        return jsonify({'error': '权限不足'}), 403
+    if _gofo_dms_auth is None:
+        return jsonify({
+            'success': False,
+            'error': 'Gofo DMS 登录未就绪：请在服务器执行 pip install pycryptodome',
+        }), 503
+    return None
+
+
+@app.route('/api/admin/gofo/captcha', methods=['POST'])
+def admin_gofo_captcha():
+    err = _admin_gofo_dms_guard()
+    if err is not None:
+        return err
+    try:
+        s = _gofo_dms_auth.new_dms_session()
+        base = _gofo_dms_auth.get_gofo_api_base()
+        uuid, img_b64 = _gofo_dms_auth.fetch_captcha(s, base)
+        session['gofo_dms_captcha_uuid'] = uuid
+        session['gofo_dms_captcha_cookies'] = _gofo_dms_auth.session_cookies_dict(s)
+        session.modified = True
+        raw = (img_b64 or "").strip()
+        if raw.startswith("data:"):
+            img_url = raw
+        else:
+            img_url = "data:image/png;base64," + raw
+        return jsonify({'success': True, 'img': img_url})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/gofo/login_token', methods=['POST'])
+def admin_gofo_login_token():
+    err = _admin_gofo_dms_guard()
+    if err is not None:
+        return err
+    data = request.json or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+    captcha_code = (data.get('captcha') or '').strip()
+    plain_password = bool(data.get('plain_password'))
+    if not username or not password:
+        return jsonify({'success': False, 'error': '请填写 DMS 账号和密码'}), 400
+    if not captcha_code:
+        return jsonify({'success': False, 'error': '请填写验证码'}), 400
+    uuid = session.get('gofo_dms_captcha_uuid')
+    cookies = session.get('gofo_dms_captcha_cookies')
+    if not uuid or not isinstance(cookies, dict):
+        return jsonify({'success': False, 'error': '请先点击「获取验证码」'}), 400
+
+    s = _gofo_dms_auth.new_dms_session()
+    _gofo_dms_auth.apply_cookies_dict(s, cookies)
+    base = _gofo_dms_auth.get_gofo_api_base()
+    try:
+        body = _gofo_dms_auth.login_dms(
+            s,
+            base=base,
+            uuid=uuid,
+            username=username,
+            password_plain=password,
+            captcha_code=captcha_code,
+            plain_password=plain_password,
+        )
+    except (requests.RequestException, ValueError) as e:
+        return jsonify({'success': False, 'error': str(e)}), 502
+
+    if body.get('code') != 200:
+        msg = body.get('msg') or body.get('message') or str(body)
+        return jsonify({'success': False, 'error': msg, 'detail': body}), 400
+
+    token = _gofo_dms_auth.extract_jwt_from_login_body(body)
+    if not token:
+        return jsonify({'success': False, 'error': '登录成功但未解析到 JWT', 'detail': body}), 500
+
+    session.pop('gofo_dms_captcha_uuid', None)
+    session.pop('gofo_dms_captcha_cookies', None)
+    session.modified = True
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        key = 'gofo_admin_token'
+        desc = 'Gofo API Admin Token'
+        val = token.strip()
+        if USE_POSTGRES:
+            sql = """
+                INSERT INTO system_config (config_key, config_value, description)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = CURRENT_TIMESTAMP
+            """
+            cursor.execute(sql, (key, val, desc))
+        else:
+            sql = "INSERT OR REPLACE INTO system_config (config_key, config_value, description) VALUES (?, ?, ?)"
+            cursor.execute(sql, (key, val, desc))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'已登录但写入配置失败: {e}'}), 500
+
+    return jsonify({'success': True, 'message': 'Token 已保存'})
+
 
 # 删除用户（仅管理员）
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
@@ -11607,12 +11892,8 @@ def gofo_hourly_sync_job():
     while True:
         try:
             now = datetime.now()
-            # 计算下一个整点过 1 分钟
-            # 例如现在是 13:25, 下一个目标是 14:01
-            next_run = now.replace(minute=1, second=0, microsecond=0)
-            if now.minute >= 1:
-                next_run += timedelta(hours=1)
-            
+            # 下一整点执行（例如 13:25 -> 14:00）
+            next_run = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
             wait_seconds = (next_run - now).total_seconds()
             print(f"[GofoAutoSync] Scheduled next sync for {next_run.strftime('%Y-%m-%d %H:%M:%S')} (waiting {wait_seconds:.1f}s)")
             

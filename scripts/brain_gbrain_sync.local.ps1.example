@@ -1,0 +1,2 @@
+# Copy to brain_gbrain_sync.local.ps1 (gitignored) to set defaults for scripts/brain_gbrain_sync.ps1
+$env:GBRAIN_REPO = 'E:\Project\gbrain'

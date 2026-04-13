@@ -780,26 +780,70 @@
             </div>
         </div>
 
-        <!-- Gofo API 配置 (Admin Only) -->
+        <!-- Gofo API 配置 (Admin Only) — 紧凑布局 -->
         <div class="card">
-            <h2><i class="fas fa-key"></i> Gofo API 配置</h2>
-            <p style="color: #666; margin-bottom: 20px;">更新 Gofo 系统对接使用的 Admin Token。如果同步失败并提示 Token Expired，请在此处更新并保存。</p>
-            <div class="form-row">
-                <div class="form-col" style="flex: 3;">
-                    <div class="form-group">
-                        <label for="gofoAdminToken">Gofo Admin Token:</label>
-                        <textarea id="gofoAdminToken" rows="3" placeholder="请粘贴最新的 Gofo Token..." 
-                                  style="width: 100%; font-family: monospace; font-size: 12px;"></textarea>
-                        <small style="color: #666;">注意：Token 具有有效期，过期后需重新获取。</small>
+            <h2 style="margin-bottom: 8px;"><i class="fas fa-key"></i> Gofo API 配置</h2>
+            <p style="color: #666; margin: 0 0 12px; font-size: 13px; line-height: 1.45;">优先 <strong>方式一</strong> 登录写入；有现成 Token 用 <strong>方式二</strong>。<code>GOFO_API_BASE</code> 可改 API 根路径。</p>
+
+            <div style="background: #f8f9fb; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; border: 1px solid #e9ecef;">
+                <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 8px;">
+                    <span style="font-size: 13px; font-weight: 600; color: #333;">方式一 · DMS 登录</span>
+                    <span style="font-size: 12px; color: #888;">同 <code style="font-size: 11px;">gofo_login_token.py</code></span>
+                </div>
+                <div class="form-row" style="flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; margin-bottom: 6px;">
+                    <div class="form-group" style="margin: 0; flex: 1; min-width: 130px;">
+                        <label for="gofoDmsUser" style="font-size: 12px; margin-bottom: 2px;">账号</label>
+                        <input type="text" id="gofoDmsUser" autocomplete="username" style="width: 100%; padding: 6px 8px; font-size: 13px;"
+                            placeholder="DMS 用户名">
                     </div>
+                    <div class="form-group" style="margin: 0; flex: 1; min-width: 130px;">
+                        <label for="gofoDmsPassword" style="font-size: 12px; margin-bottom: 2px;">密码</label>
+                        <input type="password" id="gofoDmsPassword" autocomplete="current-password" style="width: 100%; padding: 6px 8px; font-size: 13px;"
+                            placeholder="密码">
+                    </div>
+                    <label title="仅当该 DMS 未启用前端 AES 加密时勾选，否则保持关闭"
+                        style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #666; cursor: pointer; margin: 0 0 6px 0; flex: 0 0 auto; white-space: nowrap; user-select: none;">
+                        <input type="checkbox" id="gofoDmsPlainPassword" style="margin: 0; width: 14px; height: 14px; flex-shrink: 0;">
+                        明文
+                    </label>
+                </div>
+                <div class="form-row" style="flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; margin-bottom: 8px;">
+                    <button type="button" onclick="fetchGofoCaptcha()" class="action-btn btn-reset" id="btnGofoCaptcha" style="padding: 6px 12px; font-size: 13px;">
+                        <i class="fas fa-sync-alt"></i> 验证码
+                    </button>
+                    <div class="form-group" style="margin: 0;">
+                        <img id="gofoCaptchaImg" alt="验证码" title="先点「验证码」"
+                            style="height: 40px; display: block; border: 1px solid #ced4da; border-radius: 3px; background: #fff; min-width: 100px; object-fit: contain;">
+                    </div>
+                    <div class="form-group" style="margin: 0; flex: 1; min-width: 100px; max-width: 200px;">
+                        <label for="gofoDmsCaptcha" style="font-size: 12px; margin-bottom: 2px;">图中字符</label>
+                        <input type="text" id="gofoDmsCaptcha" autocomplete="off" style="width: 100%; padding: 6px 8px; font-size: 13px;"
+                            placeholder="验证码">
+                    </div>
+                    <button type="button" onclick="loginGofoAndSaveToken()" class="action-btn btn-search" id="btnGofoLoginSave" style="padding: 6px 12px; font-size: 13px;">
+                        <i class="fas fa-sign-in-alt"></i> 登录保存
+                    </button>
                 </div>
             </div>
-            <div class="action-buttons">
-                <button onclick="saveGofoToken()" class="action-btn btn-search" id="btnSaveGofoToken">
-                    <i class="fas fa-save"></i> 保存 Gofo Token
-                </button>
-                <div id="gofoTokenStatus" style="font-size: 13px; margin-left: 10px; display: flex; align-items: center;"></div>
+
+            <div style="margin-bottom: 0;">
+                <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin-bottom: 6px;">
+                    <span style="font-size: 13px; font-weight: 600; color: #333;">方式二 · 粘贴 Token</span>
+                </div>
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <label for="gofoAdminToken" style="font-size: 12px; margin-bottom: 2px;">Admin Token</label>
+                    <textarea id="gofoAdminToken" rows="2" placeholder="JWT 或 gofo_token.txt"
+                              style="width: 100%; font-family: monospace; font-size: 12px; padding: 6px 8px; line-height: 1.35;"></textarea>
+                </div>
+                <div class="action-buttons" style="margin: 0;">
+                    <button onclick="saveGofoToken()" class="action-btn btn-search" id="btnSaveGofoToken" style="padding: 6px 12px; font-size: 13px;">
+                        <i class="fas fa-save"></i> 保存
+                    </button>
+                </div>
             </div>
+
+            <div id="gofoTokenStatus" role="status" aria-live="polite"
+                style="font-size: 12px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e9ecef; min-height: 18px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;"></div>
         </div>
 
         <!-- =============== 人工及设备费率 模态框 =============== -->
@@ -1125,7 +1169,9 @@
             // --- Gofo Token 管理 ---
             async function loadGofoToken() {
                 try {
-                    const response = await fetch('/api/admin/system_config?key=gofo_admin_token');
+                    const response = await fetch('/api/admin/system_config?key=gofo_admin_token', {
+                        credentials: 'same-origin'
+                    });
                     const data = await response.json();
                     if (data.success && data.value) {
                         const el = document.getElementById('gofoAdminToken');
@@ -1133,6 +1179,95 @@
                     }
                 } catch (error) {
                     console.error('Error loading Gofo token:', error);
+                }
+            }
+
+            async function fetchGofoCaptcha() {
+                const btn = document.getElementById('btnGofoCaptcha');
+                const img = document.getElementById('gofoCaptchaImg');
+                const cap = document.getElementById('gofoDmsCaptcha');
+                if (btn) btn.disabled = true;
+                try {
+                    const response = await fetch('/api/admin/gofo/captcha', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}'
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        alert(data.error || '获取验证码失败');
+                        return;
+                    }
+                    if (img) {
+                        img.src = data.img;
+                        img.alt = '验证码';
+                    }
+                    if (cap) cap.value = '';
+                } catch (e) {
+                    console.error(e);
+                    alert('网络错误，无法获取验证码');
+                } finally {
+                    if (btn) btn.disabled = false;
+                }
+            }
+
+            async function loginGofoAndSaveToken() {
+                const u = document.getElementById('gofoDmsUser');
+                const p = document.getElementById('gofoDmsPassword');
+                const c = document.getElementById('gofoDmsCaptcha');
+                const plainEl = document.getElementById('gofoDmsPlainPassword');
+                const btn = document.getElementById('btnGofoLoginSave');
+                const status = document.getElementById('gofoTokenStatus');
+                if (!u || !p || !c) return;
+                const username = u.value.trim();
+                const password = p.value;
+                const captcha = c.value.trim();
+                if (!username || !password) {
+                    alert('请填写 DMS 账号和密码');
+                    return;
+                }
+                if (!captcha) {
+                    alert('请填写验证码，或先点击「获取验证码」');
+                    return;
+                }
+                if (btn) btn.disabled = true;
+                if (status) {
+                    status.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 登录中...';
+                    status.style.color = '#17a2b8';
+                }
+                try {
+                    const response = await fetch('/api/admin/gofo/login_token', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username,
+                            password,
+                            captcha,
+                            plain_password: !!(plainEl && plainEl.checked)
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        await loadGofoToken();
+                        if (status) {
+                            status.innerHTML = '<i class="fas fa-check-circle" style="color: #28a745; margin-right: 5px;"></i> 已登录并保存 Token';
+                            setTimeout(() => { status.innerHTML = ''; }, 4000);
+                        }
+                    } else {
+                        const msg = data.error || data.message || '登录失败';
+                        if (status) {
+                            status.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545; margin-right: 5px;"></i> ' + msg;
+                        } else {
+                            alert(msg);
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                    if (status) status.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545; margin-right: 5px;"></i> 网络错误';
+                } finally {
+                    if (btn) btn.disabled = false;
                 }
             }
 
@@ -1157,6 +1292,7 @@
                 try {
                     const response = await fetch('/api/admin/system_config', {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             key: 'gofo_admin_token',

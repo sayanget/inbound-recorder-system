@@ -29,7 +29,7 @@ echo ============================================================
 echo.
 
 REM 直接调用send_daily_report函数
-python -c "import sys; sys.path.insert(0, r'd:\project\inbound_python_source'); from daily_email_report import send_daily_report; send_daily_report()"
+python -c "import sys; sys.path.insert(0, r'e:\project\inbound_python_source'); from daily_email_report import send_daily_report; send_daily_report()"
 
 if errorlevel 1 (
     echo.
