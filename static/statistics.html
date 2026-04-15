@@ -273,10 +273,82 @@
             padding-top: 8px;
             border-top: 1px solid var(--border-color);
         }
+
+        .stats-floating-date {
+            position: fixed;
+            right: max(12px, env(safe-area-inset-right));
+            bottom: max(16px, env(safe-area-inset-bottom));
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: var(--card-shadow);
+            font-size: 0.9rem;
+            color: var(--text-color);
+        }
+
+        .stats-floating-date label {
+            margin: 0;
+            white-space: nowrap;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .stats-floating-date input[type="date"] {
+            padding: 6px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--body-bg);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+
+        .stats-floating-nav {
+            flex-shrink: 0;
+            padding: 6px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+
+        .stats-floating-nav:hover {
+            background: var(--primary-color);
+            color: #fff;
+            border-color: var(--primary-color);
+        }
+
+        .stats-floating-nav:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .stats-floating-nav:disabled:hover {
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
     </style>
 </head>
 
 <body>
+    <div id="statsFloatingDateBar" class="stats-floating-date" aria-label="Statistics end date">
+        <button type="button" id="floatingStatsPrevDay" class="stats-floating-nav">
+            <span data-lang="floating_stats_prev_day">前一天</span>
+        </button>
+        <input type="date" id="floatingStatsDate" aria-label="统计截止日" />
+        <button type="button" id="floatingStatsNextDay" class="stats-floating-nav">
+            <span data-lang="floating_stats_next_day">后一天</span>
+        </button>
+    </div>
     <div id="nav-container"></div>
     <div class="container">
         <h2><span data-lang="inbound_statistics">统计数据看板</span></h2>
@@ -569,6 +641,9 @@
                 statistics_data: "统计数据看板",
                 history_query: "历史查询",
                 select_date: "选择日期",
+                floating_stats_date_label: "统计截止日",
+                floating_stats_prev_day: "前一天",
+                floating_stats_next_day: "后一天",
                 load_data: "加载数据",
                 today: "今天",
                 statistics_summary: "统计摘要",
@@ -672,6 +747,9 @@
                 statistics_data: "Data Dashboard",
                 history_query: "History Query",
                 select_date: "Select Date",
+                floating_stats_date_label: "As-of date",
+                floating_stats_prev_day: "Previous day",
+                floating_stats_next_day: "Next day",
                 load_data: "Load Data",
                 today: "Today",
                 statistics_summary: "Statistics Summary",
@@ -778,6 +856,9 @@
                 statistics_data: "Panel de Datos",
                 history_query: "Consulta Histórica",
                 select_date: "Seleccionar Fecha",
+                floating_stats_date_label: "Fecha corte",
+                floating_stats_prev_day: "Día anterior",
+                floating_stats_next_day: "Día siguiente",
                 load_data: "Cargar Datos",
                 today: "Hoy",
                 statistics_summary: "Resumen Estadístico",
@@ -904,6 +985,13 @@
                 if (ds[1]) ds[1].label = t.packing_device || '设备集包';
                 window.dailyPackingSplitChart.update();
             }
+            if (typeof updateFloatingStatsNavState === 'function') {
+                updateFloatingStatsNavState();
+            }
+            const floatingStatsDateInput = document.getElementById('floatingStatsDate');
+            if (floatingStatsDateInput && translations[lang] && translations[lang].floating_stats_date_label) {
+                floatingStatsDateInput.setAttribute('aria-label', translations[lang].floating_stats_date_label);
+            }
         }
 
         // Toggle language dropdown (legacy - nav_component.js handles this)
@@ -1026,20 +1114,23 @@
             const formattedDate = `${year}-${month}-${day}`;
             document.getElementById('selectedDate').value = formattedDate;
             currentDate = formattedDate;
+            const floatingDateEl = document.getElementById('floatingStatsDate');
+            if (floatingDateEl) floatingDateEl.value = formattedDate;
+            updateFloatingStatsNavState();
 
             // Load default data
             loadData();
-            loadWaybillTrendData();
-            loadWeeklyWaybillTrendData();
+            refreshTrendAndCompareCharts();
 
             // Bind date selection related events
             document.getElementById('loadDataBtn').addEventListener('click', function () {
                 const selectedDate = document.getElementById('selectedDate').value;
                 if (selectedDate) {
                     currentDate = selectedDate;
+                    if (floatingDateEl) floatingDateEl.value = selectedDate;
+                    updateFloatingStatsNavState();
                     loadData();
-                    loadWaybillTrendData();
-                    loadWeeklyWaybillTrendData();
+                    refreshTrendAndCompareCharts();
                 }
             });
 
@@ -1053,10 +1144,37 @@
 
                 document.getElementById('selectedDate').value = todayFormatted;
                 currentDate = todayFormatted;
+                if (floatingDateEl) floatingDateEl.value = todayFormatted;
+                updateFloatingStatsNavState();
                 loadData();
-                loadWaybillTrendData();
-                loadWeeklyWaybillTrendData();
+                refreshTrendAndCompareCharts();
             });
+
+            if (floatingDateEl) {
+                floatingDateEl.addEventListener('change', function () {
+                    const v = this.value;
+                    if (!v) return;
+                    document.getElementById('selectedDate').value = v;
+                    currentDate = v;
+                    updateFloatingStatsNavState();
+                    loadData();
+                    refreshTrendAndCompareCharts();
+                });
+            }
+
+            const prevDayBtn = document.getElementById('floatingStatsPrevDay');
+            const nextDayBtn = document.getElementById('floatingStatsNextDay');
+            if (prevDayBtn) {
+                prevDayBtn.addEventListener('click', function () {
+                    shiftStatsDateByStep(-1);
+                });
+            }
+            if (nextDayBtn) {
+                nextDayBtn.addEventListener('click', function () {
+                    shiftStatsDateByStep(1);
+                });
+            }
+            updateFloatingStatsNavState();
 
             // Bind export Excel button event
             const exportExcelEl = document.getElementById('exportExcel');
@@ -2805,7 +2923,11 @@
         }
 
         function loadDailyPackingSplitData() {
-            fetch('/api/statistics/daily_packing_split?days=14')
+            let packUrl = '/api/statistics/daily_packing_split?days=14';
+            if (currentDate) {
+                packUrl += '&end_date=' + encodeURIComponent(currentDate);
+            }
+            fetch(packUrl)
                 .then(r => {
                     if (!r.ok) throw new Error('HTTP ' + r.status);
                     return r.json();
@@ -3021,7 +3143,11 @@
 
         // Load weekly pallet trend chart data
         function loadDailyTrendData() {
-            fetch('/api/weekly_pallet_trend')
+            let trendUrl = '/api/weekly_pallet_trend';
+            if (currentDate) {
+                trendUrl += '?end_date=' + encodeURIComponent(currentDate);
+            }
+            fetch(trendUrl)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -3255,7 +3381,11 @@
 
         // Load week comparison chart data
         function loadWeekComparisonData() {
-            fetch('/api/week_comparison')
+            let wcUrl = '/api/week_comparison';
+            if (currentDate) {
+                wcUrl += '?end_date=' + encodeURIComponent(currentDate);
+            }
+            fetch(wcUrl)
                 .then(response => response.json())
                 .then(data => {
                     // Check if it's an error object (not an array)
@@ -3631,13 +3761,7 @@
             }, 3000);
         }
 
-        // Load new charts on page load
-        window.addEventListener('load', function () {
-            loadDailyTrendData();
-            loadWeekComparisonData();
-            loadWaybillTrendData();
-            loadWeeklyWaybillTrendData();
-        });
+        // (daily trend / week comparison / waybill charts load from DOMContentLoaded via refreshTrendAndCompareCharts)
 
         // Auto-refresh sorting metrics every 30 seconds
         function refreshSortingMetrics() {
@@ -3833,9 +3957,63 @@
             }
         }
 
+        function refreshTrendAndCompareCharts() {
+            loadWaybillTrendData();
+            loadWeeklyWaybillTrendData();
+            loadDailyTrendData();
+            loadWeekComparisonData();
+        }
+
+        function statsFloatingTodayYmd() {
+            const t = new Date();
+            const y = t.getFullYear();
+            const m = String(t.getMonth() + 1).padStart(2, '0');
+            const d = String(t.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function updateFloatingStatsNavState() {
+            const nextBtn = document.getElementById('floatingStatsNextDay');
+            if (!nextBtn) return;
+            const main = document.getElementById('selectedDate');
+            const v = (main && main.value) || currentDate;
+            nextBtn.disabled = !!v && v >= statsFloatingTodayYmd();
+        }
+
+        function shiftStatsDateByStep(stepDays) {
+            const main = document.getElementById('selectedDate');
+            const base = (main && main.value) || currentDate;
+            if (!base) return;
+            const parts = base.split('-').map((x) => parseInt(x, 10));
+            if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return;
+            const d = new Date(parts[0], parts[1] - 1, parts[2]);
+            d.setDate(d.getDate() + stepDays);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            d.setHours(0, 0, 0, 0);
+            if (d > today) {
+                d.setTime(today.getTime());
+            }
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const s = `${y}-${m}-${day}`;
+            currentDate = s;
+            if (main) main.value = s;
+            const floatEl = document.getElementById('floatingStatsDate');
+            if (floatEl) floatEl.value = s;
+            updateFloatingStatsNavState();
+            loadData();
+            refreshTrendAndCompareCharts();
+        }
+
         // Load Waybill Trend Chart data (Feishu Data)
         function loadWaybillTrendData() {
-            fetch('/api/admin/statistics/waybill-trends?days=14')
+            let wtUrl = '/api/admin/statistics/waybill-trends?days=14';
+            if (currentDate) {
+                wtUrl += '&end_date=' + encodeURIComponent(currentDate);
+            }
+            fetch(wtUrl)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -3859,7 +4037,11 @@
 
         // Load Weekly Waybill Trend Chart data
         function loadWeeklyWaybillTrendData() {
-            fetch('/api/admin/statistics/weekly-waybill-trends')
+            let wkUrl = '/api/admin/statistics/weekly-waybill-trends';
+            if (currentDate) {
+                wkUrl += '?end_date=' + encodeURIComponent(currentDate);
+            }
+            fetch(wkUrl)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -3899,6 +4081,20 @@
 
             const isMobile = window.innerWidth < 768;
 
+            function formatWeeklyVolumeWan(n) {
+                const w = Number(n) / 1e4;
+                if (!Number.isFinite(w)) return '';
+                if (w === 0) return '0';
+                const rounded = Math.round(w * 100) / 100;
+                if (currentLang === 'zh') {
+                    return rounded.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '万';
+                }
+                if (currentLang === 'es') {
+                    return rounded.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + 'w';
+                }
+                return rounded.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + 'w';
+            }
+
             // Define colors for multi-line/bar
             const barColors = [
                 'rgba(67, 97, 238, 0.8)', 'rgba(247, 37, 133, 0.8)', 'rgba(76, 201, 240, 0.8)', 'rgba(58, 12, 163, 0.8)',
@@ -3923,7 +4119,7 @@
                     borderWidth: 1,
                     yAxisID: 'y',
                     datalabels: {
-                        display: true // Enable for total calculation logic
+                        display: false
                     }
                 };
             });
@@ -3957,9 +4153,61 @@
                 });
             }
 
+            const weeklyStackTotalPlugin = {
+                id: 'weeklyWaybillStackTotals',
+                afterDatasetsDraw(chart) {
+                    const { ctx, chartArea, data: cdata } = chart;
+                    if (!chartArea || !cdata.labels || !cdata.labels.length) return;
+
+                    const barGlobalIndices = [];
+                    cdata.datasets.forEach((ds, i) => {
+                        const meta = chart.getDatasetMeta(i);
+                        const chartType = (meta && meta.type) || ds.type;
+                        if (chartType === 'bar') barGlobalIndices.push(i);
+                    });
+                    if (!barGlobalIndices.length) return;
+
+                    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                    ctx.save();
+                    ctx.font = `bold ${isMobile ? 10 : 12}px Inter, 'Segoe UI', system-ui, sans-serif`;
+                    ctx.fillStyle = isDark ? '#e8eaed' : '#333333';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+
+                    const n = cdata.labels.length;
+                    for (let di = 0; di < n; di++) {
+                        let total = 0;
+                        let topY = Infinity;
+                        let x = 0;
+                        let seen = false;
+                        barGlobalIndices.forEach((gi) => {
+                            total += Number(cdata.datasets[gi].data[di]) || 0;
+                            const meta = chart.getDatasetMeta(gi);
+                            const el = meta.data[di];
+                            if (el && !el.skip) {
+                                seen = true;
+                                const y = el.y;
+                                if (typeof y === 'number' && y < topY) topY = y;
+                                x = el.x;
+                            }
+                        });
+                        if (!seen || topY === Infinity) continue;
+                        const padTop = 5;
+                        const labelY = Math.max(chartArea.top + padTop, topY - padTop);
+                        ctx.fillText(formatWeeklyVolumeWan(total), x, labelY);
+                    }
+                    ctx.restore();
+                }
+            };
+
+            const weeklyChartPlugins = [weeklyStackTotalPlugin];
+            if (typeof ChartDataLabels !== 'undefined') {
+                weeklyChartPlugins.unshift(ChartDataLabels);
+            }
+
             window.weeklyWaybillTrendChartInstance = new Chart(ctx, {
                 type: 'bar',
-                plugins: [ChartDataLabels],
+                plugins: weeklyChartPlugins,
                 data: {
                     labels: data.labels,
                     datasets: datasets
@@ -3967,6 +4215,11 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            top: isMobile ? 18 : 26
+                        }
+                    },
                     plugins: {
                         legend: {
                             position: 'top',
@@ -3988,7 +4241,11 @@
                                         label += ': ';
                                     }
                                     if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toLocaleString();
+                                        if (context.dataset.type === 'bar') {
+                                            label += formatWeeklyVolumeWan(context.parsed.y);
+                                        } else {
+                                            label += context.parsed.y.toLocaleString();
+                                        }
                                     }
                                     return label;
                                 },
@@ -4004,7 +4261,7 @@
                                     });
                                     let footerText = '';
                                     const totalText = currentLang === 'zh' ? '周总计' : 'Weekly Total';
-                                    footerText += `\n${totalText}: ${sum.toLocaleString()}`;
+                                    footerText += `\n${totalText}: ${formatWeeklyVolumeWan(sum)}`;
                                     
                                     if (wowValue !== null) {
                                         const wowText = currentLang === 'zh' ? '周环比' : 'WoW';
@@ -4015,39 +4272,12 @@
                             }
                         },
                         datalabels: {
-                            anchor: 'end',
-                            align: 'top',
-                            padding: 4,
-                            formatter: (value, context) => {
-                                const datasetIndex = context.datasetIndex;
-                                const dataIndex = context.dataIndex;
-                                const datasets = context.chart.data.datasets;
-
-                                // Only show total for the top-most visible BAR segment
-                                if (context.dataset.type !== 'bar') return context.dataset.datalabels.formatter(value, context);
-
-                                let isLastBarNonZero = true;
-                                for (let i = datasetIndex + 1; i < datasets.length; i++) {
-                                    if (datasets[i].type === 'bar' && datasets[i].data[dataIndex] > 0) {
-                                        isLastBarNonZero = false;
-                                        break;
-                                    }
-                                }
-
-                                if (!isLastBarNonZero || value === 0) return null;
-
-                                // Calculate total for this week
-                                let total = 0;
-                                datasets.forEach(ds => {
-                                    total += (ds.data[dataIndex] || 0);
-                                });
-                                return total.toLocaleString();
-                            },
+                            display: (context) => context.dataset.type === 'line',
                             font: {
                                 weight: 'bold',
                                 size: isMobile ? 9 : 11
                             },
-                            color: window.matchMedia('(prefers-color-scheme: dark)').matches ? '#ffffff' : '#444444'
+                            color: '#ff9f43'
                         }
                     },
                     scales: {
@@ -4073,7 +4303,9 @@
                             position: 'left',
                             title: {
                                 display: true,
-                                text: translations[currentLang].pieces || '件数',
+                                text: currentLang === 'zh'
+                                    ? '票数 (万)'
+                                    : (currentLang === 'es' ? 'Piezas (10k)' : 'Volume (10k)'),
                                 font: {
                                     size: isMobile ? 11 : 13
                                 }
@@ -4083,9 +4315,7 @@
                                     size: isMobile ? 8 : 10
                                 },
                                 callback: function (value) {
-                                    if (value >= 10000) return (value / 10000).toFixed(1) + 'w';
-                                    if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
-                                    return value;
+                                    return formatWeeklyVolumeWan(value);
                                 }
                             }
                         },

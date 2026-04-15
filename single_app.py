@@ -1752,7 +1752,14 @@ def api_statistics_daily_packing_split():
         days = 14
     days = min(days, 90)
     try:
-        end_date = datetime.now(LA_TZ).date()
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        if end_raw:
+            try:
+                end_date = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+            except ValueError:
+                end_date = datetime.now(LA_TZ).date()
+        else:
+            end_date = datetime.now(LA_TZ).date()
         start_date = end_date - timedelta(days=days - 1)
         conn = get_db()
         cursor = conn.cursor()
@@ -6724,6 +6731,13 @@ def get_weekly_pallet_trend():
         # 获取最小和最大日期
         min_date = min(record_dates)
         max_date = max(record_dates)
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        if end_raw:
+            try:
+                ed = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+                max_date = min(max_date, ed)
+            except ValueError:
+                pass
         
         # 辅助函数：获取自然周的起止日期
         def get_natural_week_range(date_obj):
@@ -6748,6 +6762,14 @@ def get_weekly_pallet_trend():
             for day_offset in range(7):
                 current_day = current_start + timedelta(days=day_offset)
                 next_day = current_day + timedelta(days=1)
+                
+                if current_day > max_date:
+                    daily_data.append({
+                        'date': current_day.strftime('%Y-%m-%d'),
+                        'weekday': current_day.weekday(),
+                        'pallets': 0
+                    })
+                    continue
                 
                 # 构造当天的日期时间范围 (运营日: 05:00 到 次日 05:00, 洛杉矶时间)
                 req_5am_la = LA_TZ.localize(datetime.combine(current_day, datetime.min.time().replace(hour=5)))
@@ -6841,8 +6863,15 @@ def get_week_comparison():
             print(f"解析最小日期出错: {e}, 使用当前日期")
             min_date = datetime.now(LA_TZ).date()
             
-        # 设置最大日期为今天（确保显示到本周）
+        # 设置最大日期为今天（确保显示到本周）；可选 end_date 截断
         max_date = datetime.now(LA_TZ).date()
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        if end_raw:
+            try:
+                ed = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+                max_date = min(max_date, ed)
+            except ValueError:
+                pass
         
         # 辅助函数：获取自然周的起止日期
         def get_natural_week_range(date):
@@ -6870,6 +6899,15 @@ def get_week_comparison():
             for day_offset in range(7):
                 current_day = current_start + timedelta(days=day_offset)
                 next_day = current_day + timedelta(days=1)
+                
+                if current_day > max_date:
+                    daily_data.append({
+                        'date': current_day.strftime('%Y-%m-%d'),
+                        'weekday': current_day.weekday(),
+                        'pieces': 0,
+                        'vehicles': 0
+                    })
+                    continue
                 
                 # 构造当天的日期时间范围 (运营日: 05:00 到 次日 05:00, 洛杉矶时间)
                 req_5am_la = LA_TZ.localize(datetime.combine(current_day, datetime.min.time().replace(hour=5)))
@@ -9684,22 +9722,31 @@ def get_waybill_trends():
     """获取飞书运单票数趋势 (按流向聚合)"""
     try:
         days = int(request.args.get('days', 30))
+        days = max(1, min(days, 366))
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        if end_raw:
+            try:
+                end_d = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+            except ValueError:
+                end_d = datetime.now(LA_TZ).date()
+        else:
+            end_d = datetime.now(LA_TZ).date()
+        start_d = end_d - timedelta(days=days - 1)
+        start_date = start_d.strftime('%Y-%m-%d')
+        end_date = end_d.strftime('%Y-%m-%d')
         conn = get_db()
         cursor = conn.cursor()
         
-        # 计算开始日期
-        start_date = (datetime.now(LA_TZ) - timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        # 聚合查询：按日期和流向汇总票数
+        # 聚合查询：按日期和流向汇总票数（窗口 [start_date, end_date]）
         query = """
             SELECT record_date, destination as direction, SUM(tickets_count) as total_tickets
             FROM feishu_raw_data
-            WHERE record_date >= ?
+            WHERE record_date >= ? AND record_date <= ?
             GROUP BY record_date, destination
             ORDER BY record_date ASC
         """
         
-        cursor.execute(convert_query_placeholders(query), (start_date,))
+        cursor.execute(convert_query_placeholders(query), (start_date, end_date))
         rows = cursor.fetchall()
         conn.close()
         
@@ -9710,11 +9757,11 @@ def get_waybill_trends():
         
         for row in rows:
             if USE_POSTGRES:
-                r_date = str(row['record_date'])
+                r_date = str(row['record_date']).split(' ')[0][:10]
                 direction = row['direction']
                 tickets = row['total_tickets']
             else:
-                r_date = str(row[0])
+                r_date = str(row[0]).split(' ')[0][:10]
                 direction = row[1]
                 tickets = row[2]
             
@@ -9756,6 +9803,13 @@ def get_waybill_trends():
 def get_weekly_waybill_trends():
     """获取飞书运单票数每周趋势 (按流向堆叠)"""
     try:
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        end_filter = None
+        if end_raw:
+            try:
+                end_filter = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').strftime('%Y-%m-%d')
+            except ValueError:
+                end_filter = None
         conn = get_db()
         cursor = conn.cursor()
         
@@ -9788,15 +9842,17 @@ def get_weekly_waybill_trends():
         
         for row in rows:
             if USE_POSTGRES:
-                r_date = str(row['record_date'])
+                r_date = str(row['record_date']).split(' ')[0][:10]
                 direction = row['direction']
                 tickets = row['total_tickets']
             else:
-                r_date = str(row[0])
+                r_date = str(row[0]).split(' ')[0][:10]
                 direction = row[1]
                 tickets = row[2]
             
             if not direction: continue
+            if end_filter and r_date > end_filter:
+                continue
                 
             week_start, label = get_week_label(r_date)
             if week_start not in weeks_data:
