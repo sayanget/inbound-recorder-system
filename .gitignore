@@ -168,6 +168,14 @@ in0.ico
 *.tar.gz
 *.7z
 
+# Standalone release bundles (shipped outside git)
+standalone/流向分布*/
+standalone/**/pack.log
+
+# Transient local/debug artifacts
+_cookies.txt
+_stats_live.html
+
 # Accidental one-liner stubs at repo root (do not commit)
 import boto3.py
 import requests.py

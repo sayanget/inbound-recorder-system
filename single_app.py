@@ -191,6 +191,17 @@ def _api_cors_headers(response):
     return response
 
 
+@app.after_request
+def _permissions_policy_header(response):
+    # 显式授权 unload / beforeunload，避免 Chrome 对页面上任何 unload 监听器
+    # (包括某些第三方脚本/扩展注入的 index.global.js 等)抛出
+    # "[Violation] Permissions policy violation: unload is not allowed in this document."
+    # unload=*       允许任何来源注册 unload 监听
+    # 用 setdefault 防止覆盖下游代理可能已写的策略
+    response.headers.setdefault('Permissions-Policy', 'unload=*')
+    return response
+
+
 @app.before_request
 def _session_keep_alive():
     """已登录用户：持久会话 + 每次请求续期 Cookie，减少频繁重新登录。"""
@@ -1630,6 +1641,25 @@ def outbound_stats():
         return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
     else:
         return f"File not found: {file_path}", 404
+
+
+@app.route('/route-distribution')
+def route_distribution_page():
+    """流向分布数据表（独立页面，复用 /api/outbound/records 数据源 + outbound-stats 权限）"""
+    if 'user_id' not in session:
+        return redirect('/login')
+
+    if not check_page_permission('outbound-stats'):
+        return redirect('/no_permission')
+
+    static_dir = get_static_dir()
+    file_path = os.path.join(static_dir, 'route-distribution.html')
+    if os.path.exists(file_path):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+    return f"File not found: {file_path}", 404
+
 
 @app.route('/schedule-packaging')
 def schedule_packaging_page():
@@ -11891,9 +11921,52 @@ def truck_booking_hourly_sync_job():
             print(f"[AutoSync] Loop Error in truck booking sync: {e}")
             time.sleep(60)
 
+def _maybe_backfill_center_collect_7d():
+    """首次上线（或表为空）时自动回补最近 7 天集包数据，幂等。"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='gofo_center_collect_stats'"
+        )
+        exists = cur.fetchone() is not None
+        has_recent = False
+        if exists:
+            cutoff = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            cur.execute(
+                convert_query_placeholders(
+                    "SELECT COUNT(*) AS n FROM gofo_center_collect_stats WHERE record_date >= ?"
+                ),
+                (cutoff,),
+            )
+            has_recent = (cur.fetchone()['n'] or 0) > 0
+        conn.close()
+    except Exception as e:
+        print(f"[GofoAutoSync] center collect backfill check failed: {e}")
+        return
+
+    if has_recent:
+        return  # 最近 24 小时内有数据，认为已初始化过
+    try:
+        import sync_center_collect
+        print("[GofoAutoSync] center_collect first-run: backfilling last 7 days ...")
+        res = sync_center_collect.fetch_center_collect_backfill(days=7)
+        print(
+            f"[GofoAutoSync] center_collect backfill done: "
+            f"total_stored_rows={res.get('total_stored_rows')}"
+        )
+    except Exception as e:
+        print(f"[GofoAutoSync] center_collect backfill failed: {e}")
+
+
 def gofo_hourly_sync_job():
     """执行每小时 Gofo 同步的任务函数"""
     print(f"[GofoAutoSync] Background job started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    try:
+        _maybe_backfill_center_collect_7d()
+    except Exception as e:
+        print(f"[GofoAutoSync] center_collect backfill guard error: {e}")
     
     # 定义任务内容
     def job():
@@ -11909,6 +11982,22 @@ def gofo_hourly_sync_job():
                 sync_center_checkin.fetch_center_checkin_data()
             except Exception as e:
                 print(f"[GofoAutoSync] Center checkin sync failed: {e}")
+
+            # 抓上一个完整整点的「集包运单数（目的中心）」快照
+            try:
+                import sync_center_collect
+                print(f"[GofoAutoSync] Triggering center collect sync at {now_str}...")
+                cc_res = sync_center_collect.fetch_latest_completed_hour()
+                if cc_res.get('success'):
+                    print(
+                        f"[GofoAutoSync] center collect ok: "
+                        f"{cc_res.get('date')} {cc_res.get('hour')} "
+                        f"stored={cc_res.get('stored_rows')} centers={cc_res.get('centers')}"
+                    )
+                else:
+                    print(f"[GofoAutoSync] center collect returned error: {cc_res.get('error')}")
+            except Exception as e:
+                print(f"[GofoAutoSync] Center collect sync failed: {e}")
                 
             synced_count = result.get('synced_count', 0)
             pieces = result.get('pieces', 0)
@@ -12211,6 +12300,248 @@ def api_admin_center_checkin_sync():
                 'count': result.get('count', 0),
             })
         return jsonify({'success': False, 'error': result.get('error', '同步失败')}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/center_collect_trend', methods=['GET'])
+def api_center_collect_trend():
+    """获取"集包运单数（目的中心）"趋势：按小时 + 按目的中心堆叠。
+
+    查询参数（与 /api/center_checkin_trend 对齐）：
+      date:       YYYY-MM-DD（默认：LA 时区今天）
+      days:       正整数 ⇒ 最近 N 天；all/full/0 ⇒ 库里全部（限 max_points）
+      max_points: 横轴点数上限，默认 10000
+      destin_type: 1=中心(默认) / 2=站点 / all=不过滤
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        date_param = (request.args.get("date") or "").strip()
+        days_raw = (request.args.get("days") or "").strip().lower()
+        destin_type_raw = (request.args.get("destin_type") or "1").strip().lower()
+        try:
+            max_points = int(request.args.get("max_points", "10000"))
+        except ValueError:
+            max_points = 10000
+        max_points = min(max(max_points, 10), 20000)
+
+        dt_filter_sql = ""
+        dt_params: list = []
+        if destin_type_raw in ("1", "center", "centers"):
+            dt_filter_sql = " AND destin_type = ?"
+            dt_params = [1]
+        elif destin_type_raw in ("2", "site", "sites"):
+            dt_filter_sql = " AND destin_type = ?"
+            dt_params = [2]
+        # "all" 不加过滤
+
+        filter_date = None
+        if days_raw in ("all", "full", "0"):
+            sql = (
+                "SELECT DISTINCT record_date, record_hour "
+                f"FROM {'gofo_center_collect_stats'} "
+                "WHERE record_date IS NOT NULL AND record_hour IS NOT NULL"
+                + dt_filter_sql
+                + " ORDER BY record_date DESC, record_hour DESC LIMIT ?"
+            )
+            cursor.execute(convert_query_placeholders(sql), tuple(dt_params + [max_points]))
+            dates_result = list(reversed(cursor.fetchall()))
+        elif date_param:
+            try:
+                datetime.strptime(date_param, "%Y-%m-%d")
+            except ValueError:
+                conn.close()
+                return jsonify({"success": False, "error": "日期格式无效，请使用 YYYY-MM-DD"}), 400
+            filter_date = date_param
+            sql = (
+                "SELECT DISTINCT record_date, record_hour FROM gofo_center_collect_stats "
+                "WHERE record_date = ?" + dt_filter_sql + " ORDER BY record_hour ASC"
+            )
+            cursor.execute(convert_query_placeholders(sql), tuple([filter_date] + dt_params))
+            dates_result = cursor.fetchall()
+        elif days_raw.isdigit():
+            days = min(max(int(days_raw), 1), 3650)
+            cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            sql = (
+                "SELECT DISTINCT record_date, record_hour FROM gofo_center_collect_stats "
+                "WHERE record_date >= ?" + dt_filter_sql +
+                " ORDER BY record_date ASC, record_hour ASC"
+            )
+            cursor.execute(convert_query_placeholders(sql), tuple([cutoff] + dt_params))
+            dates_result = cursor.fetchall()
+            if len(dates_result) > max_points:
+                dates_result = dates_result[-max_points:]
+        else:
+            la_tz = pytz.timezone("America/Los_Angeles")
+            filter_date = datetime.now(la_tz).strftime("%Y-%m-%d")
+            sql = (
+                "SELECT DISTINCT record_date, record_hour FROM gofo_center_collect_stats "
+                "WHERE record_date = ?" + dt_filter_sql + " ORDER BY record_hour ASC"
+            )
+            cursor.execute(convert_query_placeholders(sql), tuple([filter_date] + dt_params))
+            dates_result = cursor.fetchall()
+
+        time_points = []
+        labels = []
+        for row in dates_result:
+            rd = _cc_norm_date(row["record_date"])
+            rh = _cc_norm_hour_slot(row["record_hour"])
+            dt_str = _cc_time_point_key(row["record_date"], row["record_hour"])
+            time_points.append(dt_str)
+            dp = rd.split("-")
+            short_date = f"{dp[1]}-{dp[2]}" if len(dp) == 3 else rd
+            labels.append(f"{short_date} {rh}" if not filter_date else rh)
+
+        if not time_points:
+            conn.close()
+            return jsonify({"success": True, "dates": [], "series": []})
+
+        # 抽目的名单
+        if filter_date:
+            sql_names = (
+                "SELECT DISTINCT destin_name FROM gofo_center_collect_stats "
+                "WHERE destin_name IS NOT NULL AND record_date = ?" + dt_filter_sql
+            )
+            cursor.execute(convert_query_placeholders(sql_names), tuple([filter_date] + dt_params))
+        else:
+            sql_names = (
+                "SELECT DISTINCT destin_name FROM gofo_center_collect_stats "
+                "WHERE destin_name IS NOT NULL" + dt_filter_sql
+            )
+            cursor.execute(convert_query_placeholders(sql_names), tuple(dt_params))
+        names = [r["destin_name"] for r in cursor.fetchall() if r["destin_name"]]
+        names.sort()
+
+        series = []
+        for nm in names:
+            if filter_date:
+                sql_data = (
+                    "SELECT record_date, record_hour, waybill_cnt, package_cnt "
+                    "FROM gofo_center_collect_stats "
+                    "WHERE destin_name = ? AND record_date = ?" + dt_filter_sql +
+                    " ORDER BY record_hour ASC"
+                )
+                cursor.execute(
+                    convert_query_placeholders(sql_data),
+                    tuple([nm, filter_date] + dt_params),
+                )
+            else:
+                sql_data = (
+                    "SELECT record_date, record_hour, waybill_cnt, package_cnt "
+                    "FROM gofo_center_collect_stats "
+                    "WHERE destin_name = ?" + dt_filter_sql +
+                    " ORDER BY record_date ASC, record_hour ASC"
+                )
+                cursor.execute(
+                    convert_query_placeholders(sql_data),
+                    tuple([nm] + dt_params),
+                )
+            rows = cursor.fetchall()
+            dmap: dict = {}
+            for r in rows:
+                k = _cc_time_point_key(r["record_date"], r["record_hour"])
+                dmap[k] = dmap.get(k, 0) + int(r["waybill_cnt"] or 0)
+            data_points = [dmap.get(tp, 0) for tp in time_points]
+            if sum(data_points) == 0:
+                continue  # 不画全 0 的系列
+            series.append({"label": nm, "data": data_points})
+
+        # 最大系列（按总量降序），便于图例顺序稳定
+        series.sort(key=lambda s: -sum(s["data"]))
+
+        conn.close()
+        return jsonify({
+            "success": True,
+            "dates": labels,
+            "series": series,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/center_collect/sync', methods=['POST'])
+def api_admin_center_collect_sync():
+    """手动触发「集包运单数（目的中心）」同步。
+
+    Body (JSON, 全部可选):
+      date: YYYY-MM-DD  指定日期（默认 LA 时区今天）
+      hour: 0..23       只抓该小时；省略则抓该日所有已完成的整点
+    """
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': '未登录'}), 401
+    conn = get_db()
+    cursor = conn.cursor()
+    if not require_admin(cursor):
+        conn.close()
+        return jsonify({'success': False, 'error': '无权访问'}), 403
+    conn.close()
+
+    body = request.get_json(silent=True) or {}
+    la_tz = pytz.timezone("America/Los_Angeles")
+    date_str = (body.get('date') or '').strip() or datetime.now(la_tz).strftime('%Y-%m-%d')
+    hour_raw = body.get('hour')
+    try:
+        import sync_center_collect
+        if hour_raw is None or hour_raw == '':
+            result = sync_center_collect.fetch_center_collect_day(date_str)
+        else:
+            try:
+                h = int(hour_raw)
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': 'hour 必须是 0~23 的整数'}), 400
+            result = sync_center_collect.fetch_center_collect_hour(date_str, h)
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'count': int(result.get('stored_rows') or 0),
+                'message': (
+                    f"{date_str}"
+                    + (f" {h:02d}:00" if hour_raw not in (None, '') else "")
+                    + f" 已入库 {result.get('stored_rows')} 行"
+                ),
+                'detail': result,
+            })
+        return jsonify({'success': False, 'error': result.get('error') or '同步失败', 'detail': result}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/center_collect/backfill', methods=['POST'])
+def api_admin_center_collect_backfill():
+    """回补最近 N 天（默认 7，上限 60）。"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': '未登录'}), 401
+    conn = get_db()
+    cursor = conn.cursor()
+    if not require_admin(cursor):
+        conn.close()
+        return jsonify({'success': False, 'error': '无权访问'}), 403
+    conn.close()
+
+    body = request.get_json(silent=True) or {}
+    try:
+        days = int(body.get('days') or 7)
+    except (TypeError, ValueError):
+        days = 7
+    days = max(1, min(days, 60))
+    try:
+        import sync_center_collect
+        result = sync_center_collect.fetch_center_collect_backfill(days=days)
+        return jsonify({
+            'success': bool(result.get('success')),
+            'days': days,
+            'count': int(result.get('total_stored_rows') or 0),
+            'message': f"回补 {days} 天完成，入库 {result.get('total_stored_rows')} 行",
+            'detail': result,
+        })
     except Exception as e:
         import traceback
         traceback.print_exc()

@@ -764,12 +764,21 @@
 
         // Initialize page
         // 流向汇总：统一按单元格规范化后的「前 3 个字符」分组（相同则合并到同一桶）
+        //
+        // CNO 中转规则：如果路线字符串里含 'CNO-'（CNO = Chino CA 的仓库代号），
+        // 真正的目的地就是紧跟 'CNO-' 后的 3 位 IATA 代码。例如：
+        //   'EWR-LAV-CNO-EWR' → 'EWR'   (truck EWR→LAV→CNO→back to EWR)
+        //   'SFO-CNO-LAX'     → 'LAX'   (truck SFO→CNO→LAX — 不是 SFO 而是 LAX)
+        //   'XXX-CNO-ABC'     → 'ABC'
+        // 这条规则优先于「取前 3 个字符」—— 否则 'SFO-CNO-LAX' 会被错归到 SFO 桶。
         function normalizeRoute(route) {
             if (!route) return 'Unknown';
             let r = String(route).toUpperCase().trim();
             if (r.endsWith('.H') || r.endsWith('.G')) r = r.substring(0, r.length - 2);
             const u = r.replace(/\s+/g, ' ').trim();
             if (u.length === 0) return 'Unknown';
+            const cnoMatch = u.match(/CNO-([A-Z0-9]{3})\b/);
+            if (cnoMatch) return cnoMatch[1];
             return u.length >= 3 ? u.slice(0, 3) : u;
         }
 

@@ -6,6 +6,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-lang="statistics_title">入库统计</title>
     <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <!-- 静音 Chrome 对 'unload' 事件的 Permissions-Policy 违规告警。
+         unload 事件已被主流浏览器标记为废弃（pagehide/beforeunload 才是推荐替代），
+         但某些第三方脚本/浏览器扩展注入的 index.global.js 仍会 addEventListener('unload', ...)，
+         导致控制台一直刷 "unload is not allowed in this document" 的 violation。
+         这里在任何其他脚本加载前，把对 'unload' 的注册请求吞掉（注册本身就无意义）。
+         beforeunload / pagehide / visibilitychange 不受影响。 -->
+    <script>
+        (function () {
+            if (window.__unloadShimApplied) return;
+            window.__unloadShimApplied = true;
+            const targets = [window, document, document.body].filter(Boolean);
+            const tryPatch = (t) => {
+                if (!t || !t.addEventListener || t.__unloadShimPatched) return;
+                const orig = t.addEventListener;
+                t.addEventListener = function (type, listener, options) {
+                    if (typeof type === 'string' && type.toLowerCase() === 'unload') return;
+                    return orig.call(this, type, listener, options);
+                };
+                t.__unloadShimPatched = true;
+            };
+            tryPatch(window);
+            tryPatch(document);
+            // body 在 head 脚本里还不存在，DOMContentLoaded 时补打一次
+            document.addEventListener('DOMContentLoaded', function () { tryPatch(document.body); });
+            // 同时把 EventTarget.prototype.addEventListener 补上，捕获主世界里被
+            // 动态 new 出来的 EventTarget（例如 <iframe>.contentWindow）。
+            try {
+                const proto = EventTarget && EventTarget.prototype;
+                if (proto && !proto.__unloadShimPatched) {
+                    const protoOrig = proto.addEventListener;
+                    proto.addEventListener = function (type, listener, options) {
+                        if (typeof type === 'string' && type.toLowerCase() === 'unload') return;
+                        return protoOrig.call(this, type, listener, options);
+                    };
+                    proto.__unloadShimPatched = true;
+                }
+            } catch (_) { /* 某些沙箱里 EventTarget 只读，忽略 */ }
+        })();
+    </script>
     <!-- Chart.js 3.x 与 chartjs-plugin-datalabels@2 配套；勿用无版本号 chart.js@4 会导致插件不兼容、图表空白 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -620,6 +659,52 @@
             <div class="chart-container" style="height: 400px;">
                 <canvas id="centerCheckinTrendChart"></canvas>
             </div>
+
+            <!-- 同卡片内：集包运单数（按目的中心）堆叠面积图 -->
+            <div style="height:1px; background:var(--border-color, #e5e7eb); margin:22px 0 14px 0;"></div>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+                <h3 style="margin:0;" data-lang="center_collect_trend_chart">集包运单数（按目的中心）</h3>
+                <div id="centerCollectSyncWrap" style="display:none; align-items:center; gap:10px;">
+                    <button type="button" id="centerCollectSyncBtn" class="nav-btn"
+                        style="padding:6px 14px; font-size:13px; cursor:pointer; background:var(--primary-color); color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="center_collect_sync_btn">同步当日集包</span>
+                    </button>
+                    <button type="button" id="centerCollectBackfillBtn" class="nav-btn"
+                        style="padding:6px 14px; font-size:13px; cursor:pointer; background:var(--secondary-color, #6c757d); color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="center_collect_backfill_btn">回补 7 天</span>
+                    </button>
+                    <span id="centerCollectSyncStatus" style="font-size:12px; color:var(--text-muted); max-width:220px;"></span>
+                </div>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;"
+                data-lang="center_collect_chart_hint">数据来源：中心看板 → 集包数弹窗（目的组织类型=中心）。堆叠面积图展示每小时、按目的中心分组的集包运单数。</p>
+            <div class="chart-container" style="height: 400px;">
+                <canvas id="centerCollectTrendChart"></canvas>
+            </div>
+
+            <!-- 累计数据透视表 + 导出按钮 -->
+            <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:14px 0 6px 0;">
+                <h4 style="margin:0; font-size:15px;" data-lang="center_collect_table_title">累计数据（按目的中心 × 时段）</h4>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" id="centerCollectExportCsvBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="center_collect_export_csv">导出 CSV</span>
+                    </button>
+                    <button type="button" id="centerCollectCopyTsvBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#6c757d; color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="center_collect_copy_tsv">复制 TSV</span>
+                    </button>
+                </div>
+            </div>
+            <div id="centerCollectTableWrap"
+                style="max-height:420px; overflow:auto; border:1px solid var(--border-color, #e5e7eb); border-radius:6px;">
+                <table id="centerCollectTable"
+                    style="width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric: tabular-nums; min-width: 640px;">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
 
         <div class="button-group">
@@ -737,7 +822,21 @@
                 center_checkin_trend_chart: "CNO.H签入分类",
                 center_checkin_chart_hint: "仅展示当前统计日期（与上方所选日期一致）的签入分时；库内仍保留全部历史。查看多日可调用 API：days=all 或 days=数字。",
                 center_checkin_sync_btn: "更新签入数据",
-                center_checkin_syncing: "正在从 GoFO 同步…"
+                center_checkin_syncing: "正在从 GoFO 同步…",
+                center_collect_trend_chart: "集包运单数（按目的中心 / 小时）",
+                center_collect_chart_hint: "数据来源：中心看板「集包数」弹窗 → 目的组织类型=中心。堆叠面积图：每小时各目的中心的集包运单数。",
+                center_collect_sync_btn: "同步当日集包",
+                center_collect_backfill_btn: "回补 7 天",
+                center_collect_syncing: "正在从 GoFO 同步集包…",
+                center_collect_backfilling: "正在回补最近 7 天…",
+                center_collect_table_title: "累计数据（按目的中心 × 时段）",
+                center_collect_col_destin: "目的中心",
+                center_collect_col_total: "累计",
+                center_collect_row_sum: "合计",
+                center_collect_export_csv: "导出 CSV",
+                center_collect_copy_tsv: "复制 TSV",
+                center_collect_copied: "已复制到剪贴板",
+                center_collect_empty: "暂无数据"
             },
             en: {
                 statistics_title: "Inbound Statistics",
@@ -843,7 +942,21 @@
                 center_checkin_trend_chart: "CNO.H check-in breakdown",
                 center_checkin_chart_hint: "Only the selected statistics date (same as date picker). Full history stays in DB. For multi-day, use API days=all or days=N.",
                 center_checkin_sync_btn: "Refresh check-in data",
-                center_checkin_syncing: "Syncing from GoFO…"
+                center_checkin_syncing: "Syncing from GoFO…",
+                center_collect_trend_chart: "Collect waybills (by destination center / hour)",
+                center_collect_chart_hint: "Source: Center Board → Collect popup with 目的组织类型=Center. Stacked-area chart: hourly collect waybills by destination center.",
+                center_collect_sync_btn: "Sync today's collect",
+                center_collect_backfill_btn: "Backfill 7 days",
+                center_collect_syncing: "Syncing collect from GoFO…",
+                center_collect_backfilling: "Backfilling last 7 days…",
+                center_collect_table_title: "Cumulative data (destination center × hour)",
+                center_collect_col_destin: "Destination",
+                center_collect_col_total: "Total",
+                center_collect_row_sum: "Total",
+                center_collect_export_csv: "Export CSV",
+                center_collect_copy_tsv: "Copy TSV",
+                center_collect_copied: "Copied to clipboard",
+                center_collect_empty: "No data"
             },
             es: {
                 statistics_title: "Estadísticas de Entrada",
@@ -940,7 +1053,21 @@
                 center_checkin_trend_chart: "Clasificación de check-in CNO.H",
                 center_checkin_chart_hint: "Solo la fecha seleccionada en estadísticas. El historial completo sigue en BD. API: days=all o days=N.",
                 center_checkin_sync_btn: "Actualizar datos de ingreso",
-                center_checkin_syncing: "Sincronizando desde GoFO…"
+                center_checkin_syncing: "Sincronizando desde GoFO…",
+                center_collect_trend_chart: "Guías de envío (por centro destino / hora)",
+                center_collect_chart_hint: "Fuente: Panel del Centro → ventana emergente de Paquetes con 目的组织类型=Centro. Gráfico de área apilada por centro destino.",
+                center_collect_sync_btn: "Sincronizar hoy",
+                center_collect_backfill_btn: "Rellenar 7 días",
+                center_collect_syncing: "Sincronizando paquetes desde GoFO…",
+                center_collect_backfilling: "Rellenando últimos 7 días…",
+                center_collect_table_title: "Datos acumulados (centro destino × hora)",
+                center_collect_col_destin: "Destino",
+                center_collect_col_total: "Total",
+                center_collect_row_sum: "Total",
+                center_collect_export_csv: "Exportar CSV",
+                center_collect_copy_tsv: "Copiar TSV",
+                center_collect_copied: "Copiado al portapapeles",
+                center_collect_empty: "Sin datos"
             }
         };
 
@@ -1380,6 +1507,9 @@
                 if (typeof window.loadCenterCheckinTrendData === 'function') {
                     window.loadCenterCheckinTrendData();
                 }
+                if (typeof window.loadCenterCollectTrendData === 'function') {
+                    window.loadCenterCollectTrendData();
+                }
             });
         }
 
@@ -1672,6 +1802,9 @@
                             if (typeof window.loadCenterCheckinTrendData === 'function') {
                                 window.loadCenterCheckinTrendData();
                             }
+                            if (typeof window.loadCenterCollectTrendData === 'function') {
+                                window.loadCenterCollectTrendData();
+                            }
                         })
                         .catch(e => {
                             console.error('Error loading forecast:', e);
@@ -1679,6 +1812,9 @@
                             loadHourlyComparisonData();
                             if (typeof window.loadCenterCheckinTrendData === 'function') {
                                 window.loadCenterCheckinTrendData();
+                            }
+                            if (typeof window.loadCenterCollectTrendData === 'function') {
+                                window.loadCenterCollectTrendData();
                             }
                         });
                 })
@@ -3161,6 +3297,24 @@
                 });
         }
 
+        function statsMdShort(ymd) {
+            if (!ymd || ymd.length < 10) return '';
+            const m = parseInt(ymd.substring(5, 7), 10);
+            const d = parseInt(ymd.substring(8, 10), 10);
+            return `${m}/${d}`;
+        }
+
+        /** ISO 周数（与周一起始日 week.start_date 对齐）；物资统计图与周环比对比图共用 */
+        function statsISOWeekNumber(ymd) {
+            const p = ymd.split('-').map(Number);
+            if (p.length !== 3 || p.some((x) => Number.isNaN(x))) return '';
+            const date = new Date(p[0], p[1] - 1, p[2]);
+            date.setHours(0, 0, 0, 0);
+            date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+            const week1 = new Date(date.getFullYear(), 0, 4);
+            return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+        }
+
         // Render weekly pallet trend chart (stacked by weekday)
         function renderDailyTrendChart(data) {
             const ctx = document.getElementById('dailyTrendChart').getContext('2d');
@@ -3209,11 +3363,15 @@
                 'rgba(201, 203, 207, 1)'
             ];
 
-            // 准备图表数据
-            // X轴标签：每周一个标签
+            // 准备图表数据 — X 轴：上行周一起始短日期，下行 ISO 周数
             const labels = data.map(week => {
-                // 返回多行标签：[周标签, 日期范围]
-                return [week.week_label, `${week.start_date.substring(5)} ~ ${week.end_date.substring(5)}`];
+                const md = statsMdShort(week.start_date);
+                const wn = statsISOWeekNumber(week.start_date);
+                const weekLine = (wn === '' || wn == null)
+                    ? week.week_label
+                    : (currentLang === 'zh' ? `第${wn}周` :
+                        currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                return [md, weekLine];
             });
 
             // 创建7个数据集，每个代表一周中的某一天
@@ -3266,7 +3424,12 @@
                                 title: function (context) {
                                     const weekIndex = context[0].dataIndex;
                                     const week = data[weekIndex];
-                                    return `${week.week_label} (${week.start_date} ~ ${week.end_date})`;
+                                    const wn = statsISOWeekNumber(week.start_date);
+                                    const wk = (wn === '' || wn == null)
+                                        ? week.week_label
+                                        : (currentLang === 'zh' ? `第${wn}周` :
+                                            currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                                    return `${statsMdShort(week.start_date)} ${wk} (${week.start_date} ~ ${week.end_date})`;
                                 },
                                 label: function (context) {
                                     const weekIndex = context.dataIndex;
@@ -3324,9 +3487,9 @@
                             stacked: true,
                             title: {
                                 display: true,
-                                text: currentLang === 'zh' ? '周' :
-                                    currentLang === 'en' ? 'Week' :
-                                        'Semana',
+                                text: currentLang === 'zh' ? '日期 / 周数' :
+                                    currentLang === 'en' ? 'Date / Week #' :
+                                        'Fecha / Sem.',
                                 font: {
                                     size: isMobile ? 12 : 14
                                 }
@@ -3462,11 +3625,15 @@
                 'rgba(201, 203, 207, 1)'
             ];
 
-            // 准备图表数据
-            // X轴标签：每周一个标签
+            // 准备图表数据 — X 轴：与物资统计图相同（周一起始短日期 + ISO 周数）
             const labels = data.map(week => {
-                // 返回多行标签：[周标签, 日期范围]
-                return [week.week_label, `${week.start_date.substring(5)} ~ ${week.end_date.substring(5)}`];
+                const md = statsMdShort(week.start_date);
+                const wn = statsISOWeekNumber(week.start_date);
+                const weekLine = (wn === '' || wn == null)
+                    ? week.week_label
+                    : (currentLang === 'zh' ? `第${wn}周` :
+                        currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                return [md, weekLine];
             });
 
             // 创建7个数据集，每个代表一周中的某一天
@@ -3555,7 +3722,12 @@
                                 title: function (context) {
                                     const weekIndex = context[0].dataIndex;
                                     const week = data[weekIndex];
-                                    return `${week.week_label} (${week.start_date} ~ ${week.end_date})`;
+                                    const wn = statsISOWeekNumber(week.start_date);
+                                    const wk = (wn === '' || wn == null)
+                                        ? week.week_label
+                                        : (currentLang === 'zh' ? `第${wn}周` :
+                                            currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                                    return `${statsMdShort(week.start_date)} ${wk} (${week.start_date} ~ ${week.end_date})`;
                                 },
                                 label: function (context) {
                                     const weekIndex = context.dataIndex;
@@ -3674,7 +3846,9 @@
                             stacked: true,
                             title: {
                                 display: true,
-                                text: translations[currentLang].week || '周',
+                                text: currentLang === 'zh' ? '日期 / 周数' :
+                                    currentLang === 'en' ? 'Date / Week #' :
+                                        'Fecha / Sem.',
                                 font: {
                                     size: isMobile ? 12 : 14
                                 }
@@ -4575,6 +4749,360 @@
 
             const centerSyncBtn = document.getElementById('centerCheckinSyncBtn');
             if (centerSyncBtn) centerSyncBtn.addEventListener('click', manualCenterCheckinSync);
+
+            // ====== 集包运单数（目的中心）- 堆叠面积图 ======
+            function loadCenterCollectTrendData() {
+                let url = '/api/center_collect_trend?destin_type=1';
+                const d = currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value);
+                if (d) url += '&date=' + encodeURIComponent(d);
+                fetch(url)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data && data.error) {
+                            console.error('center_collect_trend error:', data.error);
+                            renderCenterCollectTrendChart(null);
+                            return;
+                        }
+                        renderCenterCollectTrendChart(data);
+                    })
+                    .catch(err => {
+                        console.error('center_collect_trend fetch failed:', err);
+                        renderCenterCollectTrendChart(null);
+                    });
+            }
+            window.loadCenterCollectTrendData = loadCenterCollectTrendData;
+
+            // 为每个目的中心生成稳定的色板（避免不同日期色序跳变）
+            const COLLECT_PALETTE = [
+                ['#4e79a7', 'rgba(78,121,167,0.55)'],
+                ['#f28e2b', 'rgba(242,142,43,0.55)'],
+                ['#e15759', 'rgba(225,87,89,0.55)'],
+                ['#76b7b2', 'rgba(118,183,178,0.55)'],
+                ['#59a14f', 'rgba(89,161,79,0.55)'],
+                ['#edc949', 'rgba(237,201,73,0.55)'],
+                ['#af7aa1', 'rgba(175,122,161,0.55)'],
+                ['#ff9da7', 'rgba(255,157,167,0.55)'],
+                ['#9c755f', 'rgba(156,117,95,0.55)'],
+                ['#bab0ab', 'rgba(186,176,171,0.55)'],
+                ['#1f77b4', 'rgba(31,119,180,0.55)'],
+                ['#2ca02c', 'rgba(44,160,44,0.55)'],
+                ['#d62728', 'rgba(214,39,40,0.55)'],
+                ['#9467bd', 'rgba(148,103,189,0.55)'],
+                ['#8c564b', 'rgba(140,86,75,0.55)'],
+                ['#e377c2', 'rgba(227,119,194,0.55)']
+            ];
+
+            function _collectColorFor(label) {
+                let h = 0;
+                for (let i = 0; i < label.length; i++) {
+                    h = ((h << 5) - h + label.charCodeAt(i)) | 0;
+                }
+                return COLLECT_PALETTE[Math.abs(h) % COLLECT_PALETTE.length];
+            }
+
+            function renderCenterCollectTrendChart(data) {
+                const canvas = document.getElementById('centerCollectTrendChart');
+                if (!canvas) return;
+                // 始终同步刷新下方表格（包括空状态）
+                renderCenterCollectTable(data);
+                window.__centerCollectLastData = data || null;
+
+                const ctx = canvas.getContext('2d');
+                if (window.centerCollectTrendChart && typeof window.centerCollectTrendChart.destroy === 'function') {
+                    window.centerCollectTrendChart.destroy();
+                }
+                if (!data || !data.dates || data.dates.length === 0 || !data.series || data.series.length === 0) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.font = '16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#6c757d';
+                    ctx.fillText(translations[currentLang]?.no_data || '暂无数据', canvas.width / 2, canvas.height / 2);
+                    return;
+                }
+                const datasets = data.series.map(s => {
+                    const [line, bg] = _collectColorFor(s.label || '');
+                    return {
+                        label: s.label,
+                        data: s.data,
+                        borderColor: line,
+                        backgroundColor: bg,
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        tension: 0.35,
+                        fill: true
+                    };
+                });
+                window.centerCollectTrendChart = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels: data.dates, datasets: datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            title: { display: false },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                callbacks: {
+                                    footer: (items) => {
+                                        const total = items.reduce((a, it) => a + (it.parsed.y || 0), 0);
+                                        return (translations[currentLang]?.total_vehicles ? '' : '') + '合计 / Total: ' + total.toLocaleString();
+                                    }
+                                }
+                            },
+                            datalabels: { display: false },
+                            legend: { position: 'bottom', labels: { boxWidth: 14, padding: 8, font: { size: 11 } } }
+                        },
+                        scales: {
+                            x: { title: { display: false }, ticks: { autoSkip: true, maxTicksLimit: 24 } },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                title: { display: true, text: translations[currentLang]?.pieces || '运单数' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            async function manualCenterCollectSync() {
+                const btn = document.getElementById('centerCollectSyncBtn');
+                const status = document.getElementById('centerCollectSyncStatus');
+                if (!btn || btn.disabled) return;
+                btn.disabled = true;
+                if (status) {
+                    status.textContent = translations[currentLang].center_collect_syncing || '…';
+                    status.style.color = '#6c757d';
+                }
+                try {
+                    const payload = {};
+                    const d = currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value);
+                    if (d) payload.date = d;
+                    const res = await fetch('/api/admin/center_collect/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        if (status) {
+                            status.textContent = (translations[currentLang].sync_success || '同步成功') + ` (${data.count || 0})`;
+                            status.style.color = '#28a745';
+                        }
+                        loadCenterCollectTrendData();
+                        if (typeof showMessage === 'function') showMessage(data.message || (translations[currentLang].sync_success || '同步成功'), 'success');
+                    } else {
+                        throw new Error(data.error || 'sync failed');
+                    }
+                } catch (e) {
+                    console.error('center_collect sync failed:', e);
+                    if (status) {
+                        status.textContent = (translations[currentLang].sync_failed || '失败') + ': ' + e.message;
+                        status.style.color = '#dc3545';
+                    }
+                    if (typeof showMessage === 'function') showMessage(e.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
+            async function manualCenterCollectBackfill() {
+                const btn = document.getElementById('centerCollectBackfillBtn');
+                const status = document.getElementById('centerCollectSyncStatus');
+                if (!btn || btn.disabled) return;
+                btn.disabled = true;
+                if (status) {
+                    status.textContent = translations[currentLang].center_collect_backfilling || '…';
+                    status.style.color = '#6c757d';
+                }
+                try {
+                    const res = await fetch('/api/admin/center_collect/backfill', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ days: 7 })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        if (status) {
+                            status.textContent = (translations[currentLang].sync_success || '同步成功') + ` (${data.count || 0})`;
+                            status.style.color = '#28a745';
+                        }
+                        loadCenterCollectTrendData();
+                        if (typeof showMessage === 'function') showMessage(data.message || '回补完成', 'success');
+                    } else {
+                        throw new Error(data.error || 'backfill failed');
+                    }
+                } catch (e) {
+                    console.error('center_collect backfill failed:', e);
+                    if (status) {
+                        status.textContent = (translations[currentLang].sync_failed || '失败') + ': ' + e.message;
+                        status.style.color = '#dc3545';
+                    }
+                    if (typeof showMessage === 'function') showMessage(e.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
+            // ===== 累计数据透视表 + 导出 =====
+            function _collectBuildMatrix(data) {
+                // 返回 {hours, rows, colSums, grandTotal}
+                // rows = [{name, hourly:[], total}]  按 total 降序
+                if (!data || !data.dates || !data.series || data.dates.length === 0 || data.series.length === 0) {
+                    return { hours: [], rows: [], colSums: [], grandTotal: 0 };
+                }
+                const hours = data.dates.slice();           // 原样：单日是 "HH:00"，多日是 "MM-DD HH:00"
+                const rows = data.series.map(s => {
+                    const hourly = (s.data || []).map(v => +v || 0);
+                    const total = hourly.reduce((a, b) => a + b, 0);
+                    return { name: s.label || '', hourly, total };
+                });
+                // 排序：按累计降序（与 backend 已经一致，这里再稳定一次）
+                rows.sort((a, b) => b.total - a.total);
+                const colSums = hours.map((_, i) => rows.reduce((a, r) => a + (r.hourly[i] || 0), 0));
+                const grandTotal = colSums.reduce((a, b) => a + b, 0);
+                return { hours, rows, colSums, grandTotal };
+            }
+
+            function _fmtInt(n) { return (n || 0).toLocaleString(); }
+
+            function renderCenterCollectTable(data) {
+                const table = document.getElementById('centerCollectTable');
+                if (!table) return;
+                const thead = table.querySelector('thead');
+                const tbody = table.querySelector('tbody');
+                thead.innerHTML = ''; tbody.innerHTML = '';
+
+                const { hours, rows, colSums, grandTotal } = _collectBuildMatrix(data);
+                if (rows.length === 0) {
+                    thead.innerHTML = `<tr><th style="padding:8px; color:#6c757d;">${translations[currentLang].center_collect_empty || '暂无数据'}</th></tr>`;
+                    return;
+                }
+
+                const destLabel = translations[currentLang].center_collect_col_destin || '目的中心';
+                const totalLabel = translations[currentLang].center_collect_col_total || '累计';
+                const sumLabel = translations[currentLang].center_collect_row_sum || '合计';
+
+                const thStyle = 'padding:6px 8px; background:#f8f9fa; border-bottom:2px solid #dee2e6; text-align:right; font-weight:600; white-space:nowrap; position:sticky; top:0; z-index:1;';
+                const thLeftStyle = thStyle + ' text-align:left; left:0; z-index:2; background:#f8f9fa;';
+                const tdStyle = 'padding:5px 8px; border-bottom:1px solid #f1f3f5; text-align:right; white-space:nowrap;';
+                const tdLeftStyle = 'padding:5px 8px; border-bottom:1px solid #f1f3f5; text-align:left; white-space:nowrap; position:sticky; left:0; background:#fff; font-weight:500;';
+                const totalColStyle = tdStyle + ' font-weight:600; background:#fff8e1;';
+                const footerTdStyle = 'padding:6px 8px; border-top:2px solid #dee2e6; text-align:right; font-weight:600; background:#f1f3f5; white-space:nowrap;';
+                const footerLeftStyle = footerTdStyle + ' text-align:left; position:sticky; left:0; z-index:1;';
+
+                // 表头
+                let thHtml = `<tr><th style="${thLeftStyle}">${destLabel}</th>`;
+                hours.forEach(h => { thHtml += `<th style="${thStyle}">${h}</th>`; });
+                thHtml += `<th style="${thStyle} background:#fff3cd;">${totalLabel}</th></tr>`;
+                thead.innerHTML = thHtml;
+
+                // 数据行
+                let bodyHtml = '';
+                rows.forEach(r => {
+                    bodyHtml += `<tr><td style="${tdLeftStyle}">${r.name}</td>`;
+                    r.hourly.forEach(v => {
+                        bodyHtml += `<td style="${tdStyle}">${v ? _fmtInt(v) : '<span style="color:#c7ccd1">-</span>'}</td>`;
+                    });
+                    bodyHtml += `<td style="${totalColStyle}">${_fmtInt(r.total)}</td></tr>`;
+                });
+                // 合计行
+                bodyHtml += `<tr><td style="${footerLeftStyle}">${sumLabel}</td>`;
+                colSums.forEach(v => { bodyHtml += `<td style="${footerTdStyle}">${_fmtInt(v)}</td>`; });
+                bodyHtml += `<td style="${footerTdStyle} background:#ffe69c;">${_fmtInt(grandTotal)}</td></tr>`;
+                tbody.innerHTML = bodyHtml;
+            }
+
+            function _collectMatrixToRows(sep) {
+                // 从当前表格数据构建二维行（第一行是表头，最后一行是合计）
+                const data = window.__centerCollectLastData;
+                const { hours, rows, colSums, grandTotal } = _collectBuildMatrix(data);
+                if (rows.length === 0) return [];
+                const destLabel = translations[currentLang].center_collect_col_destin || '目的中心';
+                const totalLabel = translations[currentLang].center_collect_col_total || '累计';
+                const sumLabel = translations[currentLang].center_collect_row_sum || '合计';
+                const header = [destLabel, ...hours, totalLabel];
+                const body = rows.map(r => [r.name, ...r.hourly.map(v => v || 0), r.total]);
+                const footer = [sumLabel, ...colSums, grandTotal];
+                return [header, ...body, footer];
+            }
+
+            function _collectCsvEscape(v) {
+                const s = (v === null || v === undefined) ? '' : String(v);
+                if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+                return s;
+            }
+
+            function _collectFilename(ext) {
+                const d = currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value) || '';
+                const datePart = d ? d : new Date().toISOString().slice(0, 10);
+                return `center_collect_${datePart}.${ext}`;
+            }
+
+            function manualCenterCollectExportCsv() {
+                const rows = _collectMatrixToRows();
+                if (rows.length === 0) {
+                    if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_empty || '暂无数据', 'error');
+                    return;
+                }
+                const csv = rows.map(r => r.map(_collectCsvEscape).join(',')).join('\r\n');
+                // Add BOM so Excel detects UTF-8 and shows Chinese correctly
+                const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = _collectFilename('csv');
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+            }
+
+            async function manualCenterCollectCopyTsv() {
+                const rows = _collectMatrixToRows();
+                if (rows.length === 0) {
+                    if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_empty || '暂无数据', 'error');
+                    return;
+                }
+                const tsv = rows.map(r => r.join('\t')).join('\n');
+                try {
+                    await navigator.clipboard.writeText(tsv);
+                    if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_copied || '已复制到剪贴板', 'success');
+                } catch (e) {
+                    // 回退：临时 textarea + execCommand
+                    const ta = document.createElement('textarea');
+                    ta.value = tsv; ta.style.position = 'fixed'; ta.style.top = '-1000px';
+                    document.body.appendChild(ta); ta.select();
+                    try { document.execCommand('copy'); if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_copied || '已复制到剪贴板', 'success'); }
+                    catch (e2) { if (typeof showMessage === 'function') showMessage('copy failed: ' + e2.message, 'error'); }
+                    document.body.removeChild(ta);
+                }
+            }
+
+            fetch('/api/check_login')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.logged_in && d.user && (d.user.role === 'admin' || d.user.role === 'boss')) {
+                        const w2 = document.getElementById('centerCollectSyncWrap');
+                        if (w2) w2.style.display = 'flex';
+                    }
+                })
+                .catch(() => {});
+
+            const cb1 = document.getElementById('centerCollectSyncBtn');
+            if (cb1) cb1.addEventListener('click', manualCenterCollectSync);
+            const cb2 = document.getElementById('centerCollectBackfillBtn');
+            if (cb2) cb2.addEventListener('click', manualCenterCollectBackfill);
+            const cbExp = document.getElementById('centerCollectExportCsvBtn');
+            if (cbExp) cbExp.addEventListener('click', manualCenterCollectExportCsv);
+            const cbCopy = document.getElementById('centerCollectCopyTsvBtn');
+            if (cbCopy) cbCopy.addEventListener('click', manualCenterCollectCopyTsv);
+
+            // 页面初次载入时拉一次（切日期时会通过下面的 hook 再拉）
+            loadCenterCollectTrendData();
 
             function renderCenterCheckinTrendChart(data) {
                 const ctx = document.getElementById('centerCheckinTrendChart').getContext('2d');

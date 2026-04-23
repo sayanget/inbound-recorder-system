@@ -1,0 +1,5 @@
+flask>=2.2,<4
+requests>=2.28,<3
+pyinstaller>=6.0,<7
+# Pillow：仅用于 gen_icon.py 生成 icon.ico；构建完成后运行时不需要
+Pillow>=9.1

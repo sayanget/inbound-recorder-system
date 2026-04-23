@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流向分布数据表 | Route Distribution</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="alternate icon" href="/favicon.ico">
+    <!-- 静音 Chrome 对 'unload' 事件的 Permissions-Policy 违规告警。
+         unload 早已废弃（推荐 pagehide/beforeunload）；但浏览器扩展注入的
+         index.global.js 仍可能注册 unload 监听，导致控制台反复刷 violation。
+         这里在其他脚本加载前，把对 'unload' 的注册吞掉——其它事件一律不动。 -->
+    <script>
+        (function () {
+            if (window.__unloadShimApplied) return;
+            window.__unloadShimApplied = true;
+            const patch = (t) => {
+                if (!t || !t.addEventListener || t.__unloadShimPatched) return;
+                const orig = t.addEventListener;
+                t.addEventListener = function (type, listener, options) {
+                    if (typeof type === 'string' && type.toLowerCase() === 'unload') return;
+                    return orig.call(this, type, listener, options);
+                };
+                t.__unloadShimPatched = true;
+            };
+            patch(window);
+            patch(document);
+            document.addEventListener('DOMContentLoaded', () => patch(document.body));
+            try {
+                const proto = EventTarget && EventTarget.prototype;
+                if (proto && !proto.__unloadShimPatched) {
+                    const o = proto.addEventListener;
+                    proto.addEventListener = function (type, listener, options) {
+                        if (typeof type === 'string' && type.toLowerCase() === 'unload') return;
+                        return o.call(this, type, listener, options);
+                    };
+                    proto.__unloadShimPatched = true;
+                }
+            } catch (_) { /* readonly sandbox */ }
+        })();
+    </script>
+    <style>
+        :root {
+            --bg: #f5f7fa;
+            --panel: #ffffff;
+            --border: #e4e7eb;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --success: #059669;
+            --zebra: #f9fafb;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        header {
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        header .subtitle {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 2px;
+        }
+
+        header .back-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        header .back-link:hover { text-decoration: underline; }
+
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px 24px 40px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 20px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .field label {
+            font-size: 12px;
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        .field input[type="date"],
+        .field select {
+            padding: 7px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            background: #fff;
+            color: var(--text);
+            min-width: 150px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-primary:hover { background: var(--accent-hover); }
+
+        .btn-secondary {
+            background: #fff;
+            color: var(--text);
+            border-color: var(--border);
+        }
+        .btn-secondary:hover { background: var(--zebra); }
+
+        .btn-success {
+            background: var(--success);
+            color: #fff;
+        }
+        .btn-success:hover { background: #047857; }
+
+        .quick-range {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+
+        .quick-range button {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: var(--shadow);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead th {
+            background: #f3f4f6;
+            font-weight: 600;
+            padding: 10px 12px;
+            text-align: center;
+            border-bottom: 2px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            white-space: nowrap;
+        }
+
+        thead th.date-col {
+            text-align: left;
+            background: #eef2ff;
+        }
+
+        tbody td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        tbody tr:nth-child(even) { background: var(--zebra); }
+        tbody tr:hover { background: #eff6ff; }
+
+        td.date-cell {
+            text-align: left;
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        td.total-cell {
+            font-weight: 600;
+            background: #eef2ff !important;
+            color: var(--accent);
+        }
+
+        tr.total-row td {
+            font-weight: 600;
+            background: #eef2ff !important;
+            border-top: 2px solid var(--border);
+        }
+
+        td.zero { color: #d1d5db; }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 24px 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title .hint {
+            font-weight: 400;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e0e7ff;
+            color: #3730a3;
+            font-size: 11px;
+            font-weight: 500;
+            margin-left: 6px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .note {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .warn-box {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            color: #92400e;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+
+        .select-toolbar {
+            background: #f9fafb;
+            border: 1px solid var(--border);
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            font-size: 13px;
+        }
+        .select-toolbar .select-count {
+            color: var(--text);
+            margin-right: 4px;
+        }
+        .select-toolbar .select-count b {
+            color: var(--accent);
+            font-size: 14px;
+        }
+        .select-toolbar .divider {
+            display: inline-block;
+            width: 1px;
+            height: 18px;
+            background: var(--border);
+            margin: 0 4px;
+        }
+        .select-toolbar .btn-xs {
+            padding: 3px 9px;
+            font-size: 12px;
+        }
+        .select-toolbar .sel-date-input {
+            padding: 3px 6px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 12px;
+            background: #fff;
+        }
+
+        #dispatchPreviewTable td.sel-cell,
+        #dispatchPreviewTable th.sel-cell {
+            width: 32px;
+            padding: 6px 4px;
+            text-align: center;
+            background: #f9fafb;
+        }
+        #dispatchPreviewTable tr.row-selected { background: #dbeafe !important; }
+        #dispatchPreviewTable tr.row-selected:hover { background: #bfdbfe !important; }
+        #dispatchPreviewTable tr.row-deselected { opacity: 0.45; }
+        .warn-box b { color: #78350f; }
+        .warn-box code {
+            background: #fef3c7;
+            padding: 1px 6px;
+            border-radius: 3px;
+            margin: 0 2px;
+        }
+
+        /* Route bar visualization */
+        .bar-cell {
+            position: relative;
+            padding: 6px 10px;
+            min-width: 200px;
+            text-align: left;
+        }
+        .bar-cell .bar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, rgba(37,99,235,0.15), rgba(37,99,235,0.05));
+            border-right: 2px solid var(--accent);
+        }
+        .bar-cell .bar-label {
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 500;
+        }
+        .bar-cell .route-name { color: var(--text); }
+        .bar-cell .route-count { color: var(--accent); font-weight: 600; }
+
+        @media (max-width: 640px) {
+            main { padding: 12px; }
+            header { padding: 12px 16px; }
+            .controls { gap: 8px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>流向分布数据表</h1>
+            <div class="subtitle">Route Distribution · 基于 <code>/api/outbound/records</code> · 归一化后按「日期 × 流向」透视</div>
+        </div>
+        <a href="/outbound-stats" class="back-link">← 返回出库统计</a>
+    </header>
+
+    <main>
+        <div class="panel">
+            <div class="controls">
+                <div class="field">
+                    <label for="startDate">开始日期</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div class="field">
+                    <label for="endDate">结束日期</label>
+                    <input type="date" id="endDate">
+                </div>
+                <div class="field">
+                    <label for="metric">统计口径</label>
+                    <select id="metric">
+                        <option value="count">发车次数（行数）</option>
+                        <option value="vehicle_count">发车数量合计（vehicle_count）</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="groupPrefix">归一化前缀长度</label>
+                    <select id="groupPrefix">
+                        <option value="3" selected>前 3 字符（与图表一致）</option>
+                        <option value="2">前 2 字符</option>
+                        <option value="4">前 4 字符</option>
+                        <option value="full">不截取（完整 route_code）</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="exportFormat">导出格式</label>
+                    <select id="exportFormat">
+                        <option value="dispatch" selected>调度组原始数据（班次+费用）</option>
+                        <option value="pivot">透视表（含合计，当前口径）</option>
+                    </select>
+                </div>
+                <button id="loadBtn" class="btn-primary">加载数据</button>
+                <button id="exportBtn" class="btn-success" disabled>导出 CSV</button>
+            </div>
+            <div class="quick-range">
+                <span style="font-size:12px;color:var(--muted);margin-right:4px;">快捷：</span>
+                <button class="btn-secondary" data-days="7">近 7 天</button>
+                <button class="btn-secondary" data-days="14">近 14 天</button>
+                <button class="btn-secondary" data-days="30">近 30 天</button>
+                <button class="btn-secondary" data-days="60">近 60 天</button>
+                <button class="btn-secondary" data-days="90">近 90 天</button>
+            </div>
+            <div class="note">
+                归一化规则（仅影响网页上的透视表/流向合计）：<code>route_code</code> → 大写去空格 → 去掉尾部 <code>.H</code>/<code>.G</code> → 截取前 N 字符，空值归类为 <code>Unknown</code>。<br>
+                导出格式：
+                <b>调度组原始数据</b> = 以 <code>调度组数据_原始数据.csv</code> 的表头为<b>固定模板</b>（列名、顺序、空格完全一致），数据中存在但模板里没有的流向会被忽略并在页面顶部提示；
+                <b>透视表</b> = 行=日期、列=流向、含行/列合计与元信息。<br>
+                <span style="color:var(--muted);">调度组导出时内部使用完整 <code>route_code</code>（不截断）匹配模板，与左侧"归一化前缀长度"设置无关。</span>
+            </div>
+        </div>
+
+        <div class="stats-row" id="statsRow" style="display:none;">
+            <div class="stat-card">
+                <div class="label">日期跨度</div>
+                <div class="value" id="statDays">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">流向数</div>
+                <div class="value" id="statRoutes">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">记录数</div>
+                <div class="value" id="statRecords">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">发车数量合计</div>
+                <div class="value" id="statVehicles">-</div>
+            </div>
+        </div>
+
+        <div id="templateMatchBox" class="warn-box" style="display:none;"></div>
+
+        <div class="section-title" id="dispatchPreviewTitle" style="display:none;">
+            <span>调度组模板预览 <span class="badge" id="previewBadge">40 列</span></span>
+            <span class="hint">
+                <button id="copyDataBtn" class="btn-success" style="padding:5px 12px;font-size:13px;margin-right:6px;" disabled title="复制已选数据行到剪贴板（TSV，不含日期列）">复制已选数据行（不含日期）</button>
+                <button id="copyFullBtn" class="btn-secondary" style="padding:5px 12px;font-size:13px;" disabled title="复制已选数据行，带表头，不含日期列">复制已选（含表头，不含日期）</button>
+            </span>
+        </div>
+
+        <div class="select-toolbar" id="selectToolbar" style="display:none;">
+            <span class="select-count">已选 <b id="selCount">0</b> / <span id="selTotal">0</span> 天</span>
+            <span class="divider"></span>
+            <button class="btn-secondary btn-xs" data-sel-action="all">全选</button>
+            <button class="btn-secondary btn-xs" data-sel-action="none">全不选</button>
+            <button class="btn-secondary btn-xs" data-sel-action="invert">反选</button>
+            <span class="divider"></span>
+            <button class="btn-secondary btn-xs" data-sel-action="today">仅今天</button>
+            <button class="btn-secondary btn-xs" data-sel-action="last1">仅最近 1 天</button>
+            <button class="btn-secondary btn-xs" data-sel-action="last7">仅最近 7 天</button>
+            <span class="divider"></span>
+            <span style="font-size:12px;color:var(--muted);">按区间：</span>
+            <input type="date" id="selStart" class="sel-date-input">
+            <span style="font-size:12px;color:var(--muted);">~</span>
+            <input type="date" id="selEnd" class="sel-date-input">
+            <button class="btn-secondary btn-xs" data-sel-action="range">应用区间</button>
+        </div>
+
+        <div class="table-wrap" id="dispatchPreviewWrap" style="display:none;">
+            <table id="dispatchPreviewTable"></table>
+        </div>
+        <div class="note" id="dispatchPreviewNote" style="display:none;">
+            上方表格即导出文件的实际列顺序；空白格表示该日该流向未录入（参考文件里也区分空白与 <code>0</code>）。<br>
+            每行前的复选框控制"复制到剪贴板"的范围，默认全选。<b>复制到剪贴板的内容不含首列「日期」</b>，粘贴时在 Excel 里定位到「<b>IAH班次</b>」所在单元格再 <code>Ctrl+V</code>，数据自动从 IAH班次 列开始对齐到 是否提交 列（39 列）。<br>
+            下载 CSV 文件仍包含日期列，用于归档/备份。
+        </div>
+
+        <div class="section-title">
+            <span>透视表：日期 × 流向 <span class="badge" id="metricBadge">发车次数</span></span>
+            <span class="hint" id="tableHint"></span>
+        </div>
+        <div class="table-wrap">
+            <table id="pivotTable">
+                <thead><tr><th>请点击"加载数据"</th></tr></thead>
+                <tbody><tr><td class="empty-state">尚未加载</td></tr></tbody>
+            </table>
+        </div>
+
+        <div class="section-title">
+            <span>流向合计（降序）</span>
+            <span class="hint">同口径</span>
+        </div>
+        <div class="table-wrap">
+            <table id="totalsTable">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">#</th>
+                        <th>流向</th>
+                        <th>数值</th>
+                        <th>占比</th>
+                        <th style="width: 40%;">分布</th>
+                    </tr>
+                </thead>
+                <tbody><tr><td colspan="5" class="empty-state">尚未加载</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+    (function () {
+        'use strict';
+
+        // ---------- Dispatch-group CSV template ----------
+        // Routes come from `调度组数据_原始数据.csv`, but columns are paired so that
+        // each `XXX班次` is immediately followed by its `XXX费用`.
+        // Irregular names (with spaces / bare 班次) are kept verbatim to match the
+        // source workbook's column titles; only the ORDER is regularized.
+        const DISPATCH_TEMPLATE_HEADER = [
+            '日期',
+            'IAH班次',        'IAH费用',
+            'MCO班次',        'MCO费用',
+            'MCO-MIA班次',    'MCO-MIA费用',
+            'MIA-SJU班次',    'MIA-SJU费用',
+            'ATL班次',        'ATL费用',
+            'DFW班次',        'DFW费用',
+            'DFW-ATL班次',    'DFW-ATL费用',
+            'DFW-IAH班次',    'DFW-IAH费用',
+            'ORD班次',        'ORD费用',
+            'EWR-JFK班次',    'EWR-JFK费用',
+            'JFK班次',        'JFK费用',
+            'CLT班次',        'CLT费用',
+            'LAV班次',        'LAV费用',
+            'SFO班次',        'SFO费用',
+            'DEN班次',        'DEN费用',
+            'ATL-CLT班次',    'ATL-CLT费用',
+            'MOD-SFO 班次',   'MOD-SFO 费用',
+            'PHX(TUC)',       'PHX(TUC) 费用',
+            'LAS',            'LAS 费用',
+            '是否提交'
+        ];
+
+        // Parse each template column → { route, field }  (field is '班次' or '费用' or null for meta like 日期/是否提交)
+        // Matching is tolerant to trailing "班次" / "费用" or " 班次" / " 费用" or bare route (→ 班次).
+        const DISPATCH_COLUMN_SPEC = DISPATCH_TEMPLATE_HEADER.map(h => {
+            if (h === '日期' || h === '是否提交') return { header: h, route: null, field: h };
+            let route, field;
+            if (h.endsWith(' 费用') || h.endsWith('费用')) {
+                field = '费用';
+                route = h.slice(0, -2).trim(); // strip "费用"
+            } else if (h.endsWith(' 班次') || h.endsWith('班次')) {
+                field = '班次';
+                route = h.slice(0, -2).trim(); // strip "班次"
+            } else {
+                // Bare column (e.g. "PHX(TUC)" / "LAS") — treated as 班次
+                field = '班次';
+                route = h.trim();
+            }
+            return { header: h, route: route.toUpperCase(), field };
+        });
+
+        const DISPATCH_TEMPLATE_ROUTES = Array.from(
+            new Set(DISPATCH_COLUMN_SPEC.filter(c => c.route).map(c => c.route))
+        );
+
+        // ---------- Utilities ----------
+        function formatLocalDateISO(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        // Multi-leg routes that pass through CNO (the Chino, CA hub) are
+        // written in the sheet with a dash-separated chain like
+        //   EWR-LAV-CNO-EWR  (truck goes EWR → LAV → CNO → back to EWR)
+        //   SFO-CNO-LAX      (truck goes SFO → CNO → LAX)
+        // Operational rule from dispatch: the REAL destination is the
+        // 3-char IATA code IMMEDIATELY AFTER 'CNO-'. Everything before is
+        // intermediate / return routing and must not affect classification.
+        // Returns null if the string doesn't contain CNO-XXX.
+        function extractDestAfterCNO(upperRoute) {
+            const m = upperRoute.match(/CNO-([A-Z0-9]{3})\b/);
+            return m ? m[1] : null;
+        }
+
+        // Normalized route code bucket (with configurable prefix length).
+        // Mirrors logic in static/outbound-stats.html::normalizeRoute
+        function normalizeRoute(route, prefix) {
+            if (!route) return 'Unknown';
+            let r = String(route).toUpperCase().trim();
+            if (r.endsWith('.H') || r.endsWith('.G')) r = r.substring(0, r.length - 2);
+            const u = r.replace(/\s+/g, ' ').trim();
+            if (u.length === 0) return 'Unknown';
+            // CNO-XXX rule: multi-leg routes → take the 3 chars after CNO-
+            const cnoDest = extractDestAfterCNO(u);
+            if (cnoDest) {
+                // For 'full' / long prefixes return the pure destination;
+                // for short prefixes also respect the truncation.
+                if (prefix === 'full') return cnoDest;
+                const np = parseInt(prefix, 10);
+                if (!np || isNaN(np)) return cnoDest;
+                return cnoDest.length >= np ? cnoDest.slice(0, np) : cnoDest;
+            }
+            if (prefix === 'full') return u;
+            const n = parseInt(prefix, 10);
+            if (!n || isNaN(n)) return u;
+            return u.length >= n ? u.slice(0, n) : u;
+        }
+
+        // Aggressive normalization used ONLY for matching against the
+        // dispatch-group template header. The Google-Sheet "TO" column is
+        // written by humans, so it contains variants like:
+        //   - 'DFW DROP'             → 'DFW'
+        //   - 'EWR DROP'             → 'EWR'
+        //   - 'LAV (往返）drop trailer' → 'LAV'
+        //   - 'ATL.G-ATL' / 'ATL.H-ATL' → 'ATL'
+        //   - 'EWR-LAV-CNO-EWR'      → 'EWR'  (CNO-XXX rule, see above)
+        //   - 'SFO-CNO-LAX'          → 'LAX'
+        // This is intentionally more aggressive than normalizeRoute() so that
+        // shift / drop / trailer variants collapse to the template's canonical
+        // route code. Does NOT merge genuinely different routes (DFW-ATL stays
+        // as DFW-ATL, MCO-MIA stays MCO-MIA).
+        function normalizeRouteForTemplate(route) {
+            if (!route) return '';
+            let r = String(route).toUpperCase();
+            // CNO-XXX rule takes precedence — return pure destination.
+            const cnoDest = extractDestAfterCNO(r);
+            if (cnoDest) return cnoDest;
+            r = r.replace(/\.[HG](?=[^A-Z0-9]|$)/g, '');
+            r = r.replace(/\s*[\(（][^)）]*[\)）].*$/, '');
+            r = r.replace(/\s+DROP(\s+TRAILER)?\s*$/i, '');
+            r = r.replace(/\s+/g, ' ').trim();
+            const m = r.match(/^([A-Z0-9()]+)-\1$/);
+            if (m) r = m[1];
+            return r;
+        }
+
+        function enumerateDates(startISO, endISO) {
+            const out = [];
+            const s = new Date(startISO + 'T00:00:00');
+            const e = new Date(endISO + 'T00:00:00');
+            if (s > e) return out;
+            const cur = new Date(s);
+            while (cur <= e) {
+                out.push(formatLocalDateISO(cur));
+                cur.setDate(cur.getDate() + 1);
+            }
+            return out;
+        }
+
+        function getWeekday(iso) {
+            const names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+            const d = new Date(iso + 'T12:00:00');
+            return names[d.getDay()];
+        }
+
+        function setQuickRange(days) {
+            const today = new Date();
+            const start = new Date(today);
+            start.setDate(today.getDate() - (days - 1));
+            document.getElementById('startDate').value = formatLocalDateISO(start);
+            document.getElementById('endDate').value = formatLocalDateISO(today);
+        }
+
+        // ---------- State ----------
+        let lastPivot = null; // { dates, routes, matrix, rowTotals, colTotals, grandTotal, metric }
+        let selectedDates = new Set(); // ISO date strings currently checked in dispatch preview
+
+        // ---------- Core: fetch + pivot ----------
+        async function loadData() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const metric = document.getElementById('metric').value; // 'count' | 'vehicle_count'
+            const prefix = document.getElementById('groupPrefix').value;
+
+            if (!startDate || !endDate) {
+                alert('请选择开始和结束日期');
+                return;
+            }
+            if (startDate > endDate) {
+                alert('开始日期必须早于或等于结束日期');
+                return;
+            }
+
+            const loadBtn = document.getElementById('loadBtn');
+            const exportBtn = document.getElementById('exportBtn');
+            loadBtn.disabled = true;
+            exportBtn.disabled = true;
+            loadBtn.innerHTML = '<span class="loading"></span>加载中…';
+
+            try {
+                const url = `/api/outbound/records?start_date=${startDate}&end_date=${endDate}`;
+                const resp = await fetch(url, { credentials: 'same-origin' });
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+                }
+                const payload = await resp.json();
+                if (!Array.isArray(payload)) {
+                    throw new Error('接口未返回数组：' + JSON.stringify(payload).slice(0, 200));
+                }
+
+                const dates = enumerateDates(startDate, endDate);
+
+                // Collect unique routes
+                const routeSet = new Set();
+                payload.forEach(r => routeSet.add(normalizeRoute(r.route_code, prefix)));
+                const routes = Array.from(routeSet).sort();
+
+                // Init matrices (keep three parallel aggregates: count / vehicle_count / cost)
+                const matrix = {};        // current display metric (count or vehicle_count)
+                const vehicleMatrix = {}; // 班次 = sum(vehicle_count) — used by 调度组导出
+                const costMatrix = {};    // 费用 = sum(cost) — used by 调度组导出
+                const hasDataMatrix = {}; // 是否录入过（区分"填了 0"与"没数据"）
+                dates.forEach(d => {
+                    matrix[d] = {};
+                    vehicleMatrix[d] = {};
+                    costMatrix[d] = {};
+                    hasDataMatrix[d] = {};
+                    routes.forEach(rc => {
+                        matrix[d][rc] = 0;
+                        vehicleMatrix[d][rc] = 0;
+                        costMatrix[d][rc] = 0;
+                        hasDataMatrix[d][rc] = false;
+                    });
+                });
+
+                // Fill
+                let totalVehicles = 0;
+                let totalCost = 0;
+                payload.forEach(r => {
+                    const rd = (r.record_date || '').substring(0, 10);
+                    const rc = normalizeRoute(r.route_code, prefix);
+                    if (!matrix[rd]) return; // out-of-range safety
+                    if (!(rc in matrix[rd])) {
+                        matrix[rd][rc] = 0;
+                        vehicleMatrix[rd][rc] = 0;
+                        costMatrix[rd][rc] = 0;
+                        hasDataMatrix[rd][rc] = false;
+                    }
+
+                    const v = Number(r.vehicle_count) || 0;
+                    const c = Number(r.cost) || 0;
+
+                    if (metric === 'vehicle_count') {
+                        matrix[rd][rc] += v;
+                    } else {
+                        matrix[rd][rc] += 1;
+                    }
+                    vehicleMatrix[rd][rc] += v;
+                    costMatrix[rd][rc] += c;
+                    hasDataMatrix[rd][rc] = true;
+                    totalVehicles += v;
+                    totalCost += c;
+                });
+
+                // Row / col totals (for on-page pivot view only)
+                const rowTotals = {};
+                const colTotals = {};
+                routes.forEach(rc => colTotals[rc] = 0);
+                let grandTotal = 0;
+                dates.forEach(d => {
+                    let rowSum = 0;
+                    routes.forEach(rc => {
+                        const v = matrix[d][rc] || 0;
+                        rowSum += v;
+                        colTotals[rc] += v;
+                    });
+                    rowTotals[d] = rowSum;
+                    grandTotal += rowSum;
+                });
+
+                lastPivot = {
+                    dates, routes, matrix, rowTotals, colTotals, grandTotal,
+                    vehicleMatrix, costMatrix, hasDataMatrix,
+                    rawRecords: payload,
+                    metric, prefix,
+                    recordCount: payload.length,
+                    totalVehicles, totalCost,
+                    startDate, endDate
+                };
+
+                renderStats();
+                renderPivotTable();
+                renderTotalsTable();
+
+                // Pre-compute dispatch-template diagnostics so the user sees
+                // matched / unmatched routes immediately after loading
+                const dispatchRows = buildDispatchCSVRows(lastPivot);
+                renderTemplateMatchInfo(buildDispatchCSVRows.lastDiagnostics);
+                renderDispatchPreview(dispatchRows);
+
+                exportBtn.disabled = false;
+                document.getElementById('copyDataBtn').disabled = false;
+                document.getElementById('copyFullBtn').disabled = false;
+            } catch (err) {
+                console.error(err);
+                alert('加载失败：' + err.message);
+            } finally {
+                loadBtn.disabled = false;
+                loadBtn.textContent = '加载数据';
+            }
+        }
+
+        // ---------- Render ----------
+        function renderStats() {
+            const p = lastPivot;
+            document.getElementById('statsRow').style.display = '';
+            document.getElementById('statDays').textContent = p.dates.length;
+            document.getElementById('statRoutes').textContent = p.routes.length;
+            document.getElementById('statRecords').textContent = p.recordCount.toLocaleString();
+            document.getElementById('statVehicles').textContent = p.totalVehicles.toLocaleString();
+
+            const badge = document.getElementById('metricBadge');
+            badge.textContent = p.metric === 'vehicle_count' ? '发车数量合计' : '发车次数';
+            document.getElementById('tableHint').textContent =
+                `${p.startDate} ~ ${p.endDate} · 合计 ${p.grandTotal.toLocaleString()}`;
+        }
+
+        function renderPivotTable() {
+            const p = lastPivot;
+            const table = document.getElementById('pivotTable');
+
+            if (p.routes.length === 0 || p.recordCount === 0) {
+                table.innerHTML = '<thead><tr><th>无数据</th></tr></thead>' +
+                    '<tbody><tr><td class="empty-state">该区间内无出库记录</td></tr></tbody>';
+                return;
+            }
+
+            // Header
+            let html = '<thead><tr>';
+            html += '<th class="date-col">日期</th>';
+            p.routes.forEach(rc => {
+                html += `<th>${escapeHtml(rc)}</th>`;
+            });
+            html += '<th>行合计</th></tr></thead><tbody>';
+
+            // Body rows
+            p.dates.forEach(d => {
+                html += `<tr><td class="date-cell">${d} <span style="color:var(--muted);font-size:11px;">(${getWeekday(d)})</span></td>`;
+                p.routes.forEach(rc => {
+                    const v = p.matrix[d][rc] || 0;
+                    html += `<td class="${v === 0 ? 'zero' : ''}">${v}</td>`;
+                });
+                html += `<td class="total-cell">${p.rowTotals[d]}</td></tr>`;
+            });
+
+            // Footer: column totals
+            html += '<tr class="total-row"><td class="date-cell">列合计</td>';
+            p.routes.forEach(rc => {
+                html += `<td>${p.colTotals[rc]}</td>`;
+            });
+            html += `<td class="total-cell">${p.grandTotal}</td></tr>`;
+
+            html += '</tbody>';
+            table.innerHTML = html;
+        }
+
+        function renderTotalsTable() {
+            const p = lastPivot;
+            const table = document.getElementById('totalsTable');
+
+            if (p.routes.length === 0 || p.grandTotal === 0) {
+                table.querySelector('tbody').innerHTML =
+                    '<tr><td colspan="5" class="empty-state">无数据</td></tr>';
+                return;
+            }
+
+            const sorted = p.routes
+                .map(rc => ({ rc, total: p.colTotals[rc] || 0 }))
+                .sort((a, b) => b.total - a.total);
+
+            const maxVal = sorted[0].total || 1;
+
+            let html = '';
+            sorted.forEach((item, idx) => {
+                const pct = p.grandTotal > 0 ? (item.total / p.grandTotal * 100) : 0;
+                const width = (item.total / maxVal * 100).toFixed(1);
+                html += `<tr>
+                    <td>${idx + 1}</td>
+                    <td style="text-align:left;font-weight:500;">${escapeHtml(item.rc)}</td>
+                    <td>${item.total.toLocaleString()}</td>
+                    <td>${pct.toFixed(2)}%</td>
+                    <td class="bar-cell">
+                        <div class="bar" style="width:${width}%"></div>
+                        <div class="bar-label">
+                            <span class="route-name">${escapeHtml(item.rc)}</span>
+                            <span class="route-count">${item.total}</span>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+            table.querySelector('tbody').innerHTML = html;
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[c]);
+        }
+
+        // ---------- CSV Export ----------
+        // Convert "YYYY-MM-DD" → "YYYY/MM/DD" to match 调度组数据_原始数据.csv
+        function formatDateSlash(iso) {
+            return (iso || '').replace(/-/g, '/');
+        }
+
+        function buildDispatchCSVRows(p) {
+            // Fill data into the FIXED template header (copied from 调度组数据_原始数据.csv).
+            // Matching: our route codes (fully normalized, upper-cased) vs template routes (upper-cased).
+            // Data routes NOT in the template are skipped and reported back to the UI.
+
+            // Build per-date per-route vehicle/cost maps keyed by UPPER route.
+            // p.vehicleMatrix / p.costMatrix already keyed by the normalized route the user chose.
+            // For correct matching against multi-char template keys like "MCO-MIA",
+            // prefer the fully-normalized raw code from rawRecords when available.
+            // fullMatrix is keyed by the TEMPLATE-normalized route so that
+            // Sheet variants like 'DFW DROP' / 'LAV (往返）drop trailer' /
+            // 'ATL.G-ATL' collapse into 'DFW' / 'LAV' / 'ATL'.
+            const fullMatrix = {};   // date → templateRoute → { vehicles, cost, hasData, rawLabels:Set }
+            p.dates.forEach(d => { fullMatrix[d] = {}; });
+
+            // rawByTemplate: templateRoute → Set of original raw labels that
+            // collapsed into it — used by the diagnostics box so the user can
+            // see which weird Sheet labels were merged.
+            const rawByTemplate = {};
+
+            (p.rawRecords || []).forEach(r => {
+                const rd = (r.record_date || '').substring(0, 10);
+                if (!fullMatrix[rd]) return;
+                const rawLabel = String(r.route_code || '').trim();
+                const rc = normalizeRouteForTemplate(rawLabel);
+                if (!rc) return;
+                if (!fullMatrix[rd][rc]) {
+                    fullMatrix[rd][rc] = { vehicles: 0, cost: 0, hasData: false };
+                }
+                fullMatrix[rd][rc].vehicles += Number(r.vehicle_count) || 0;
+                fullMatrix[rd][rc].cost += Number(r.cost) || 0;
+                fullMatrix[rd][rc].hasData = true;
+
+                if (!rawByTemplate[rc]) rawByTemplate[rc] = {};
+                rawByTemplate[rc][rawLabel] = (rawByTemplate[rc][rawLabel] || 0) + 1;
+            });
+
+            // Collect unmatched routes (present in data, absent in template) for UI warning
+            const templateSet = new Set(DISPATCH_TEMPLATE_ROUTES);
+            const dataRoutes = new Set();
+            Object.values(fullMatrix).forEach(perDate => {
+                Object.keys(perDate).forEach(rc => dataRoutes.add(rc));
+            });
+            const unmatched = Array.from(dataRoutes).filter(rc => !templateSet.has(rc)).sort();
+            const matched = Array.from(dataRoutes).filter(rc => templateSet.has(rc)).sort();
+
+            // Build rows
+            const rows = [DISPATCH_TEMPLATE_HEADER.slice()];
+            p.dates.forEach(d => {
+                const row = DISPATCH_COLUMN_SPEC.map(col => {
+                    if (col.field === '日期') return formatDateSlash(d);
+                    if (col.field === '是否提交') return '';
+                    const entry = fullMatrix[d][col.route];
+                    if (!entry || !entry.hasData) return ''; // 未录入 → 空白（与参考文件一致）
+                    return col.field === '班次' ? entry.vehicles : entry.cost;
+                });
+                rows.push(row);
+            });
+
+            // Attach diagnostic info on the function (read by exportCSV)
+            buildDispatchCSVRows.lastDiagnostics = {
+                templateRoutes: DISPATCH_TEMPLATE_ROUTES.slice(),
+                matched,
+                unmatched,
+                totalDataRoutes: dataRoutes.size,
+                rawByTemplate
+            };
+            return rows;
+        }
+
+        function renderDispatchPreview(rows) {
+            // rows[0] is the exact template header (40 cols); rows[1..] are date rows.
+            const title = document.getElementById('dispatchPreviewTitle');
+            const toolbar = document.getElementById('selectToolbar');
+            const wrap = document.getElementById('dispatchPreviewWrap');
+            const note = document.getElementById('dispatchPreviewNote');
+            const table = document.getElementById('dispatchPreviewTable');
+            const badge = document.getElementById('previewBadge');
+            // rows must at minimum contain the header. If we got called with
+            // nothing at all, hide everything. Otherwise always show — even
+            // when there are 0 data rows — so the user can see that the card
+            // is alive and know their range returned empty results.
+            if (!rows || rows.length === 0) {
+                title.style.display = 'none';
+                toolbar.style.display = 'none';
+                wrap.style.display = 'none';
+                note.style.display = 'none';
+                return;
+            }
+            const header = rows[0];
+            const dataRows = rows.slice(1);
+
+            badge.textContent = `${header.length} 列`;
+
+            // Default selection: all dates selected
+            selectedDates = new Set(lastPivot.dates);
+
+            // Wire up toolbar date inputs to current range
+            document.getElementById('selStart').value = lastPivot.startDate;
+            document.getElementById('selEnd').value = lastPivot.endDate;
+
+            // Build <thead> — first column: master checkbox; rest from template
+            let html = '<thead><tr>';
+            html += '<th class="sel-cell"><input type="checkbox" id="masterCheck" checked title="全选/全不选"></th>';
+            DISPATCH_COLUMN_SPEC.forEach(col => {
+                const cls = (col.field === '日期' || col.field === '是否提交') ? 'date-col' : '';
+                html += `<th class="${cls}" title="${escapeHtml(col.header)}">${escapeHtml(col.header)}</th>`;
+            });
+            html += '</tr></thead>';
+
+            // Body: one row per date (cap by maxRows if really long ranges)
+            html += '<tbody>';
+            const maxRows = 366; // show up to ~1 year
+            const visibleRows = dataRows.slice(0, maxRows);
+            visibleRows.forEach((r, i) => {
+                const iso = lastPivot.dates[i];
+                html += `<tr data-date="${escapeHtml(iso)}" class="row-selected">`;
+                html += `<td class="sel-cell"><input type="checkbox" class="row-check" data-date="${escapeHtml(iso)}" checked></td>`;
+                r.forEach((cell, idx) => {
+                    const col = DISPATCH_COLUMN_SPEC[idx];
+                    const isDate = col && col.field === '日期';
+                    const cls = isDate ? 'date-cell' : (cell === '' ? 'zero' : '');
+                    html += `<td class="${cls}">${escapeHtml(String(cell))}</td>`;
+                });
+                html += '</tr>';
+            });
+            if (dataRows.length > maxRows) {
+                html += `<tr><td colspan="${header.length + 1}" class="empty-state">… 还有 ${dataRows.length - maxRows} 行未显示（复制/导出时仍全部包含已选）</td></tr>`;
+            }
+            html += '</tbody>';
+
+            table.innerHTML = html;
+            title.style.display = '';
+            toolbar.style.display = '';
+            wrap.style.display = '';
+            note.style.display = '';
+
+            // Bind events
+            document.getElementById('masterCheck').addEventListener('change', e => {
+                applySelectionAction(e.target.checked ? 'all' : 'none');
+            });
+            table.querySelectorAll('input.row-check').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const d = cb.dataset.date;
+                    if (cb.checked) selectedDates.add(d);
+                    else selectedDates.delete(d);
+                    updateSelectionUI();
+                });
+            });
+            // Click anywhere on row (except the link/input) toggles
+            table.querySelectorAll('tbody tr[data-date]').forEach(tr => {
+                tr.addEventListener('click', e => {
+                    if (e.target.tagName === 'INPUT') return;
+                    const cb = tr.querySelector('input.row-check');
+                    if (!cb) return;
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change'));
+                });
+            });
+
+            updateSelectionUI();
+        }
+
+        function applySelectionAction(action) {
+            if (!lastPivot) return;
+            const dates = lastPivot.dates;
+            const today = formatLocalDateISO(new Date());
+
+            if (action === 'all') {
+                selectedDates = new Set(dates);
+            } else if (action === 'none') {
+                selectedDates = new Set();
+            } else if (action === 'invert') {
+                const next = new Set();
+                dates.forEach(d => { if (!selectedDates.has(d)) next.add(d); });
+                selectedDates = next;
+            } else if (action === 'today') {
+                selectedDates = new Set(dates.filter(d => d === today));
+            } else if (action === 'last1') {
+                // Latest single day in the range
+                const sorted = dates.slice().sort();
+                const last = sorted[sorted.length - 1];
+                selectedDates = last ? new Set([last]) : new Set();
+            } else if (action === 'last7') {
+                const sorted = dates.slice().sort();
+                const tail = sorted.slice(-7);
+                selectedDates = new Set(tail);
+            } else if (action === 'range') {
+                const s = document.getElementById('selStart').value;
+                const e = document.getElementById('selEnd').value;
+                if (!s || !e) { alert('请先填写区间两端日期'); return; }
+                const [lo, hi] = s <= e ? [s, e] : [e, s];
+                selectedDates = new Set(dates.filter(d => d >= lo && d <= hi));
+            }
+            // Sync checkboxes + UI
+            document.querySelectorAll('#dispatchPreviewTable input.row-check').forEach(cb => {
+                cb.checked = selectedDates.has(cb.dataset.date);
+            });
+            updateSelectionUI();
+        }
+
+        function updateSelectionUI() {
+            if (!lastPivot) return;
+            const total = lastPivot.dates.length;
+            const count = selectedDates.size;
+            const countEl = document.getElementById('selCount');
+            const totalEl = document.getElementById('selTotal');
+            if (countEl) countEl.textContent = count;
+            if (totalEl) totalEl.textContent = total;
+
+            // Update master checkbox state
+            const master = document.getElementById('masterCheck');
+            if (master) {
+                if (count === 0) { master.checked = false; master.indeterminate = false; }
+                else if (count === total) { master.checked = true; master.indeterminate = false; }
+                else { master.checked = false; master.indeterminate = true; }
+            }
+
+            // Update row visual state
+            document.querySelectorAll('#dispatchPreviewTable tbody tr[data-date]').forEach(tr => {
+                const d = tr.dataset.date;
+                if (selectedDates.has(d)) {
+                    tr.classList.add('row-selected');
+                    tr.classList.remove('row-deselected');
+                } else {
+                    tr.classList.remove('row-selected');
+                    tr.classList.add('row-deselected');
+                }
+            });
+
+            // Enable/disable copy buttons
+            const hasSel = count > 0;
+            const copyData = document.getElementById('copyDataBtn');
+            const copyFull = document.getElementById('copyFullBtn');
+            if (copyData) copyData.disabled = !hasSel;
+            if (copyFull) copyFull.disabled = !hasSel;
+        }
+
+        function buildSelectedDispatchRows() {
+            // Re-build full rows, then filter by selection (keep header row).
+            if (!lastPivot) return null;
+            const all = buildDispatchCSVRows(lastPivot);
+            if (all.length === 0) return null;
+            const header = all[0];
+            const dataRows = all.slice(1).filter((_, i) => selectedDates.has(lastPivot.dates[i]));
+            return [header, ...dataRows];
+        }
+
+        function copyRowsAsTSV(rows, includeHeader) {
+            const toCopy = includeHeader ? rows : rows.slice(1);
+            // Excel expects TAB-separated, literal tabs, no quoting normally needed.
+            // If a cell contains a TAB/CR/LF, wrap in double quotes + escape.
+            const text = toCopy.map(r => r.map(cell => {
+                const s = String(cell ?? '');
+                if (/[\t\n\r"]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+                return s;
+            }).join('\t')).join('\r\n');
+
+            const finish = () => {
+                const btn = document.activeElement;
+                if (btn && btn.tagName === 'BUTTON') {
+                    const original = btn.textContent;
+                    btn.textContent = '✓ 已复制 ' + toCopy.length + ' 行';
+                    setTimeout(() => { btn.textContent = original; }, 1800);
+                }
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(finish).catch(() => {
+                    fallbackCopy(text);
+                    finish();
+                });
+            } else {
+                fallbackCopy(text);
+                finish();
+            }
+        }
+
+        function fallbackCopy(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.top = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+            document.body.removeChild(ta);
+        }
+
+        function renderTemplateMatchInfo(diag) {
+            const box = document.getElementById('templateMatchBox');
+            if (!box || !diag) return;
+            const { matched, unmatched, templateRoutes, totalDataRoutes, rawByTemplate } = diag;
+            const unusedTemplate = templateRoutes.filter(r => !matched.includes(r));
+
+            // Note: previously we hid the box when everything was zero, but
+            // that left the user with a fully empty template preview and no
+            // indication why. Keep the box visible and show a clear
+            // "0 条数据" message.
+
+            // Helper: show raw label(s) that collapsed into a template key,
+            // so the user knows which Sheet labels were merged by
+            // normalizeRouteForTemplate (DROP, (往返）, .H/.G ...).
+            function showRaw(code) {
+                const rb = (rawByTemplate && rawByTemplate[code]) || {};
+                const labels = Object.keys(rb);
+                if (labels.length === 0) return '';
+                if (labels.length === 1 && labels[0].toUpperCase() === code) return '';
+                const pairs = labels
+                    .sort((a, b) => rb[b] - rb[a])
+                    .map(l => `${escapeHtml(l)}×${rb[l]}`);
+                return ` <span class="muted" style="font-size:12px;">← ${pairs.join(', ')}</span>`;
+            }
+
+            let html = '';
+            if (totalDataRoutes === 0) {
+                html += '<div style="color:#b45309;font-size:14px;margin-bottom:4px;">';
+                html += '<b>⚠ 本时间区间 0 条发车记录</b> ';
+                html += '<span style="font-size:12px;color:var(--muted);">';
+                html += '（Google Sheet 里这个日期范围内没有 MT 开头的运单；'
+                     + '换个有数据的区间试试，例如 <code>2026-02-01 ~ 2026-02-28</code>）';
+                html += '</span></div>';
+            }
+            html += '<b>调度组模板匹配情况：</b> ';
+            html += `数据中 ${totalDataRoutes} 个流向（去重并做 DROP/括号/.H.G 规整后），`;
+            html += `模板命中 <b>${matched.length}</b> 个。`;
+            if (matched.length > 0) {
+                html += '<div style="margin-top:6px;">';
+                html += '<b>✓ 已并入模板：</b><br>';
+                html += matched.map(r => `<code>${escapeHtml(r)}</code>${showRaw(r)}`).join('<br>');
+                html += '</div>';
+            }
+            if (unmatched.length > 0) {
+                html += '<div style="margin-top:6px;color:#b45309;">';
+                html += `<b>⚠ 未在模板中（导出时会被<b>忽略</b>）：</b><br>`;
+                html += unmatched.map(r => `<code>${escapeHtml(r)}</code>${showRaw(r)}`).join('<br>');
+                html += '<br><span style="font-size:12px;">如需纳入，请在代码里 <code>DISPATCH_TEMPLATE_HEADER</code> 末尾追加 <code>XXX班次</code> / <code>XXX费用</code> 两列。</span>';
+                html += '</div>';
+            }
+            if (unusedTemplate.length > 0) {
+                html += '<div style="margin-top:6px;color:var(--muted);">';
+                html += `<b>ℹ 模板里本次区间无数据（导出为全空列）：</b> `;
+                html += unusedTemplate.map(r => `<code>${escapeHtml(r)}</code>`).join(' ');
+                html += '</div>';
+            }
+            box.innerHTML = html;
+            box.style.display = '';
+        }
+
+        function buildPivotCSVRows(p) {
+            const metricLabel = p.metric === 'vehicle_count' ? '发车数量合计' : '发车次数';
+            const meta = [
+                [`# 流向分布（${metricLabel}）`],
+                [`# 区间: ${p.startDate} ~ ${p.endDate}  跨度: ${p.dates.length} 天`],
+                [`# 记录数: ${p.recordCount}  流向数: ${p.routes.length}  合计: ${p.grandTotal}`],
+                [`# 归一化前缀: ${p.prefix === 'full' ? '完整 route_code' : '前 ' + p.prefix + ' 字符'}`],
+                [`# 导出时间: ${new Date().toLocaleString()}`],
+                []
+            ];
+
+            const header = ['日期', '星期', ...p.routes, '行合计'];
+            const rows = [header];
+
+            p.dates.forEach(d => {
+                const row = [d, getWeekday(d)];
+                p.routes.forEach(rc => row.push(p.matrix[d][rc] || 0));
+                row.push(p.rowTotals[d]);
+                rows.push(row);
+            });
+
+            const footer = ['列合计', ''];
+            p.routes.forEach(rc => footer.push(p.colTotals[rc]));
+            footer.push(p.grandTotal);
+            rows.push(footer);
+
+            return meta.concat(rows);
+        }
+
+        function rowsToCSV(rows) {
+            return rows.map(r =>
+                r.map(cell => {
+                    const s = String(cell ?? '');
+                    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+                    return s;
+                }).join(',')
+            ).join('\r\n');
+        }
+
+        function downloadCSV(csvText, filename) {
+            // UTF-8 BOM so Excel renders Chinese correctly
+            const blob = new Blob(['\ufeff' + csvText], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function exportCSV() {
+            const p = lastPivot;
+            if (!p) return;
+
+            const fmt = document.getElementById('exportFormat').value; // 'dispatch' | 'pivot'
+
+            if (fmt === 'dispatch') {
+                const rows = buildDispatchCSVRows(p);
+                const filename = `调度组数据_原始数据_${p.startDate}_${p.endDate}.csv`;
+                downloadCSV(rowsToCSV(rows), filename);
+            } else {
+                const rows = buildPivotCSVRows(p);
+                const filename = `route-distribution_${p.startDate}_to_${p.endDate}_${p.metric}.csv`;
+                downloadCSV(rowsToCSV(rows), filename);
+            }
+        }
+
+        // ---------- Init ----------
+        document.addEventListener('DOMContentLoaded', function () {
+            setQuickRange(14);
+
+            document.getElementById('loadBtn').addEventListener('click', loadData);
+            document.getElementById('exportBtn').addEventListener('click', exportCSV);
+            document.getElementById('copyDataBtn').addEventListener('click', () => {
+                const rows = buildSelectedDispatchRows();
+                if (!rows || rows.length <= 1) { alert('未选中任何日期'); return; }
+                // Strip leading 日期 column from every row so the paste lands
+                // starting at "IAH班次" column in the target sheet.
+                const trimmed = rows.map(r => r.slice(1));
+                copyRowsAsTSV(trimmed, false); // data rows only, no header, no date col
+            });
+            document.getElementById('copyFullBtn').addEventListener('click', () => {
+                const rows = buildSelectedDispatchRows();
+                if (!rows || rows.length <= 1) { alert('未选中任何日期'); return; }
+                const trimmed = rows.map(r => r.slice(1));
+                copyRowsAsTSV(trimmed, true); // include header, no date col
+            });
+
+            // Selection toolbar buttons
+            document.querySelectorAll('#selectToolbar button[data-sel-action]').forEach(btn => {
+                btn.addEventListener('click', () => applySelectionAction(btn.dataset.selAction));
+            });
+            document.querySelectorAll('.quick-range button[data-days]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    setQuickRange(parseInt(btn.dataset.days, 10));
+                    loadData();
+                });
+            });
+
+            // Auto-load on first visit
+            loadData();
+        });
+    })();
+    </script>
+</body>
+</html>

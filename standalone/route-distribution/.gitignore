@@ -1,0 +1,20 @@
+# PyInstaller outputs
+build/
+dist/
+*.spec
+
+# Python runtime
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Portable Python env (~60 MB, created by init_portable.bat).
+# Don't commit to git; ship as part of a standalone zip instead.
+portable/
+
+# User config (generated at runtime by the .exe)
+config.txt
+
+# Auto-synced from ../../static/ by build.bat
+route-distribution.html
