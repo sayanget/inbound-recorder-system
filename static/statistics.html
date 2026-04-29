@@ -627,7 +627,20 @@
 
         <!-- Daily Trend Chart -->
         <div class="stats-section">
-            <h3 data-lang="daily_trend_chart">物资统计图</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+                <h3 style="margin:0;" data-lang="daily_trend_chart">物资统计图</h3>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" id="dailyTrendExportCsvBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="daily_trend_export_csv">导出 CSV</span>
+                    </button>
+                    <button type="button" id="dailyTrendCopyTsvBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#6c757d; color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="daily_trend_copy_tsv">复制 TSV</span>
+                    </button>
+                </div>
+            </div>
             <div class="chart-container">
                 <canvas id="dailyTrendChart"></canvas>
             </div>
@@ -700,6 +713,30 @@
             <div id="centerCollectTableWrap"
                 style="max-height:420px; overflow:auto; border:1px solid var(--border-color, #e5e7eb); border-radius:6px;">
                 <table id="centerCollectTable"
+                    style="width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric: tabular-nums; min-width: 640px;">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- 短驳发车累计（流向 × 实际发车时段） -->
+            <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:18px 0 6px 0;">
+                <h4 style="margin:0; font-size:15px;" data-lang="tms_shuttle_pivot_title">短驳发车累计（流向 × 实际发车时段）</h4>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <span id="tmsShuttlePivotMeta" style="font-size:12px; color:var(--text-muted, #666);"></span>
+                    <button type="button" id="tmsShuttlePivotRefreshBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
+                        data-lang="refresh">刷新</button>
+                    <button type="button" id="tmsShuttlePivotExportCsvBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                        data-lang="center_collect_export_csv">导出 CSV</button>
+                </div>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted); margin:0 0 6px 0; line-height:1.4;"
+                data-lang="tms_shuttle_pivot_hint">数据来源：TMS 短驳运输任务（已完成 + CNO.H），按【实际发车时间】小时取整聚合。</p>
+            <div id="tmsShuttlePivotTableWrap"
+                style="max-height:420px; overflow:auto; border:1px solid var(--border-color, #e5e7eb); border-radius:6px;">
+                <table id="tmsShuttlePivotTable"
                     style="width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric: tabular-nums; min-width: 640px;">
                     <thead></thead>
                     <tbody></tbody>
@@ -797,6 +834,30 @@
                 save_failed: "保存失败",
                 logout: "登出",
                 daily_trend_chart: "物资统计图",
+                outbound_pallets_label: "出库托盘",
+                outbound_pallets_tooltip: "出库托盘（LAV 折半计）",
+                outbound_pallets_no_data: "无出库数据",
+                daily_trend_export_csv: "导出 CSV",
+                daily_trend_copy_tsv: "复制 TSV",
+                daily_trend_no_export_data: "暂无可导出数据",
+                daily_trend_csv_title: "物资统计图",
+                daily_trend_col_week_start: "周起始",
+                daily_trend_col_week_no: "周次",
+                daily_trend_col_mon: "周一",
+                daily_trend_col_tue: "周二",
+                daily_trend_col_wed: "周三",
+                daily_trend_col_thu: "周四",
+                daily_trend_col_fri: "周五",
+                daily_trend_col_sat: "周六",
+                daily_trend_col_sun: "周日",
+                daily_trend_col_inbound_total: "入库合计",
+                daily_trend_col_outbound_pallets: "出库托盘",
+                daily_trend_col_lav_trips: "LAV 车次",
+                daily_trend_col_other_trips: "其它车次",
+                daily_trend_col_lav_effective: "LAV 计入",
+                daily_trend_total_row: "合计",
+                daily_trend_copy_success: "已复制到剪贴板",
+                daily_trend_copy_failed: "复制失败",
                 daily_packing_split_chart: "每日集包（人工 / 设备）",
                 daily_packing_split_hint: "按 LA 运营日 06:00–次日 06:00 统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
                 daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
@@ -830,6 +891,8 @@
                 center_collect_syncing: "正在从 GoFO 同步集包…",
                 center_collect_backfilling: "正在回补最近 7 天…",
                 center_collect_table_title: "累计数据（按目的中心 × 时段）",
+                tms_shuttle_pivot_title: "短驳发车累计（流向 × 实际发车时段）",
+                tms_shuttle_pivot_hint: "数据来源：TMS 短驳运输任务（已完成 + CNO.H），按【实际发车时间】小时取整聚合。",
                 center_collect_col_destin: "目的中心",
                 center_collect_col_total: "累计",
                 center_collect_row_sum: "合计",
@@ -917,6 +980,30 @@
                 save_failed: "Save failed",
                 logout: "Logout",
                 daily_trend_chart: "Material Statistics",
+                outbound_pallets_label: "Outbound Pallets",
+                outbound_pallets_tooltip: "Outbound Pallets (LAV counted as half)",
+                outbound_pallets_no_data: "No outbound data",
+                daily_trend_export_csv: "Export CSV",
+                daily_trend_copy_tsv: "Copy TSV",
+                daily_trend_no_export_data: "No data to export",
+                daily_trend_csv_title: "Material Statistics",
+                daily_trend_col_week_start: "Week Start",
+                daily_trend_col_week_no: "Week",
+                daily_trend_col_mon: "Mon",
+                daily_trend_col_tue: "Tue",
+                daily_trend_col_wed: "Wed",
+                daily_trend_col_thu: "Thu",
+                daily_trend_col_fri: "Fri",
+                daily_trend_col_sat: "Sat",
+                daily_trend_col_sun: "Sun",
+                daily_trend_col_inbound_total: "Inbound Total",
+                daily_trend_col_outbound_pallets: "Outbound Pallets",
+                daily_trend_col_lav_trips: "LAV Trips",
+                daily_trend_col_other_trips: "Other Trips",
+                daily_trend_col_lav_effective: "LAV Counted",
+                daily_trend_total_row: "Total",
+                daily_trend_copy_success: "Copied to clipboard",
+                daily_trend_copy_failed: "Copy failed",
                 daily_packing_split_chart: "Daily packing (manual / device)",
                 daily_packing_split_hint: "LA business day 06:00–06:00, last 14 days; bar height = daily total (manual+device); segment labels show share.",
                 daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
@@ -950,6 +1037,8 @@
                 center_collect_syncing: "Syncing collect from GoFO…",
                 center_collect_backfilling: "Backfilling last 7 days…",
                 center_collect_table_title: "Cumulative data (destination center × hour)",
+                tms_shuttle_pivot_title: "Shuttle dispatches (destination × actual departure hour)",
+                tms_shuttle_pivot_hint: "Source: TMS shuttle tasks (completed + CNO.H), bucketed by actual departure hour.",
                 center_collect_col_destin: "Destination",
                 center_collect_col_total: "Total",
                 center_collect_row_sum: "Total",
@@ -1032,6 +1121,30 @@
                 save_failed: "Error al guardar",
                 logout: "Cerrar sesión",
                 daily_trend_chart: "Estadísticas de Materiales",
+                outbound_pallets_label: "Palets de Salida",
+                outbound_pallets_tooltip: "Palets de Salida (LAV cuenta mitad)",
+                outbound_pallets_no_data: "Sin datos de salida",
+                daily_trend_export_csv: "Exportar CSV",
+                daily_trend_copy_tsv: "Copiar TSV",
+                daily_trend_no_export_data: "Sin datos para exportar",
+                daily_trend_csv_title: "Estadísticas de Materiales",
+                daily_trend_col_week_start: "Inicio de Semana",
+                daily_trend_col_week_no: "Semana",
+                daily_trend_col_mon: "Lun",
+                daily_trend_col_tue: "Mar",
+                daily_trend_col_wed: "Mié",
+                daily_trend_col_thu: "Jue",
+                daily_trend_col_fri: "Vie",
+                daily_trend_col_sat: "Sáb",
+                daily_trend_col_sun: "Dom",
+                daily_trend_col_inbound_total: "Total Entrada",
+                daily_trend_col_outbound_pallets: "Palets de Salida",
+                daily_trend_col_lav_trips: "Viajes LAV",
+                daily_trend_col_other_trips: "Otros Viajes",
+                daily_trend_col_lav_effective: "LAV Contado",
+                daily_trend_total_row: "Total",
+                daily_trend_copy_success: "Copiado al portapapeles",
+                daily_trend_copy_failed: "Error al copiar",
                 daily_packing_split_chart: "Empaque diario (manual / dispositivo)",
                 daily_packing_split_hint: "Día operativo LA 06:00–06:00, últimos 14 días; altura = total diario (manual+dispositivo); etiquetas = proporción.",
                 daily_packing_split_tooltip_footer: "(Proporción respecto al total manual+dispositivo del día)",
@@ -1061,6 +1174,8 @@
                 center_collect_syncing: "Sincronizando paquetes desde GoFO…",
                 center_collect_backfilling: "Rellenando últimos 7 días…",
                 center_collect_table_title: "Datos acumulados (centro destino × hora)",
+                tms_shuttle_pivot_title: "Despachos de lanzadera (destino × hora real de salida)",
+                tms_shuttle_pivot_hint: "Fuente: tareas de lanzadera TMS (completadas + CNO.H), agrupadas por hora real de salida.",
                 center_collect_col_destin: "Destino",
                 center_collect_col_total: "Total",
                 center_collect_row_sum: "Total",
@@ -1510,6 +1625,9 @@
                 if (typeof window.loadCenterCollectTrendData === 'function') {
                     window.loadCenterCollectTrendData();
                 }
+                if (typeof window.loadTmsShuttlePivot === 'function') {
+                    window.loadTmsShuttlePivot();
+                }
             });
         }
 
@@ -1805,6 +1923,9 @@
                             if (typeof window.loadCenterCollectTrendData === 'function') {
                                 window.loadCenterCollectTrendData();
                             }
+                            if (typeof window.loadTmsShuttlePivot === 'function') {
+                                window.loadTmsShuttlePivot();
+                            }
                         })
                         .catch(e => {
                             console.error('Error loading forecast:', e);
@@ -1815,6 +1936,9 @@
                             }
                             if (typeof window.loadCenterCollectTrendData === 'function') {
                                 window.loadCenterCollectTrendData();
+                            }
+                            if (typeof window.loadTmsShuttlePivot === 'function') {
+                                window.loadTmsShuttlePivot();
                             }
                         });
                 })
@@ -3277,7 +3401,93 @@
             }
         }
 
-        // Load weekly pallet trend chart data
+        // ---- Outbound pallet overlay (for 物资统计图) ----
+        // Business rule (per user):
+        //   pallets_per_truck = 30
+        //   LAV routes (normalized) are 甲挂/drop-trailer style — they only deliver half a truck's
+        //   worth of pallets per run, so count them as round(lav_count / 2) trips, then * 30.
+        //   All other routes: count * 30. Sum = weekly outbound pallets.
+        //
+        // Normalization matches /outbound-stats:  uppercase + strip .H/.G + CNO-XXX rule +
+        // fall back to first 3 chars. Only the normalized route name needs to equal 'LAV' to
+        // qualify for the LAV waiver.
+        function statsNormalizeOutboundRoute(route) {
+            if (!route) return 'Unknown';
+            let r = String(route).toUpperCase().trim();
+            if (r.endsWith('.H') || r.endsWith('.G')) r = r.substring(0, r.length - 2);
+            const u = r.replace(/\s+/g, ' ').trim();
+            if (u.length === 0) return 'Unknown';
+            const cnoMatch = u.match(/CNO-([A-Z0-9]{3})\b/);
+            if (cnoMatch) return cnoMatch[1];
+            return u.length >= 3 ? u.slice(0, 3) : u;
+        }
+
+        function statsNormalizeRecordDate(val) {
+            if (val == null || val === '') return '';
+            let s = String(val).trim();
+            if (s.includes('T')) s = s.split('T')[0];
+            if (s.includes(' ')) s = s.split(' ')[0];
+            return s.length >= 10 ? s.substring(0, 10) : s;
+        }
+
+        // Local-calendar Monday of the given YYYY-MM-DD (matches backend natural-week logic).
+        function statsMondayOf(ymd) {
+            const parts = String(ymd).split('-').map(Number);
+            if (parts.length !== 3 || parts.some(x => Number.isNaN(x))) return '';
+            const d = new Date(parts[0], parts[1] - 1, parts[2]);
+            const dow = d.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
+            const diff = dow === 0 ? -6 : 1 - dow;
+            d.setDate(d.getDate() + diff);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        async function loadOutboundPalletWeekly(startDate, endDate) {
+            try {
+                const url = `/api/outbound/records?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+                const resp = await fetch(url);
+                if (!resp.ok) {
+                    console.warn('loadOutboundPalletWeekly: fetch failed with status', resp.status);
+                    return null;
+                }
+                const rows = await resp.json();
+                if (!Array.isArray(rows)) {
+                    console.warn('loadOutboundPalletWeekly: expected array, got', rows);
+                    return null;
+                }
+                // Bucket by Monday: { 'YYYY-MM-DD': { lav: n, other: n } }
+                const byWeek = {};
+                rows.forEach(r => {
+                    const monday = statsMondayOf(statsNormalizeRecordDate(r.record_date));
+                    if (!monday) return;
+                    if (!byWeek[monday]) byWeek[monday] = { lav: 0, other: 0 };
+                    const norm = statsNormalizeOutboundRoute(r.route_code);
+                    if (norm === 'LAV') byWeek[monday].lav += 1;
+                    else byWeek[monday].other += 1;
+                });
+                // Compute pallets per week using the LAV-halved-then-rounded rule
+                const out = {};
+                Object.keys(byWeek).forEach(wk => {
+                    const v = byWeek[wk];
+                    const lavEffective = Math.round(v.lav / 2);
+                    const effectiveTrips = v.other + lavEffective;
+                    out[wk] = {
+                        lav_count: v.lav,
+                        other_count: v.other,
+                        lav_effective: lavEffective,
+                        pallets: effectiveTrips * 30
+                    };
+                });
+                return out;
+            } catch (e) {
+                console.error('loadOutboundPalletWeekly failed:', e);
+                return null;
+            }
+        }
+
+        // Load weekly pallet trend chart data (with outbound overlay)
         function loadDailyTrendData() {
             let trendUrl = '/api/weekly_pallet_trend';
             if (currentDate) {
@@ -3285,16 +3495,156 @@
             }
             fetch(trendUrl)
                 .then(response => response.json())
-                .then(data => {
+                .then(async data => {
                     if (data.error) {
                         console.error('Error loading weekly pallet trend data:', data.error);
                         return;
                     }
-                    renderDailyTrendChart(data);
+                    let outboundMap = null;
+                    if (Array.isArray(data) && data.length > 0) {
+                        const startDate = data[0].start_date;
+                        const endDate = data[data.length - 1].end_date;
+                        outboundMap = await loadOutboundPalletWeekly(startDate, endDate);
+                    }
+                    renderDailyTrendChart(data, outboundMap);
                 })
                 .catch(error => {
                     console.error('Error fetching weekly pallet trend data:', error);
                 });
+        }
+
+        // ---- Daily Trend export (CSV / TSV) ----
+        // One row per week with: Monday date, ISO week #, Mon..Sun inbound pallets, inbound total,
+        // outbound pallets (LAV-halved rule), LAV trip count, other-route trip count, LAV counted.
+        // Bottom 合计 row sums every numeric column.
+        function _dailyTrendBuildExportRows() {
+            const snap = dailyTrendExportSnapshot;
+            if (!snap || !snap.data || !snap.data.length) return null;
+            const t = translations[currentLang] || {};
+            const header = [
+                t.daily_trend_col_week_start || '周起始',
+                t.daily_trend_col_week_no || '周次',
+                t.daily_trend_col_mon || '周一',
+                t.daily_trend_col_tue || '周二',
+                t.daily_trend_col_wed || '周三',
+                t.daily_trend_col_thu || '周四',
+                t.daily_trend_col_fri || '周五',
+                t.daily_trend_col_sat || '周六',
+                t.daily_trend_col_sun || '周日',
+                t.daily_trend_col_inbound_total || '入库合计',
+                t.daily_trend_col_outbound_pallets || '出库托盘',
+                t.daily_trend_col_lav_trips || 'LAV 车次',
+                t.daily_trend_col_other_trips || '其它车次',
+                t.daily_trend_col_lav_effective || 'LAV 计入'
+            ];
+            const rows = [];
+            // Running column totals for the bottom row (skip the first two text cols).
+            const numericCols = header.length - 2;
+            const colSums = new Array(numericCols).fill(0);
+            snap.data.forEach(week => {
+                const wn = statsISOWeekNumber(week.start_date);
+                const weekLabel = (wn === '' || wn == null)
+                    ? (week.week_label || '')
+                    : (currentLang === 'zh' ? `第${wn}周` : currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                const dayVals = [0, 0, 0, 0, 0, 0, 0];
+                for (let i = 0; i < 7; i++) {
+                    const di = week.daily_data ? week.daily_data[i] : null;
+                    dayVals[i] = di && typeof di.pallets === 'number' ? di.pallets : 0;
+                }
+                const inboundTotal = typeof week.week_total_pallets === 'number'
+                    ? week.week_total_pallets
+                    : dayVals.reduce((a, b) => a + b, 0);
+                const ob = snap.outboundMap ? snap.outboundMap[week.start_date] : null;
+                const outboundPallets = ob ? ob.pallets : 0;
+                const lavCount = ob ? ob.lav_count : 0;
+                const otherCount = ob ? ob.other_count : 0;
+                const lavEffective = ob ? ob.lav_effective : 0;
+                const row = [
+                    week.start_date,
+                    weekLabel,
+                    ...dayVals,
+                    inboundTotal,
+                    outboundPallets,
+                    lavCount,
+                    otherCount,
+                    lavEffective
+                ];
+                rows.push(row);
+                for (let i = 0; i < numericCols; i++) {
+                    const v = row[i + 2];
+                    if (typeof v === 'number') colSums[i] += v;
+                }
+            });
+            const totalRow = [t.daily_trend_total_row || '合计', '', ...colSums];
+            return {
+                title: t.daily_trend_csv_title || '物资统计图',
+                header,
+                rows,
+                totalRow
+            };
+        }
+
+        function _dailyTrendCsvEscape(value) {
+            const s = String(value ?? '');
+            if (/[",\r\n]/.test(s)) {
+                return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+        }
+
+        function exportDailyTrendCsv() {
+            const built = _dailyTrendBuildExportRows();
+            const t = translations[currentLang] || {};
+            if (!built) { alert(t.daily_trend_no_export_data || '暂无可导出数据'); return; }
+            const lines = [];
+            if (built.title) lines.push(_dailyTrendCsvEscape(built.title));
+            lines.push(built.header.map(_dailyTrendCsvEscape).join(','));
+            built.rows.forEach(r => lines.push(r.map(_dailyTrendCsvEscape).join(',')));
+            lines.push(built.totalRow.map(_dailyTrendCsvEscape).join(','));
+            const csv = '\uFEFF' + lines.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const stamp = (function () {
+                const d = new Date();
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            })();
+            a.href = url;
+            a.download = `material_statistics_${stamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function copyDailyTrendTsv() {
+            const built = _dailyTrendBuildExportRows();
+            const t = translations[currentLang] || {};
+            if (!built) { alert(t.daily_trend_no_export_data || '暂无可导出数据'); return; }
+            // Plain TSV — no title so a direct paste into Excel / Sheets lands at the header row.
+            const lines = [];
+            lines.push(built.header.join('\t'));
+            built.rows.forEach(r => lines.push(r.join('\t')));
+            lines.push(built.totalRow.join('\t'));
+            const tsv = lines.join('\r\n');
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(tsv);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = tsv;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                alert(t.daily_trend_copy_success || '已复制到剪贴板');
+            } catch (err) {
+                console.error('copyDailyTrendTsv failed:', err);
+                alert(t.daily_trend_copy_failed || '复制失败');
+            }
         }
 
         function statsMdShort(ymd) {
@@ -3315,8 +3665,14 @@
             return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
         }
 
+        // Snapshot of the last rendered daily-trend matrix, consumed by CSV/TSV export.
+        // Shape: { data: [week,...], outboundMap: { mondayYmd: {...} } | null }
+        let dailyTrendExportSnapshot = null;
+
         // Render weekly pallet trend chart (stacked by weekday)
-        function renderDailyTrendChart(data) {
+        // outboundMap: { 'YYYY-MM-DD (Monday)': { pallets, lav_count, other_count, lav_effective } }
+        function renderDailyTrendChart(data, outboundMap) {
+            dailyTrendExportSnapshot = { data: data || [], outboundMap: outboundMap || null };
             const ctx = document.getElementById('dailyTrendChart').getContext('2d');
 
             // Destroy existing chart if it exists
@@ -3389,9 +3745,42 @@
                     data: dayData,
                     backgroundColor: weekdayColors[dayIndex],
                     borderColor: weekdayBorderColors[dayIndex],
-                    borderWidth: 1
+                    borderWidth: 1,
+                    // Group weekday bars into a single "inbound" stack so the outbound line
+                    // can live in its own stack group and plot absolute values on the same y-axis.
+                    stack: 'inbound'
                 });
             }
+
+            // Outbound pallets overlay (line) — aligned with the same week labels.
+            // Data per week: outboundMap[week.start_date].pallets (0 if no data / map unavailable).
+            const outboundLineData = data.map(week => {
+                if (outboundMap && outboundMap[week.start_date]) {
+                    return outboundMap[week.start_date].pallets;
+                }
+                return 0;
+            });
+            const hasOutboundData = outboundLineData.some(v => v > 0);
+
+            datasets.push({
+                type: 'line',
+                label: translations[currentLang].outbound_pallets_label || '出库托盘',
+                data: outboundLineData,
+                borderColor: '#e74c3c',
+                backgroundColor: 'rgba(231, 76, 60, 0.15)',
+                borderWidth: 2.5,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#e74c3c',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1,
+                fill: false,
+                tension: 0.25,
+                // Separate stack bucket so this line isn't summed onto the inbound bar stack.
+                stack: 'outbound',
+                order: 0,
+                spanGaps: true
+            });
 
             // Detect if it's a mobile device
             const isMobile = window.innerWidth < 768;
@@ -3433,15 +3822,26 @@
                                 },
                                 label: function (context) {
                                     const weekIndex = context.dataIndex;
-                                    const dayIndex = context.datasetIndex;
+                                    const datasetIndex = context.datasetIndex;
                                     const week = data[weekIndex];
-                                    const dayInfo = week.daily_data[dayIndex];
-                                    const weekdayName = weekdayShortTranslations[currentLang][dayIndex];
-                                    const palletCount = dayInfo.pallets;
 
                                     const palletText = currentLang === 'zh' ? '托盘' :
                                         currentLang === 'en' ? 'Pallets' :
                                             'Palets';
+
+                                    // Dataset index 7 is the outbound-pallets line; render it separately.
+                                    if (datasetIndex === 7) {
+                                        const outbound = outboundMap ? outboundMap[week.start_date] : null;
+                                        const label = translations[currentLang].outbound_pallets_label || '出库托盘';
+                                        if (!outbound) {
+                                            return `${label}: 0 ${palletText}`;
+                                        }
+                                        return `${label}: ${outbound.pallets.toLocaleString()} ${palletText}`;
+                                    }
+
+                                    const dayInfo = week.daily_data[datasetIndex];
+                                    const weekdayName = weekdayShortTranslations[currentLang][datasetIndex];
+                                    const palletCount = dayInfo ? dayInfo.pallets : 0;
 
                                     return `${weekdayName}: ${palletCount.toLocaleString()} ${palletText}`;
                                 },
@@ -3457,7 +3857,26 @@
                                         currentLang === 'en' ? 'Pallets' :
                                             'Palets';
 
-                                    return `\n${totalText}: ${week.week_total_pallets.toLocaleString()} ${palletText}`;
+                                    const lines = [`\n${totalText}: ${week.week_total_pallets.toLocaleString()} ${palletText}`];
+
+                                    // Surface the LAV breakdown so users can verify the halving rule.
+                                    const outbound = outboundMap ? outboundMap[week.start_date] : null;
+                                    if (outbound) {
+                                        const outboundLabel = translations[currentLang].outbound_pallets_tooltip || '出库托盘（LAV 折半计）';
+                                        lines.push(`${outboundLabel}: ${outbound.pallets.toLocaleString()} ${palletText}`);
+                                        if (outbound.lav_count || outbound.other_count) {
+                                            const tripText = currentLang === 'zh' ? '车次' :
+                                                currentLang === 'en' ? 'trips' :
+                                                    'viajes';
+                                            const lavFragment = currentLang === 'zh'
+                                                ? `LAV ${outbound.lav_count} → ${outbound.lav_effective} 计`
+                                                : currentLang === 'en'
+                                                    ? `LAV ${outbound.lav_count} → ${outbound.lav_effective} counted`
+                                                    : `LAV ${outbound.lav_count} → ${outbound.lav_effective} contados`;
+                                            lines.push(`  ${lavFragment} · ${currentLang === 'zh' ? '其它' : currentLang === 'en' ? 'Other' : 'Otros'} ${outbound.other_count} ${tripText}`);
+                                        }
+                                    }
+                                    return lines.join('\n');
                                 }
                             }
                         },
@@ -4772,6 +5191,126 @@
             }
             window.loadCenterCollectTrendData = loadCenterCollectTrendData;
 
+            // ===== TMS 短驳发车累计（流向 × 实际发车时段） =====
+            function loadTmsShuttlePivot() {
+                const d = currentDate
+                    || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value)
+                    || '';
+                let url = '/api/tms/shuttle-completed/pivot';
+                if (d) url += '?date=' + encodeURIComponent(d);
+                fetch(url, { credentials: 'same-origin' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data && data.error) {
+                            console.error('tms shuttle pivot error:', data.error);
+                            renderTmsShuttlePivot({ hours: [], destinations: [], date: d, note: data.error });
+                            return;
+                        }
+                        window.__tmsShuttlePivotData = data;
+                        renderTmsShuttlePivot(data);
+                    })
+                    .catch(err => {
+                        console.error('tms shuttle pivot fetch failed:', err);
+                        renderTmsShuttlePivot({ hours: [], destinations: [], date: d, note: String(err) });
+                    });
+            }
+            window.loadTmsShuttlePivot = loadTmsShuttlePivot;
+
+            function renderTmsShuttlePivot(data) {
+                const table = document.getElementById('tmsShuttlePivotTable');
+                if (!table) return;
+                const thead = table.querySelector('thead');
+                const tbody = table.querySelector('tbody');
+                const meta = document.getElementById('tmsShuttlePivotMeta');
+                thead.innerHTML = '';
+                tbody.innerHTML = '';
+
+                const hours = (data && data.hours) || [];
+                const dests = (data && data.destinations) || [];
+                if (meta) {
+                    const totalDispatch = (data && data.grand_total) || 0;
+                    meta.textContent = `${data && data.date ? data.date : ''} · 共 ${totalDispatch} 车`;
+                }
+                if (!dests.length) {
+                    thead.innerHTML = `<tr><th style="padding:8px; color:#6c757d;">${(data && data.note) || (translations[currentLang].center_collect_empty || '暂无数据')}</th></tr>`;
+                    return;
+                }
+
+                const destLabel = translations[currentLang].center_collect_col_destin || '目的地';
+                const totalLabel = translations[currentLang].center_collect_col_total || '累计';
+                const sumLabel = translations[currentLang].center_collect_row_sum || '合计';
+                const thStyle = 'padding:6px 8px; background:#f8f9fa; border-bottom:2px solid #dee2e6; text-align:right; font-weight:600; white-space:nowrap; position:sticky; top:0; z-index:1;';
+                const thLeftStyle = thStyle + ' text-align:left; left:0; z-index:2; background:#f8f9fa;';
+                const tdStyle = 'padding:5px 8px; border-bottom:1px solid #f1f3f5; text-align:right; white-space:nowrap;';
+                const tdLeftStyle = 'padding:5px 8px; border-bottom:1px solid #f1f3f5; text-align:left; white-space:nowrap; position:sticky; left:0; background:#fff; font-weight:500;';
+                const totalColStyle = tdStyle + ' font-weight:600; background:#fff8e1;';
+                const footerTdStyle = 'padding:6px 8px; border-top:2px solid #dee2e6; text-align:right; font-weight:600; background:#f1f3f5; white-space:nowrap;';
+                const footerLeftStyle = footerTdStyle + ' text-align:left; position:sticky; left:0; z-index:1;';
+
+                let thHtml = `<tr><th style="${thLeftStyle}">${destLabel}</th>`;
+                hours.forEach(h => { thHtml += `<th style="${thStyle}">${h}</th>`; });
+                thHtml += `<th style="${thStyle} background:#fff3cd;">${totalLabel}</th></tr>`;
+                thead.innerHTML = thHtml;
+
+                const colSums = hours.map((_, i) => dests.reduce((a, r) => a + (r.hourly[i] || 0), 0));
+                const grand = colSums.reduce((a, b) => a + b, 0);
+
+                let bodyHtml = '';
+                dests.forEach(r => {
+                    bodyHtml += `<tr><td style="${tdLeftStyle}">${r.name}</td>`;
+                    (r.hourly || []).forEach(v => {
+                        bodyHtml += `<td style="${tdStyle}">${v ? v.toLocaleString() : '<span style="color:#c7ccd1">-</span>'}</td>`;
+                    });
+                    bodyHtml += `<td style="${totalColStyle}">${(r.total || 0).toLocaleString()}</td></tr>`;
+                });
+                bodyHtml += `<tr><td style="${footerLeftStyle}">${sumLabel}</td>`;
+                colSums.forEach(v => { bodyHtml += `<td style="${footerTdStyle}">${(v || 0).toLocaleString()}</td>`; });
+                bodyHtml += `<td style="${footerTdStyle} background:#ffe69c;">${grand.toLocaleString()}</td></tr>`;
+                tbody.innerHTML = bodyHtml;
+            }
+            window.renderTmsShuttlePivot = renderTmsShuttlePivot;
+
+            function exportTmsShuttlePivotCsv() {
+                const data = window.__tmsShuttlePivotData;
+                if (!data || !data.destinations || !data.destinations.length) {
+                    if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_empty || '暂无数据', 'error');
+                    return;
+                }
+                const destLabel = translations[currentLang].center_collect_col_destin || '目的地';
+                const totalLabel = translations[currentLang].center_collect_col_total || '累计';
+                const sumLabel = translations[currentLang].center_collect_row_sum || '合计';
+                const hours = data.hours || [];
+                const dests = data.destinations || [];
+                const colSums = hours.map((_, i) => dests.reduce((a, r) => a + (r.hourly[i] || 0), 0));
+                const grand = colSums.reduce((a, b) => a + b, 0);
+                const esc = v => {
+                    const s = (v == null) ? '' : String(v);
+                    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+                };
+                const lines = [];
+                lines.push([destLabel, ...hours, totalLabel].map(esc).join(','));
+                dests.forEach(r => {
+                    lines.push([r.name, ...(r.hourly || []).map(v => v || 0), r.total || 0].map(esc).join(','));
+                });
+                lines.push([sumLabel, ...colSums, grand].map(esc).join(','));
+                const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `tms_shuttle_pivot_${data.date || new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+            }
+
+            // 绑定按钮 + 跟随 selectedDate 变化
+            (function bindTmsShuttlePivot() {
+                const refreshBtn = document.getElementById('tmsShuttlePivotRefreshBtn');
+                if (refreshBtn) refreshBtn.addEventListener('click', loadTmsShuttlePivot);
+                const exportBtn = document.getElementById('tmsShuttlePivotExportCsvBtn');
+                if (exportBtn) exportBtn.addEventListener('click', exportTmsShuttlePivotCsv);
+            })();
+
             // 为每个目的中心生成稳定的色板（避免不同日期色序跳变）
             const COLLECT_PALETTE = [
                 ['#4e79a7', 'rgba(78,121,167,0.55)'],
@@ -5100,6 +5639,12 @@
             if (cbExp) cbExp.addEventListener('click', manualCenterCollectExportCsv);
             const cbCopy = document.getElementById('centerCollectCopyTsvBtn');
             if (cbCopy) cbCopy.addEventListener('click', manualCenterCollectCopyTsv);
+
+            // 物资统计图导出按钮
+            const dtExp = document.getElementById('dailyTrendExportCsvBtn');
+            if (dtExp) dtExp.addEventListener('click', exportDailyTrendCsv);
+            const dtCopy = document.getElementById('dailyTrendCopyTsvBtn');
+            if (dtCopy) dtCopy.addEventListener('click', copyDailyTrendTsv);
 
             // 页面初次载入时拉一次（切日期时会通过下面的 hook 再拉）
             loadCenterCollectTrendData();

@@ -276,32 +276,14 @@ _DISPATCH_WAIVER_RE = re.compile(
 
 def _is_dispatched(mt_cell: str, pickup_cell: str = "", route_cell: str = "") -> bool:
     """
-    A row counts as dispatched when ANY of:
-      1. the MT# column starts with 'MT' (case-insensitive), OR
-      2. the Pickup # column has any non-empty alphanumeric content
-         (e.g. 'LASCNO042618', 'EWRCNO...', 'MIA53061201'), OR
-      3. the TO column describes a FIXED drop-trailer / 往返 route
-         (matches `_DISPATCH_WAIVER_RE`). These固定甩挂线路 are scheduled
-         daily and dispatchers don't bother opening individual MT#/Pickup #
-         for them — but the trucks still run.
+    Strict rule (per user 2026-04-27): a row counts as dispatched ONLY when
+    the MT# (K column) starts with 'MT' (case-insensitive).
 
-    Context:
-      • Pre-2026: every dispatched row had an MT# like 'MT2025113000123'.
-      • From 2026 onward: MT# is often blank, Pickup # carries the id.
-      • From 2026-03 onward: for `LAV (往返） drop trailer`-style lines,
-        BOTH MT# and Pickup # are blank — rule #3 catches those.
-    Without rule #3, 4 月 2026 约 125 条 LAV (往返) drop trailer 会被漏计。
+    Pickup # 兜底 / drop-trailer 豁免这两条之前的兜底规则已停用——
+    用户口径：只统计 MT 列实打实有 MT 编号的行。
     """
     mt = str(mt_cell or "").strip().upper()
-    if mt.startswith(SHEET_MT_PREFIX):
-        return True
-    pk = str(pickup_cell or "").strip()
-    if pk and any(ch.isalnum() for ch in pk):
-        return True
-    route = str(route_cell or "").strip()
-    if route and _DISPATCH_WAIVER_RE.search(route):
-        return True
-    return False
+    return mt.startswith(SHEET_MT_PREFIX)
 
 
 def _year_from_mt(mt_cell: str) -> int | None:
@@ -488,6 +470,48 @@ def fetch_sheet_records(
     hdr_row, col = hdr
     c_date, c_route, c_cost, c_mt = col["date"], col["route"], col["cost"], col["mt"]
     c_pickup = col.get("pickup", -1)
+
+    # MT column resolution. Per user 2026-04-27 ("只统计 K"), the canonical
+    # MT-number column is the un-headed column the dispatch team writes into
+    # for the current workflow era. In the live 2026 sheet that's column K
+    # (idx 10) — the column literally labelled "MT#" (idx 12) is filled only
+    # for legacy rows and is ignored here.
+    #
+    # Strategy:
+    #   1. Scan every non-key column for "MT##...##" density.
+    #   2. Among columns whose HEADER is blank, take the one with the most
+    #      MT-prefix hits — that's column K.
+    #   3. If no blank-header column has any hits, fall back to the
+    #      header-matched MT# column for backward compat with old sheets.
+    body_rows = all_rows[hdr_row + 1 :]
+    header_cells = all_rows[hdr_row] if hdr_row < len(all_rows) else []
+
+    def _mt_hit_count(idx: int) -> int:
+        if idx < 0:
+            return 0
+        n = 0
+        for r in body_rows:
+            if idx < len(r) and str(r[idx]).strip().upper().startswith(SHEET_MT_PREFIX):
+                n += 1
+        return n
+
+    def _header_blank(idx: int) -> bool:
+        return idx >= len(header_cells) or not str(header_cells[idx]).strip()
+
+    max_col = max((len(r) for r in body_rows), default=c_mt + 1)
+    blank_candidate, blank_best_hits = -1, 0
+    for j in range(max_col):
+        if j in (c_date, c_route, c_cost, c_pickup):
+            continue
+        if not _header_blank(j):
+            continue
+        h = _mt_hit_count(j)
+        if h > blank_best_hits:
+            blank_candidate, blank_best_hits = j, h
+
+    if blank_candidate >= 0 and blank_best_hits > 0:
+        c_mt = blank_candidate
+
     max_idx = max(c_date, c_route, c_cost, c_mt, c_pickup if c_pickup >= 0 else 0)
 
     # Decide year_base used by the monotonic walker.

@@ -549,6 +549,9 @@
                             <input type="checkbox" id="truckClearBeforeSync" style="margin: 0;" checked>
                             方式一：先清空 outbound / truck_bookings，再按表格全量导入（不可撤销）
                         </label>
+                        <div style="font-size: 11px; color: #16a085; padding-top: 4px; border-top: 1px dashed rgba(46, 204, 113, 0.25);">
+                            <i class="fas fa-info-circle"></i> 同步规则：仅 <strong>K 列含 MT 编号</strong>的行算作发车并写入；老工作流和 LAV (往返) drop trailer 等无 MT# 的行会被跳过，与 route-distribution 工具口径一致。
+                        </div>
                     </div>
                 </div>
 

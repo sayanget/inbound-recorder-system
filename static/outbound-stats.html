@@ -517,14 +517,24 @@
         <div class="section">
             <!-- Weekly Trend Chart -->
             <div style="margin-bottom: 40px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                     <h3 data-lang="weekly_trend" style="margin: 0;">每周趋势</h3>
-                    <div class="btn-group" role="group" style="display: flex; gap: 5px;">
-                        <button type="button" class="btn btn-outline-primary" id="btnWeeklyCount"
-                            data-lang="vehicle_count"
-                            style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">发车数量</button>
-                        <button type="button" class="btn btn-primary" id="btnWeeklyCost" data-lang="cost"
-                            style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">成本</button>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <div class="btn-group" role="group" style="display: flex; gap: 5px;">
+                            <button type="button" class="btn btn-outline-primary" id="btnWeeklyCount"
+                                data-lang="vehicle_count"
+                                style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">发车数量</button>
+                            <button type="button" class="btn btn-primary" id="btnWeeklyCost" data-lang="cost"
+                                style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">成本</button>
+                        </div>
+                        <div class="btn-group" role="group" style="display: flex; gap: 5px;">
+                            <button type="button" class="btn btn-outline-primary" id="btnWeeklyExportCsv"
+                                data-lang="export_csv"
+                                style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">导出 CSV</button>
+                            <button type="button" class="btn btn-outline-primary" id="btnWeeklyCopyTsv"
+                                data-lang="copy_tsv"
+                                style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">复制 TSV</button>
+                        </div>
                     </div>
                 </div>
                 <div class="chart-container" style="position: relative; height: 500px;">
@@ -587,6 +597,50 @@
             </tbody>
         </table>
     </div>
+
+    <!-- TMS 短驳运输任务（已完成） -->
+    <div class="section">
+        <div style="display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 12px;">
+            <div>
+                <h3 style="margin: 0 0 4px 0;" data-lang="tms_shuttle_title">短驳运输任务（已完成 · CNO.H）</h3>
+                <p style="margin: 0; font-size: 13px; color: var(--text-muted, #666);" data-lang="tms_shuttle_subtitle">数据来源：TMS / 同步脚本 sync_tms_shuttle_completed.py</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: end; flex-wrap: wrap;">
+                <div class="form-group" style="margin: 0;">
+                    <label for="tmsShuttleDate" style="margin-bottom: 4px;" data-lang="record_date">记录日期</label>
+                    <input type="date" id="tmsShuttleDate" />
+                </div>
+                <button id="tmsShuttleRefreshBtn" type="button" data-lang="refresh">刷新</button>
+                <button id="tmsShuttleSyncBtn" type="button" data-lang="sync_now" style="background-color: #2563eb;">立即同步</button>
+                <button id="tmsShuttleExportBtn" type="button" data-lang="export_csv" style="background-color: #16a34a;">导出 CSV</button>
+            </div>
+            <div id="tmsShuttleSyncStatus" style="margin-top: 6px; font-size: 12px; color: var(--text-muted, #666);"></div>
+        </div>
+        <div style="overflow-x: auto;">
+            <table id="tmsShuttleTable">
+                <thead>
+                    <tr>
+                        <th data-lang="tms_origin">始发地</th>
+                        <th data-lang="tms_destination">目的地</th>
+                        <th data-lang="tms_actual_dep_date">实际发车日期</th>
+                        <th data-lang="tms_actual_dep_time">实际发车时间</th>
+                        <th data-lang="tms_actual_arr_date">实际到车日期</th>
+                        <th data-lang="tms_actual_arr_time">实际到车时间</th>
+                    </tr>
+                </thead>
+                <tbody id="tmsShuttleTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center;" data-lang="no_data">暂无数据</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6" style="text-align: right; color: var(--text-muted, #666); font-size: 12px;" id="tmsShuttleSummary"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
     </div>
 
     <script>
@@ -624,6 +678,17 @@
                 pending_shipments_title: "待发货记录",
                 add_pending: "添加待发货",
                 quantity: "数量",
+                refresh: "刷新",
+                sync_now: "立即同步",
+                export_csv: "导出 CSV",
+                tms_shuttle_title: "短驳运输任务（已完成 · CNO.H）",
+                tms_shuttle_subtitle: "数据来源：TMS / 同步脚本 sync_tms_shuttle_completed.py",
+                tms_origin: "始发地",
+                tms_destination: "目的地",
+                tms_actual_dep_date: "实际发车日期",
+                tms_actual_dep_time: "实际发车时间",
+                tms_actual_arr_date: "实际到车日期",
+                tms_actual_arr_time: "实际到车时间",
                 daily_statistics: "当日统计",
                 trunk_total: "干线总发车",
                 branch_total: "支线总发车",
@@ -649,7 +714,16 @@
                 statistics: "统计",
                 export_success: "导出成功",
                 load_error: "加载失败",
-                weekly_trend: "每周趋势"
+                weekly_trend: "每周趋势",
+                export_csv: "导出 CSV",
+                copy_tsv: "复制 TSV",
+                copy_success: "已复制到剪贴板",
+                copy_failed: "复制失败",
+                no_export_data: "暂无可导出数据",
+                week_start: "周起始",
+                total: "合计",
+                weekly_trend_count_title: "每周趋势 - 发车数",
+                weekly_trend_cost_title: "每周趋势 - 成本（美元）"
             },
             en: {
                 outbound_stats_title: "Outbound Statistics",
@@ -674,6 +748,17 @@
                 pending_shipments_title: "Pending Shipments",
                 add_pending: "Add Pending Shipment",
                 quantity: "Quantity",
+                refresh: "Refresh",
+                sync_now: "Sync Now",
+                export_csv: "Export CSV",
+                tms_shuttle_title: "Shuttle Tasks (Completed · CNO.H)",
+                tms_shuttle_subtitle: "Source: TMS / sync script sync_tms_shuttle_completed.py",
+                tms_origin: "Origin",
+                tms_destination: "Destination",
+                tms_actual_dep_date: "Actual Dep. Date",
+                tms_actual_dep_time: "Actual Dep. Time",
+                tms_actual_arr_date: "Actual Arr. Date",
+                tms_actual_arr_time: "Actual Arr. Time",
                 daily_statistics: "Daily Statistics",
                 trunk_total: "Trunk Total",
                 branch_total: "Branch Total",
@@ -699,7 +784,16 @@
                 statistics: "Statistics",
                 export_success: "Export successful",
                 load_error: "Load failed",
-                weekly_trend: "Weekly Trend"
+                weekly_trend: "Weekly Trend",
+                export_csv: "Export CSV",
+                copy_tsv: "Copy TSV",
+                copy_success: "Copied to clipboard",
+                copy_failed: "Copy failed",
+                no_export_data: "No data to export",
+                week_start: "Week Start",
+                total: "Total",
+                weekly_trend_count_title: "Weekly Trend - Vehicle Count",
+                weekly_trend_cost_title: "Weekly Trend - Cost (USD)"
             },
             es: {
                 outbound_stats_title: "Estadísticas de Salida",
@@ -724,6 +818,17 @@
                 pending_shipments_title: "Registros Pendientes de Envío",
                 add_pending: "Agregar Envío Pendiente",
                 quantity: "Cantidad",
+                refresh: "Actualizar",
+                sync_now: "Sincronizar Ahora",
+                export_csv: "Exportar CSV",
+                tms_shuttle_title: "Tareas de Lanzadera (Completadas · CNO.H)",
+                tms_shuttle_subtitle: "Fuente: TMS / script sync_tms_shuttle_completed.py",
+                tms_origin: "Origen",
+                tms_destination: "Destino",
+                tms_actual_dep_date: "Fecha Salida Real",
+                tms_actual_dep_time: "Hora Salida Real",
+                tms_actual_arr_date: "Fecha Llegada Real",
+                tms_actual_arr_time: "Hora Llegada Real",
                 daily_statistics: "Estadísticas Diarias",
                 trunk_total: "Total Troncal",
                 branch_total: "Total Ramificación",
@@ -749,7 +854,16 @@
                 statistics: "Estadísticas",
                 export_success: "Exportación exitosa",
                 load_error: "Error al cargar",
-                weekly_trend: "Tendencia Semanal"
+                weekly_trend: "Tendencia Semanal",
+                export_csv: "Exportar CSV",
+                copy_tsv: "Copiar TSV",
+                copy_success: "Copiado al portapapeles",
+                copy_failed: "Error al copiar",
+                no_export_data: "Sin datos para exportar",
+                week_start: "Inicio de Semana",
+                total: "Total",
+                weekly_trend_count_title: "Tendencia Semanal - Cantidad",
+                weekly_trend_cost_title: "Tendencia Semanal - Costo (USD)"
             }
         };
 
@@ -793,9 +907,179 @@
             checkLoginStatus();
             loadFreights(); // Load freight rates
             loadWeeklyData(); // Load weekly trend
-            
+            initTmsShuttleTable();
+
             console.log("Outbound Stats Initialized");
         });
+
+        let _tmsShuttleRows = [];
+        let _tmsShuttleDate = '';
+        let _tmsShuttleAutoTimer = null;
+
+        function _todayLocalISO() {
+            const n = new Date();
+            return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+        }
+
+        function initTmsShuttleTable() {
+            const dateInput = document.getElementById('tmsShuttleDate');
+            const btn = document.getElementById('tmsShuttleRefreshBtn');
+            const syncBtn = document.getElementById('tmsShuttleSyncBtn');
+            const exportBtn = document.getElementById('tmsShuttleExportBtn');
+            if (!dateInput || !btn) return;
+            dateInput.value = _todayLocalISO();
+            btn.addEventListener('click', loadTmsShuttle);
+            dateInput.addEventListener('change', loadTmsShuttle);
+            if (syncBtn) syncBtn.addEventListener('click', () => triggerTmsShuttleSync(true));
+            if (exportBtn) exportBtn.addEventListener('click', exportTmsShuttleCsv);
+            loadTmsShuttle();
+            scheduleTmsShuttleAutoSync();
+        }
+
+        function scheduleTmsShuttleAutoSync() {
+            if (_tmsShuttleAutoTimer) clearTimeout(_tmsShuttleAutoTimer);
+            const now = new Date();
+            // 下一个整点 +5 秒（避开服务端整点同步任务的瞬间）
+            const nextHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+                                      now.getHours() + 1, 0, 5, 0);
+            const wait = Math.max(60_000, nextHour.getTime() - now.getTime());
+            _tmsShuttleAutoTimer = setTimeout(async () => {
+                try {
+                    await triggerTmsShuttleSync(false);
+                } catch (e) {
+                    console.warn('TMS shuttle auto-sync failed', e);
+                }
+                scheduleTmsShuttleAutoSync();
+            }, wait);
+            const next = nextHour.toLocaleTimeString();
+            const el = document.getElementById('tmsShuttleSyncStatus');
+            if (el) el.textContent = `下次自动同步：${next}（每整点）`;
+        }
+
+        async function triggerTmsShuttleSync(showAlert) {
+            const status = document.getElementById('tmsShuttleSyncStatus');
+            const syncBtn = document.getElementById('tmsShuttleSyncBtn');
+            if (syncBtn) syncBtn.disabled = true;
+            if (status) status.textContent = '同步中...';
+            try {
+                const resp = await fetch('/api/tms/shuttle-completed/sync',
+                    { method: 'POST', credentials: 'same-origin' });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || data.success === false) {
+                    const msg = (data && (data.error || data.msg)) || `HTTP ${resp.status}`;
+                    if (status) status.textContent = `同步失败：${msg}`;
+                    if (showAlert) alert(`同步失败：${msg}`);
+                    return;
+                }
+                const date = data.date || '';
+                const fetched = data.fetched != null ? data.fetched : '?';
+                const stored = data.stored != null ? data.stored : '?';
+                const ts = new Date().toLocaleTimeString();
+                if (status) status.textContent = `已同步 ${date}：抓取 ${fetched} 条 / 入表 ${stored} 条（${ts}）`;
+                const dateInput = document.getElementById('tmsShuttleDate');
+                if (dateInput && (!dateInput.value || dateInput.value === date)) {
+                    dateInput.value = date;
+                    loadTmsShuttle();
+                }
+            } catch (err) {
+                if (status) status.textContent = `同步失败：${err.message || err}`;
+                if (showAlert) alert(`同步失败：${err.message || err}`);
+            } finally {
+                if (syncBtn) syncBtn.disabled = false;
+            }
+        }
+
+        function exportTmsShuttleCsv() {
+            if (!_tmsShuttleRows.length) {
+                alert(currentLang === 'en' ? 'No data to export.' : (currentLang === 'es' ? 'No hay datos para exportar.' : '没有可导出的数据'));
+                return;
+            }
+            const T = (translations[currentLang] || translations.zh) || {};
+            const headers = [
+                T.tms_origin || '始发地',
+                T.tms_destination || '目的地',
+                T.tms_actual_dep_date || '实际发车日期',
+                T.tms_actual_dep_time || '实际发车时间',
+                T.tms_actual_arr_date || '实际到车日期',
+                T.tms_actual_arr_time || '实际到车时间',
+            ];
+            const escCsv = (v) => {
+                if (v == null) return '';
+                const s = String(v);
+                if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+                return s;
+            };
+            const lines = [headers.map(escCsv).join(',')];
+            for (const r of _tmsShuttleRows) {
+                lines.push([
+                    r.place_of_origin,
+                    r.destination,
+                    r.actual_departure_date,
+                    r.actual_departure_time_only,
+                    r.actual_arrival_date,
+                    r.actual_arrival_time_only,
+                ].map(escCsv).join(','));
+            }
+            const bom = '\uFEFF';
+            const blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tms_shuttle_${_tmsShuttleDate || 'export'}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function loadTmsShuttle() {
+            const dateInput = document.getElementById('tmsShuttleDate');
+            const tbody = document.getElementById('tmsShuttleTableBody');
+            const summary = document.getElementById('tmsShuttleSummary');
+            if (!dateInput || !tbody) return;
+            const dateVal = dateInput.value;
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">加载中...</td></tr>';
+            if (summary) summary.textContent = '';
+            try {
+                const url = `/api/tms/shuttle-completed${dateVal ? `?date=${encodeURIComponent(dateVal)}` : ''}`;
+                const resp = await fetch(url, { credentials: 'same-origin' });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                renderTmsShuttle(data);
+            } catch (err) {
+                console.error('loadTmsShuttle error', err);
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#c00;">加载失败：${err.message || err}</td></tr>`;
+            }
+        }
+
+        function renderTmsShuttle(data) {
+            const tbody = document.getElementById('tmsShuttleTableBody');
+            const summary = document.getElementById('tmsShuttleSummary');
+            if (!tbody) return;
+            const rows = (data && data.rows) || [];
+            _tmsShuttleRows = rows;
+            _tmsShuttleDate = (data && data.date) || '';
+            const note = data && data.note;
+            if (!rows.length) {
+                const msg = note ? note : '暂无数据';
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted,#666);">${msg}</td></tr>`;
+                if (summary) summary.textContent = note ? '' : `日期 ${data && data.date ? data.date : ''} · 共 0 条`;
+                return;
+            }
+            const esc = (s) => (s == null ? '' : String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td>${esc(r.place_of_origin)}</td>
+                    <td>${esc(r.destination)}</td>
+                    <td>${esc(r.actual_departure_date)}</td>
+                    <td>${esc(r.actual_departure_time_only)}</td>
+                    <td>${esc(r.actual_arrival_date)}</td>
+                    <td>${esc(r.actual_arrival_time_only)}</td>
+                </tr>
+            `).join('');
+            if (summary) summary.textContent = `日期 ${data.date || ''} · 共 ${rows.length} 条`;
+        }
 
         function initLanguage() {
             updateLanguage(currentLang);
@@ -2023,6 +2307,9 @@
         let weeklyChart = null;
         let weeklyChartMode = 'cost'; // 'count' or 'cost'
         let currentWeeklyData = []; // Store weekly data separately
+        // Snapshot of the last rendered weekly matrix; consumed by CSV/TSV export
+        // Shape: { weeks: [YYYY-MM-DD,...], routes: [code,...], counts: {week: {route: n}}, costs: {week: {route: $}} }
+        let weeklyExportSnapshot = null;
 
         // Initialize chart toggles
         const btnWeeklyCount = document.getElementById('btnWeeklyCount');
@@ -2065,6 +2352,130 @@
             if (currentWeeklyData && currentWeeklyData.length > 0) {
                 updateWeeklyChart(currentWeeklyData);
             }
+        }
+
+        // ---- Weekly Trend Export (CSV / TSV) ----
+        // Exports the currently displayed metric (count or cost). Includes a per-week 合计 column
+        // and a bottom 合计 row that sums every column. CSV is UTF-8 with BOM for Excel.
+        function _weeklyBuildExportRows(mode) {
+            const snap = weeklyExportSnapshot;
+            if (!snap || !snap.weeks.length) return null;
+            const t = translations[currentLang] || {};
+            const titleKey = mode === 'count' ? 'weekly_trend_count_title' : 'weekly_trend_cost_title';
+            const totalLabel = t.total || '合计';
+            const weekStartLabel = t.week_start || '周起始';
+            const header = [weekStartLabel, ...snap.routes, totalLabel];
+            const rows = [];
+            const colTotals = new Array(snap.routes.length).fill(0);
+            let grandTotal = 0;
+            snap.weeks.forEach(week => {
+                const row = [week];
+                let rowTotal = 0;
+                snap.routes.forEach((route, idx) => {
+                    const cell = snap.matrix[week] && snap.matrix[week][route];
+                    const v = cell ? (cell[mode] || 0) : 0;
+                    row.push(v);
+                    rowTotal += v;
+                    colTotals[idx] += v;
+                });
+                row.push(rowTotal);
+                grandTotal += rowTotal;
+                rows.push(row);
+            });
+            const totalRow = [totalLabel, ...colTotals, grandTotal];
+            return {
+                title: t[titleKey] || '',
+                header,
+                rows,
+                totalRow,
+                mode
+            };
+        }
+
+        function _weeklyFormatCell(value, mode, forCsv) {
+            if (typeof value !== 'number') return String(value ?? '');
+            if (mode === 'cost') {
+                // CSV: plain number with 2 decimals so spreadsheets can sum it.
+                // TSV: same — Excel/Sheets parse plain numbers best.
+                return value.toFixed(2);
+            }
+            return String(value);
+        }
+
+        function _csvEscape(value) {
+            const s = String(value ?? '');
+            if (/[",\r\n]/.test(s)) {
+                return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+        }
+
+        function exportWeeklyTrendCsv() {
+            const data = _weeklyBuildExportRows(weeklyChartMode);
+            const t = translations[currentLang] || {};
+            if (!data) { alert(t.no_export_data || '暂无可导出数据'); return; }
+            const lines = [];
+            if (data.title) lines.push(_csvEscape(data.title));
+            lines.push(data.header.map(_csvEscape).join(','));
+            data.rows.forEach(r => {
+                const cells = r.map((c, i) => i === 0 ? _csvEscape(c) : _csvEscape(_weeklyFormatCell(c, data.mode, true)));
+                lines.push(cells.join(','));
+            });
+            lines.push(data.totalRow.map((c, i) => i === 0 ? _csvEscape(c) : _csvEscape(_weeklyFormatCell(c, data.mode, true))).join(','));
+            const csv = '\uFEFF' + lines.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const modeTag = data.mode === 'cost' ? 'cost' : 'count';
+            const stamp = formatLocalDateISO(new Date());
+            a.href = url;
+            a.download = `weekly_trend_${modeTag}_${stamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function copyWeeklyTrendTsv() {
+            const data = _weeklyBuildExportRows(weeklyChartMode);
+            const t = translations[currentLang] || {};
+            if (!data) { alert(t.no_export_data || '暂无可导出数据'); return; }
+            // Plain TSV — no title row so a direct paste into Excel/Sheets lands in a grid starting at the header.
+            const lines = [];
+            lines.push(data.header.join('\t'));
+            data.rows.forEach(r => {
+                lines.push(r.map((c, i) => i === 0 ? String(c) : _weeklyFormatCell(c, data.mode, false)).join('\t'));
+            });
+            lines.push(data.totalRow.map((c, i) => i === 0 ? String(c) : _weeklyFormatCell(c, data.mode, false)).join('\t'));
+            const tsv = lines.join('\r\n');
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(tsv);
+                } else {
+                    // Fallback for older browsers / insecure contexts
+                    const ta = document.createElement('textarea');
+                    ta.value = tsv;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                alert(t.copy_success || '已复制到剪贴板');
+            } catch (err) {
+                console.error('copyWeeklyTrendTsv failed:', err);
+                alert(t.copy_failed || '复制失败');
+            }
+        }
+
+        const btnWeeklyExportCsv = document.getElementById('btnWeeklyExportCsv');
+        if (btnWeeklyExportCsv) {
+            btnWeeklyExportCsv.addEventListener('click', exportWeeklyTrendCsv);
+        }
+        const btnWeeklyCopyTsv = document.getElementById('btnWeeklyCopyTsv');
+        if (btnWeeklyCopyTsv) {
+            btnWeeklyCopyTsv.addEventListener('click', copyWeeklyTrendTsv);
         }
 
         // Local calendar YYYY-MM-DD (avoid UTC shift from toISOString on boundaries)
@@ -2165,6 +2576,12 @@
             const sortedWeeks = Object.keys(weeks).sort();
             const routeList = Array.from(allRoutes).sort();
 
+            // Cache snapshot for CSV/TSV export (both metrics, regardless of current mode)
+            weeklyExportSnapshot = {
+                weeks: sortedWeeks,
+                routes: routeList,
+                matrix: weeks
+            };
 
             // Colors
             const routeColors = {

@@ -888,6 +888,34 @@ def init_db():
             except Exception:
                 pass
 
+        # Migration: outbound_records.mt_number — used as the dedup key for the
+        # incremental MT-based Google Sheet sync (K column rule). Filled only by
+        # the new sync flow;手工录入 / truck_bookings 聚合写入仍为 NULL，互不影响。
+        # PostgreSQL: ADD COLUMN IF NOT EXISTS supported (≥ 9.6).
+        # SQLite: PRAGMA table_info → ADD COLUMN if missing.
+        try:
+            if USE_POSTGRES:
+                cursor.execute(
+                    "ALTER TABLE outbound_records ADD COLUMN IF NOT EXISTS mt_number TEXT"
+                )
+                cursor.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS outbound_records_mt_number_uq "
+                    "ON outbound_records(mt_number) WHERE mt_number IS NOT NULL"
+                )
+            else:
+                cursor.execute("PRAGMA table_info(outbound_records)")
+                cols = {row[1] for row in cursor.fetchall()}
+                if "mt_number" not in cols:
+                    cursor.execute(
+                        "ALTER TABLE outbound_records ADD COLUMN mt_number TEXT"
+                    )
+                cursor.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS outbound_records_mt_number_uq "
+                    "ON outbound_records(mt_number) WHERE mt_number IS NOT NULL"
+                )
+        except Exception as _e:
+            print(f"[init_db] outbound_records.mt_number migration: {_e}")
+
         sql = convert_sql("""CREATE TABLE IF NOT EXISTS consumables (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name VARCHAR(50) UNIQUE NOT NULL,
@@ -2412,6 +2440,199 @@ def get_outbound_stats():
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
+
+
+def _tms_shuttle_sync_today():
+    """调用 scripts/sync_tms_shuttle_completed.py 的 sync_day 抓今天数据。"""
+    import importlib.util
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(base_dir, 'scripts', 'sync_tms_shuttle_completed.py')
+    if not os.path.exists(script_path):
+        return {'success': False, 'error': f'sync 脚本不存在: {script_path}'}
+    spec = importlib.util.spec_from_file_location('sync_tms_shuttle_completed', script_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    day = datetime.now().strftime('%Y-%m-%d')
+    return mod.sync_day(day)
+
+
+@app.route('/api/tms/shuttle-completed/pivot', methods=['GET'])
+def get_tms_shuttle_pivot():
+    """读取 gofo_tms_shuttle_split，按【目的地 × HH:00（实际发车时段）】聚合返回。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+
+    date_str = (request.args.get('date') or '').strip()
+    if not date_str:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    try:
+        datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': '日期格式无效，应为 YYYY-MM-DD'}), 400
+
+    hours = [f"{h:02d}:00" for h in range(24)]
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(convert_query_placeholders(
+            """
+            SELECT destination, actual_departure_time
+            FROM gofo_tms_shuttle_split
+            WHERE record_date = ?
+            """
+        ), (date_str,))
+        rows = cursor.fetchall()
+    except Exception as e:
+        msg = str(e)
+        if 'no such table' in msg.lower() or 'undefinedtable' in msg.lower() or 'does not exist' in msg.lower():
+            return jsonify({
+                'date': date_str, 'hours': hours,
+                'destinations': [], 'grand_total': 0,
+                'note': '表 gofo_tms_shuttle_split 不存在，请先运行同步'
+            })
+        print(f"Error get_tms_shuttle_pivot: {e}")
+        return jsonify({'error': msg}), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    matrix = {}
+    for r in rows:
+        try:
+            dest = r['destination']
+            t = r['actual_departure_time']
+        except Exception:
+            dest = r[0]
+            t = r[1]
+        dest = (dest or '').strip() or '未知'
+        hh_idx = None
+        if t:
+            ts = str(t).strip()
+            if len(ts) >= 2 and ts[:2].isdigit():
+                hi = int(ts[:2])
+                if 0 <= hi <= 23:
+                    hh_idx = hi
+        bucket = matrix.setdefault(dest, [0] * 24)
+        if hh_idx is None:
+            continue
+        bucket[hh_idx] += 1
+
+    out_rows = []
+    for name, hourly in matrix.items():
+        total = sum(hourly)
+        out_rows.append({'name': name, 'hourly': hourly, 'total': total})
+    out_rows.sort(key=lambda x: (-x['total'], x['name']))
+    grand = sum(r['total'] for r in out_rows)
+    return jsonify({
+        'date': date_str,
+        'hours': hours,
+        'destinations': out_rows,
+        'grand_total': grand,
+    })
+
+
+@app.route('/api/tms/shuttle-completed/sync', methods=['POST'])
+def post_tms_shuttle_sync():
+    """触发一次 TMS 短驳『已完成 + CNO.H』当日同步（手动按钮 / 计划任务都用它）。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        res = _tms_shuttle_sync_today()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    if not res.get('success'):
+        return jsonify(res), 500
+    return jsonify({
+        'success': True,
+        'date': res.get('date'),
+        'fetched': res.get('fetched'),
+        'stored': res.get('stored'),
+        'total_expected': res.get('total_expected'),
+    })
+
+
+@app.route('/api/tms/shuttle-completed', methods=['GET'])
+def get_tms_shuttle_completed():
+    """读取 gofo_tms_shuttle_split 表（始发地/目的地 + 拆分后的实际发车/到车日期与时间）。
+
+    数据由 scripts/sync_tms_shuttle_completed.py 同步：
+      - gofo_tms_shuttle_completed       字段全集（含 raw_json）
+      - gofo_tms_shuttle_split           本接口使用的展示子集（日期/时间已拆分入库）
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+
+    date_str = (request.args.get('date') or '').strip()
+    if not date_str:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    try:
+        datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': '日期格式无效，应为 YYYY-MM-DD'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(convert_query_placeholders(
+            """
+            SELECT task_no, place_of_origin, destination,
+                   actual_departure_date, actual_departure_time,
+                   actual_arrival_date,   actual_arrival_time
+            FROM gofo_tms_shuttle_split
+            WHERE record_date = ?
+            ORDER BY (actual_departure_date IS NULL),
+                     actual_departure_date,
+                     (actual_departure_time IS NULL),
+                     actual_departure_time
+            """
+        ), (date_str,))
+        rows = cursor.fetchall()
+    except Exception as e:
+        msg = str(e)
+        if 'no such table' in msg.lower() or 'undefinedtable' in msg.lower() or 'does not exist' in msg.lower():
+            return jsonify({
+                'success': True,
+                'date': date_str,
+                'rows': [],
+                'note': '表 gofo_tms_shuttle_split 不存在，请先运行 scripts/sync_tms_shuttle_completed.py'
+            })
+        print(f"Error get_tms_shuttle_completed: {e}")
+        return jsonify({'error': msg}), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    def _v(row, key, idx):
+        try:
+            return row[key]
+        except Exception:
+            return row[idx]
+
+    out = []
+    for r in rows:
+        out.append({
+            'task_no': _v(r, 'task_no', 0),
+            'place_of_origin': _v(r, 'place_of_origin', 1),
+            'destination': _v(r, 'destination', 2),
+            'actual_departure_date': _v(r, 'actual_departure_date', 3),
+            'actual_departure_time_only': _v(r, 'actual_departure_time', 4),
+            'actual_arrival_date': _v(r, 'actual_arrival_date', 5),
+            'actual_arrival_time_only': _v(r, 'actual_arrival_time', 6),
+        })
+
+    return jsonify({'success': True, 'date': date_str, 'rows': out})
 
 
 @app.route('/tabler-dashboard')
@@ -11002,12 +11223,25 @@ def _sync_truck_bookings_core(sheet_url, clear_before_sync=True):
 
         if date_col is None or to_col is None:
             return False, '表头缺少 DATE 或 TO 列，无法同步', 0
-            
+
+        # K 列 MT# 规则（与 standalone/route-distribution/app.py 口径一致）：
+        # 一行只有当对应"MT 列"以 'MT' 开头时才算实际发车。MT 列优先取
+        # 「无表头但每行写 MT2026...」的那列（即 2026 年 4 月起的 K 列），
+        # 找不到再退回到带 MT# 表头的列。这样旧表（MT 在 M）也能继续同步，新表（MT 在 K）也工作。
+        body_rows_for_mt = rows[start_index:]
+        exclude_for_mt = {c for c in (date_col, to_col, pickup_col, vendor_col, cost_col, driver_col, pickup_time_col) if c is not None}
+        mt_col = _resolve_mt_column(header_row or [], body_rows_for_mt, exclude_for_mt)
+
         print(
             f"[TruckSync] Header mapping: DATE={date_col}, TO={to_col}, "
-            f"PICKUP={pickup_col}, VENDOR={vendor_col}, COST={cost_col}",
+            f"PICKUP={pickup_col}, VENDOR={vendor_col}, COST={cost_col}, MT={mt_col}",
             flush=True,
         )
+        if mt_col < 0:
+            print(
+                "[TruckSync][WARN] 未在表中定位到 MT 列，本次同步将放弃 K-MT 过滤、按原 TO-非空逻辑处理。",
+                flush=True,
+            )
 
         synced_count = 0
         seen_pickup_no = set()
@@ -11015,12 +11249,21 @@ def _sync_truck_bookings_core(sheet_url, clear_before_sync=True):
         temp_pickup_no_count = 0
         duplicate_nonempty_pickup_no_count = 0
         duplicate_pickup_no_renamed_count = 0
+        skipped_no_mt_count = 0
         placeholder = get_placeholder()
         
         for row in rows[start_index:]:
             if len(row) < 3: continue
             raw_date = row[date_col].strip() if len(row) > date_col else ""
             if not raw_date or raw_date.upper() == 'DATE': continue
+
+            # K-列 MT# 过滤：只有 MT 列以 "MT" 开头的行才算一次实际发车。
+            # mt_col < 0 时（极旧表头解析失败）跳过过滤、退回原行为，已在上面 warn。
+            if mt_col >= 0:
+                mt_cell = row[mt_col].strip() if len(row) > mt_col else ""
+                if not _MT_FULL_RE.match(mt_cell):
+                    skipped_no_mt_count += 1
+                    continue
             
             try:
                 m_part, d_part = 0, 0
@@ -11177,6 +11420,10 @@ def _sync_truck_bookings_core(sheet_url, clear_before_sync=True):
             f"[TruckSync] pickup_no diagnostics: renamed_duplicates={duplicate_pickup_no_renamed_count}",
             flush=True,
         )
+        print(
+            f"[TruckSync] K-MT filter: skipped_rows_without_mt={skipped_no_mt_count}",
+            flush=True,
+        )
         return True, "Success", synced_count
         
     except Exception as e:
@@ -11187,6 +11434,60 @@ def _sync_truck_bookings_core(sheet_url, clear_before_sync=True):
         return False, str(e), 0
     finally:
         if 'conn' in locals() and conn: conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by the K-column MT filter that _sync_truck_bookings_core uses
+# below. Kept module-level so they're easy to unit-test / reuse.
+# ---------------------------------------------------------------------------
+_MT_FULL_RE = re.compile(r"^MT\d{6,}", re.IGNORECASE)
+
+
+def _resolve_mt_column(header_row, body_rows, exclude_idxs):
+    """
+    Find the column that holds the per-row MT# value.
+    Strategy (matches standalone/route-distribution/app.py):
+      1. Among columns whose HEADER cell is blank, pick the one with the most
+         "MT######" prefix hits — that's column K in the live 2026 sheet.
+      2. If no blank-header column has any hits, fall back to a column whose
+         header matches MT# / MT / 发车运单号 — preserves legacy sheets.
+      3. Otherwise return -1 (caller errors out).
+    """
+    if not body_rows:
+        return -1
+
+    def _hits(idx):
+        n = 0
+        for r in body_rows:
+            if idx < len(r) and _MT_FULL_RE.match(str(r[idx]).strip()):
+                n += 1
+        return n
+
+    max_col = max(len(r) for r in body_rows)
+    blank_best, blank_hits = -1, 0
+    for j in range(max_col):
+        if j in exclude_idxs:
+            continue
+        hcell = str(header_row[j]).strip() if j < len(header_row) else ""
+        if hcell:
+            continue
+        h = _hits(j)
+        if h > blank_hits:
+            blank_best, blank_hits = j, h
+
+    if blank_best >= 0 and blank_hits > 0:
+        return blank_best
+
+    mt_aliases = ("mt#", "mt #", "mt", "发车运单号", "运单号", "运单")
+    for j, cell in enumerate(header_row):
+        if j in exclude_idxs:
+            continue
+        s = str(cell or "").strip().lower()
+        for a in mt_aliases:
+            if s == a or s.startswith(a) or a in s:
+                return j
+    return -1
+
 
 @app.route('/api/admin/truck_bookings/sync', methods=['POST'])
 def sync_truck_bookings():
@@ -11998,7 +12299,21 @@ def gofo_hourly_sync_job():
                     print(f"[GofoAutoSync] center collect returned error: {cc_res.get('error')}")
             except Exception as e:
                 print(f"[GofoAutoSync] Center collect sync failed: {e}")
-                
+
+            # TMS 短驳运输任务（已完成 + CNO.H）当天数据同步
+            try:
+                print(f"[GofoAutoSync] Triggering TMS shuttle sync at {now_str}...")
+                ts_res = _tms_shuttle_sync_today()
+                if ts_res.get('success'):
+                    print(
+                        f"[GofoAutoSync] tms shuttle ok: {ts_res.get('date')} "
+                        f"fetched={ts_res.get('fetched')} stored={ts_res.get('stored')}"
+                    )
+                else:
+                    print(f"[GofoAutoSync] tms shuttle returned error: {ts_res.get('error')}")
+            except Exception as e:
+                print(f"[GofoAutoSync] TMS shuttle sync failed: {e}")
+
             synced_count = result.get('synced_count', 0)
             pieces = result.get('pieces', 0)
             hour = result.get('synced_hour')

@@ -542,7 +542,7 @@
         </div>
 
         <div class="section-title">
-            <span>透视表：日期 × 流向 <span class="badge" id="metricBadge">发车次数</span></span>
+            <span>透视表：日期 × 流向（与调度组模板预览同表头） <span class="badge" id="metricBadge">发车次数</span></span>
             <span class="hint" id="tableHint"></span>
         </div>
         <div class="table-wrap">
@@ -686,19 +686,39 @@
         // shift / drop / trailer variants collapse to the template's canonical
         // route code. Does NOT merge genuinely different routes (DFW-ATL stays
         // as DFW-ATL, MCO-MIA stays MCO-MIA).
+        // Aliases: business-level merges that map a normalized data route to
+        // the canonical template column key. E.g. plain 'EWR' / 'EWR DROP' /
+        // 'EWR-LAV-CNO-EWR' all collapse to 'EWR' here, and we route them
+        // into the 'EWR-JFK班次' template column (EWR shifts ultimately go to
+        // JFK per dispatch convention). Add more aliases here as needed.
+        const TEMPLATE_ROUTE_ALIASES = {
+            'EWR': 'EWR-JFK',
+            'PHX': 'PHX(TUC)',
+            'MIA': 'MIA-SJU',
+            'LAX': 'LAV'
+        };
+
         function normalizeRouteForTemplate(route) {
             if (!route) return '';
             let r = String(route).toUpperCase();
             // CNO-XXX rule takes precedence — return pure destination.
             const cnoDest = extractDestAfterCNO(r);
-            if (cnoDest) return cnoDest;
+            if (cnoDest) {
+                return TEMPLATE_ROUTE_ALIASES[cnoDest] || cnoDest;
+            }
+            // Strip ".H" / ".G" suffix on segments (legacy notation)
             r = r.replace(/\.[HG](?=[^A-Z0-9]|$)/g, '');
+            // Strip "-H" / "-G" suffix on the trailing 3-IATA segment
+            // (data variant of the ".H/.G" notation, e.g. 'ATL-ATL-G' → 'ATL-ATL').
+            // Only strip when preceded by a valid 3-letter IATA segment so we
+            // don't accidentally chop genuine multi-leg endpoints.
+            r = r.replace(/(-[A-Z]{3})-[HG](?=[^A-Z0-9]|$)/g, '$1');
             r = r.replace(/\s*[\(（][^)）]*[\)）].*$/, '');
             r = r.replace(/\s+DROP(\s+TRAILER)?\s*$/i, '');
             r = r.replace(/\s+/g, ' ').trim();
             const m = r.match(/^([A-Z0-9()]+)-\1$/);
             if (m) r = m[1];
-            return r;
+            return TEMPLATE_ROUTE_ALIASES[r] || r;
         }
 
         function enumerateDates(startISO, endISO) {
@@ -770,7 +790,31 @@
                 // Collect unique routes
                 const routeSet = new Set();
                 payload.forEach(r => routeSet.add(normalizeRoute(r.route_code, prefix)));
-                const routes = Array.from(routeSet).sort();
+                // Order columns to match 调度组模板预览 exactly.
+                // Each pivot route is mapped to the FIRST template entry it equals
+                // OR is a prefix of, so e.g. (default prefix=3):
+                //   'EWR' → 'EWR-JFK' slot, 'MIA' → 'MIA-SJU' slot,
+                //   'MOD' → 'MOD-SFO' slot, 'PHX' → 'PHX(TUC)' slot,
+                //   'DFW' → 'DFW' (exact) slot.
+                // Routes with no matching template entry land after template
+                // routes, sorted alphabetically (still visible, never lost).
+                const _orderCache = new Map();
+                const templateOrderOf = (rc) => {
+                    if (_orderCache.has(rc)) return _orderCache.get(rc);
+                    let idx = Number.POSITIVE_INFINITY;
+                    for (let i = 0; i < DISPATCH_TEMPLATE_ROUTES.length; i++) {
+                        const t = DISPATCH_TEMPLATE_ROUTES[i];
+                        if (t === rc || t.startsWith(rc)) { idx = i; break; }
+                    }
+                    _orderCache.set(rc, idx);
+                    return idx;
+                };
+                const routes = Array.from(routeSet).sort((a, b) => {
+                    const ai = templateOrderOf(a);
+                    const bi = templateOrderOf(b);
+                    if (ai !== bi) return ai - bi;
+                    return a.localeCompare(b);
+                });
 
                 // Init matrices (keep three parallel aggregates: count / vehicle_count / cost)
                 const matrix = {};        // current display metric (count or vehicle_count)
@@ -892,30 +936,84 @@
                 return;
             }
 
-            // Header
+            // Aggregate by TEMPLATE-normalized route (same logic as dispatch preview)
+            // so column headers match 调度组模板预览 exactly.
+            const tmplMatrix = {};
+            p.dates.forEach(d => { tmplMatrix[d] = {}; });
+            (p.rawRecords || []).forEach(r => {
+                const rd = (r.record_date || '').substring(0, 10);
+                if (!tmplMatrix[rd]) return;
+                const rc = normalizeRouteForTemplate(String(r.route_code || ''));
+                if (!rc) return;
+                if (!tmplMatrix[rd][rc]) {
+                    tmplMatrix[rd][rc] = { vehicles: 0, cost: 0, count: 0, hasData: false };
+                }
+                tmplMatrix[rd][rc].vehicles += Number(r.vehicle_count) || 0;
+                tmplMatrix[rd][rc].cost += Number(r.cost) || 0;
+                tmplMatrix[rd][rc].count += 1;
+                tmplMatrix[rd][rc].hasData = true;
+            });
+
+            const useVehicle = p.metric === 'vehicle_count';
+            const dispatchValueOf = (entry) => {
+                if (!entry || !entry.hasData) return null;
+                return useVehicle ? entry.vehicles : entry.count;
+            };
+
+            // Header — match DISPATCH_TEMPLATE_HEADER but skip 费用 columns; trailing 行合计
+            const visibleCols = DISPATCH_COLUMN_SPEC.filter(c => c.field !== '费用');
+
             let html = '<thead><tr>';
-            html += '<th class="date-col">日期</th>';
-            p.routes.forEach(rc => {
-                html += `<th>${escapeHtml(rc)}</th>`;
+            visibleCols.forEach(col => {
+                const cls = (col.field === '日期' || col.field === '是否提交') ? 'date-col' : '';
+                html += `<th class="${cls}" title="${escapeHtml(col.header)}">${escapeHtml(col.header)}</th>`;
             });
             html += '<th>行合计</th></tr></thead><tbody>';
 
-            // Body rows
+            // Body — one row per date, values mapped into the template grid
+            const colTotals = {}; // header → number
+            visibleCols.forEach(col => { colTotals[col.header] = 0; });
+            let grandTotal = 0;
+
             p.dates.forEach(d => {
-                html += `<tr><td class="date-cell">${d} <span style="color:var(--muted);font-size:11px;">(${getWeekday(d)})</span></td>`;
-                p.routes.forEach(rc => {
-                    const v = p.matrix[d][rc] || 0;
-                    html += `<td class="${v === 0 ? 'zero' : ''}">${v}</td>`;
+                let rowSum = 0;
+                html += '<tr>';
+                visibleCols.forEach(col => {
+                    if (col.field === '日期') {
+                        html += `<td class="date-cell">${d} <span style="color:var(--muted);font-size:11px;">(${getWeekday(d)})</span></td>`;
+                        return;
+                    }
+                    if (col.field === '是否提交') {
+                        html += '<td class="zero"></td>';
+                        return;
+                    }
+                    const entry = tmplMatrix[d][col.route];
+                    const v = (entry && entry.hasData) ? dispatchValueOf(entry) : null;
+                    if (v === null) {
+                        html += '<td class="zero"></td>';
+                    } else {
+                        const isZero = !v;
+                        html += `<td class="${isZero ? 'zero' : ''}">${v}</td>`;
+                        rowSum += Number(v) || 0;
+                        colTotals[col.header] += Number(v) || 0;
+                    }
                 });
-                html += `<td class="total-cell">${p.rowTotals[d]}</td></tr>`;
+                html += `<td class="total-cell">${rowSum}</td></tr>`;
+                grandTotal += rowSum;
             });
 
-            // Footer: column totals
-            html += '<tr class="total-row"><td class="date-cell">列合计</td>';
-            p.routes.forEach(rc => {
-                html += `<td>${p.colTotals[rc]}</td>`;
+            // Footer — column totals
+            html += '<tr class="total-row">';
+            visibleCols.forEach(col => {
+                if (col.field === '日期') {
+                    html += '<td class="date-cell">列合计</td>';
+                } else if (col.field === '是否提交') {
+                    html += '<td></td>';
+                } else {
+                    html += `<td>${colTotals[col.header] || 0}</td>`;
+                }
             });
-            html += `<td class="total-cell">${p.grandTotal}</td></tr>`;
+            html += `<td class="total-cell">${grandTotal}</td></tr>`;
 
             html += '</tbody>';
             table.innerHTML = html;
