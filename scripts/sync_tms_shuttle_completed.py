@@ -12,7 +12,7 @@
   actualDepartureStartTimeStr / actualDepartureEndTimeStr  时间类型=【实际发车时间】（与页面 UI 选择对应）
   返回字段 actualDepartureTime / actualArrivalTime 原样存，不做时区换算
 
-时区：America/Los_Angeles（与 sync_center_collect.py 一致）
+HTTP 头携带 User-Time-Zone=America/Los_Angeles 与浏览器一致；日期字符串按调用方传入原样提交，不做本地换算。
 
 用法：
   python scripts/sync_tms_shuttle_completed.py                       # 抓"今天"（系统本地日期）
@@ -51,6 +51,7 @@ DB_PATH = (
 CNO_H_ORIGIN_ID = 148
 TASK_STATUS_COMPLETED = "5"
 PAGE_SIZE = 200
+MAX_PAGES = 500
 
 
 def _headers(token: str) -> Dict[str, str]:
@@ -147,9 +148,6 @@ def _fetch_page(
             last_err = str(e)
             time.sleep(2 ** attempt)
     raise RuntimeError(f"pageList 请求失败: {last_err}")
-
-
-_HOUR_RE = None
 
 
 def _hour_bucket(actual_dep: Optional[str]) -> Optional[str]:
@@ -421,22 +419,44 @@ def sync_day(
     fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     rows: List[Dict[str, Any]] = []
     total_expected: Optional[int] = None
-    while True:
+    seen_tn: set = set()
+    while page <= MAX_PAGES:
         recs, total = _fetch_page(
             token, page, page_size, day_str, origin_id=origin_id
         )
-        if total is not None:
-            total_expected = total
-        rows.extend(recs)
+        if total is not None and total_expected is None:
+            try:
+                total_expected = int(total)
+            except (TypeError, ValueError):
+                pass
         if not recs:
             break
-        if total_expected is not None and len(rows) >= total_expected:
-            break
-        if len(recs) < page_size:
+        added = 0
+        for r in recs:
+            tid = r.get("taskNo")
+            if not tid:
+                continue
+            if tid not in seen_tn:
+                seen_tn.add(tid)
+                rows.append(r)
+                added += 1
+        if added == 0:
+            # 本页无新单号（重复页或异常），避免死循环
             break
         page += 1
         if sleep_between > 0:
             time.sleep(sleep_between)
+    else:
+        print(
+            f"警告: {day_str} 已达到最大页数 {MAX_PAGES}，可能未拉全",
+            file=sys.stderr,
+        )
+    if total_expected is not None and len(seen_tn) != total_expected:
+        print(
+            f"警告: {day_str} API total={total_expected} 去重后 task 数={len(seen_tn)}，"
+            f"合并行数={len(rows)}，请核对接口",
+            file=sys.stderr,
+        )
 
     conn = sqlite3.connect(DB_PATH)
     inserted = 0
