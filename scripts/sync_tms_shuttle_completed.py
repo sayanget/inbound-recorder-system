@@ -2,17 +2,20 @@
 # -*- coding: utf-8 -*-
 """
 拉取 GoFO DMS - TMS「短驳/运输任务」页面（vehicleManagement/transportationManagement/shuttle）
-按筛选「状态=已完成 / 始发地=CNO.H」的当天全部任务，按「实际发车时间(actualDepartureTime)」
-切成每个整点小时一桶，落到本地 SQLite 新表 gofo_tms_shuttle_completed。
+筛选「状态=已完成 / 始发地=CNO.H」，**仅按实际发车时间**。
+
+- **统计日 record_date**：默认 **当日 05:00:00～次日 04:59:59**（与 DMS User-Time-Zone 一致，洛杉矶本地钟点）。
+  例如选 2026-04-28 时，实际发车落在 [04-28 05:00, 04-29 04:59:59]。
+- 环境变量 `GOFO_TMS_SHUTTLE_DAY_START_HOUR` 可改起点小时（默认 5）；设为 `0` 或 `calendar` 则为自然日 00:00～23:59。
+- 入库前按解析后的 **actualDepartureTime** 再过滤到上述窗口（与接口窗一致，防边界漂移）。
+  跳过行级过滤：`GOFO_TMS_SHUTTLE_SKIP_ROW_WINDOW_FILTER=1`。
 
 接口：
   POST https://dms.gofoexpress.com/prod-api/dbu_tms/api/task/transportTask/pageList
   taskStatusList=["5"]            状态=已完成
   placeOfOriginList=[148]         CNO.H 中转 ID
-  actualDepartureStartTimeStr / actualDepartureEndTimeStr  时间类型=【实际发车时间】（与页面 UI 选择对应）
-  返回字段 actualDepartureTime / actualArrivalTime 原样存，不做时区换算
 
-HTTP 头携带 User-Time-Zone=America/Los_Angeles 与浏览器一致；日期字符串按调用方传入原样提交，不做本地换算。
+HTTP 头携带 User-Time-Zone=America/Los_Angeles 与浏览器一致。
 
 用法：
   python scripts/sync_tms_shuttle_completed.py                       # 抓"今天"（系统本地日期）
@@ -29,7 +32,7 @@ import os
 import sqlite3
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -74,6 +77,105 @@ def _headers(token: str) -> Dict[str, str]:
     }
 
 
+def _day_start_hour() -> int:
+    """默认 5=当日 05:00 至次日 04:59:59；0 / calendar=自然日。"""
+    raw = (os.environ.get("GOFO_TMS_SHUTTLE_DAY_START_HOUR") or "5").strip().lower()
+    if raw in ("0", "calendar", "midnight"):
+        return 0
+    try:
+        h = int(raw)
+    except ValueError:
+        h = 5
+    return max(0, min(23, h))
+
+
+def _actual_departure_window_bounds_dt(day_str: str) -> Tuple[datetime, datetime]:
+    """统计日实际发车闭区间 [start, end]，与 API 查询窗一致。"""
+    d = datetime.strptime(day_str.strip(), "%Y-%m-%d").date()
+    h0 = _day_start_hour()
+    if h0 <= 0:
+        lo = datetime.combine(d, datetime.min.time())
+        hi = datetime.combine(d, time(23, 59, 59))
+        return lo, hi
+    lo = datetime.combine(d, time(h0, 0, 0))
+    hi = lo + timedelta(days=1) - timedelta(seconds=1)
+    return lo, hi
+
+
+def _actual_departure_time_bounds(day_str: str) -> Tuple[str, str]:
+    """返回 API 用 actualDepartureStart/End 字符串。"""
+    lo, hi = _actual_departure_window_bounds_dt(day_str)
+    return lo.strftime("%Y-%m-%d %H:%M:%S"), hi.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _task_no_key(rec: Dict[str, Any]) -> Optional[str]:
+    for k in ("taskNo", "task_no", "transportTaskNo", "taskNumber"):
+        tn = rec.get(k)
+        if tn is not None:
+            s = str(tn).strip()
+            if s:
+                return s
+    return None
+
+
+def _parse_actual_departure_datetime(val: Any) -> Optional[datetime]:
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    if "." in s and " " in s:
+        s = s.split(".")[0].strip()
+    trial = [s]
+    if len(s) >= 19:
+        trial.append(s[:19])
+    for cand in trial:
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%m/%d/%Y %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%m/%d/%Y %H:%M",
+        ):
+            try:
+                return datetime.strptime(cand, fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def _filter_rows_actual_departure_window(
+    rows: List[Dict[str, Any]], day_str: str
+) -> List[Dict[str, Any]]:
+    """只保留实际发车时刻落在统计日窗口内的行。"""
+    if (os.environ.get("GOFO_TMS_SHUTTLE_SKIP_ROW_WINDOW_FILTER") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return rows
+    win_lo, win_hi = _actual_departure_window_bounds_dt(day_str)
+    out: List[Dict[str, Any]] = []
+    dropped_outside = 0
+    dropped_nodate = 0
+    for r in rows:
+        dt = _parse_actual_departure_datetime(r.get("actualDepartureTime"))
+        if dt is None:
+            dropped_nodate += 1
+            continue
+        if dt < win_lo or dt > win_hi:
+            dropped_outside += 1
+            continue
+        out.append(r)
+    n_drop = dropped_outside + dropped_nodate
+    if n_drop:
+        print(
+            f"提示: {day_str} [实际发车窗口 {win_lo} ~ {win_hi}] 筛掉 {n_drop} 条"
+            f"（窗外 {dropped_outside} / 无时间 {dropped_nodate}），保留 {len(out)} 条",
+            file=sys.stderr,
+        )
+    return out
+
+
 def _build_payload(
     page_num: int,
     page_size: int,
@@ -82,25 +184,29 @@ def _build_payload(
     origin_id: int,
     status_list: List[str],
 ) -> Dict[str, Any]:
+    dep_start, dep_end = _actual_departure_time_bounds(day_str)
+    data: Dict[str, Any] = {
+        "taskNos": [],
+        "supplierIdList": [],
+        "taskStatusList": list(status_list),
+        "lineIdList": [],
+        "transportationTypeList": [],
+        "placeOfOriginList": [origin_id],
+        "destinationList": [],
+        "vehicleAttributeList": [],
+        "dispatchTypeList": [],
+        "departTypeList": [],
+        "linePointIdList": [],
+        "licensePlateNoList": [],
+        "trailerNoList": [],
+        "actualDepartureStartTimeStr": dep_start,
+        "actualDepartureEndTimeStr": dep_end,
+    }
+    flag = (os.environ.get("GOFO_TMS_SHUTTLE_FORCE_TASK_STATUS") or "1").strip().lower()
+    if flag not in ("0", "false", "no", "off"):
+        data["forceTaskStatusList"] = [1, 2, 3, 4, 5, 6]
     return {
-        "data": {
-            "taskNos": [],
-            "supplierIdList": [],
-            "taskStatusList": list(status_list),
-            "lineIdList": [],
-            "transportationTypeList": [],
-            "placeOfOriginList": [origin_id],
-            "destinationList": [],
-            "vehicleAttributeList": [],
-            "dispatchTypeList": [],
-            "departTypeList": [],
-            "linePointIdList": [],
-            "forceTaskStatusList": [1, 2, 3, 4, 5, 6],
-            "actualDepartureStartTimeStr": f"{day_str} 00:00:00",
-            "actualDepartureEndTimeStr": f"{day_str} 23:59:59",
-            "licensePlateNoList": [],
-            "trailerNoList": [],
-        },
+        "data": data,
         "pageNum": page_num,
         "pageSize": page_size,
     }
@@ -148,6 +254,69 @@ def _fetch_page(
             last_err = str(e)
             time.sleep(2 ** attempt)
     raise RuntimeError(f"pageList 请求失败: {last_err}")
+
+
+def _fetch_all_pages_for_mode(
+    token: str,
+    day_str: str,
+    *,
+    origin_id: int,
+    page_size: int,
+    sleep_between: float,
+) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+    """按实际发车时间窗口分页拉全（record_date 业务日）。"""
+    log_tag = "actual_departure"
+    page = 1
+    rows: List[Dict[str, Any]] = []
+    total_expected: Optional[int] = None
+    seen_tn: set = set()
+    dup_streak = 0
+    while page <= MAX_PAGES:
+        recs, total = _fetch_page(
+            token, page, page_size, day_str, origin_id=origin_id
+        )
+        if total is not None and total_expected is None:
+            try:
+                total_expected = int(total)
+            except (TypeError, ValueError):
+                pass
+        if not recs:
+            break
+        added = 0
+        for r in recs:
+            tid = _task_no_key(r)
+            if not tid:
+                continue
+            if tid not in seen_tn:
+                seen_tn.add(tid)
+                rows.append(r)
+                added += 1
+        if total_expected is not None and len(seen_tn) >= total_expected:
+            break
+        if added == 0:
+            dup_streak += 1
+            if dup_streak >= 5:
+                print(
+                    f"警告: {day_str} [{log_tag}] 连续 {dup_streak} 页无新 task，停止分页",
+                    file=sys.stderr,
+                )
+                break
+        else:
+            dup_streak = 0
+        page += 1
+        if sleep_between > 0:
+            time.sleep(sleep_between)
+    else:
+        print(
+            f"警告: {day_str} [{log_tag}] 已达到最大页数 {MAX_PAGES}，可能未拉全",
+            file=sys.stderr,
+        )
+    if total_expected is not None and len(seen_tn) != total_expected:
+        print(
+            f"警告: {day_str} [{log_tag}] API total={total_expected} 去重 task 数={len(seen_tn)}",
+            file=sys.stderr,
+        )
+    return rows, total_expected
 
 
 def _hour_bucket(actual_dep: Optional[str]) -> Optional[str]:
@@ -277,14 +446,14 @@ def _split_dt(s: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
 
 
 def _split_row_tuple(rec: Dict[str, Any], date_str: str, fetched_at: str) -> Optional[Tuple[Any, ...]]:
-    task_no = rec.get("taskNo")
+    task_no = _task_no_key(rec)
     if not task_no:
         return None
     dep_d, dep_t = _split_dt(rec.get("actualDepartureTime"))
     arr_d, arr_t = _split_dt(rec.get("actualArrivalTime"))
     return (
         date_str,
-        str(task_no),
+        task_no,
         rec.get("placeOfOrigin"),
         rec.get("destination"),
         dep_d, dep_t,
@@ -294,12 +463,12 @@ def _split_row_tuple(rec: Dict[str, Any], date_str: str, fetched_at: str) -> Opt
 
 
 def _row_tuple(rec: Dict[str, Any], date_str: str, fetched_at: str) -> Optional[Tuple[Any, ...]]:
-    task_no = rec.get("taskNo")
+    task_no = _task_no_key(rec)
     if not task_no:
         return None
     return (
         date_str,
-        str(task_no),
+        task_no,
         _hour_bucket(rec.get("actualDepartureTime")),
         rec.get("taskStatus"),
         rec.get("taskStatusStr"),
@@ -415,55 +584,20 @@ def sync_day(
     sleep_between: float = 0.2,
 ) -> Dict[str, Any]:
     token = get_gofo_token()
-    page = 1
     fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    rows: List[Dict[str, Any]] = []
-    total_expected: Optional[int] = None
-    seen_tn: set = set()
-    while page <= MAX_PAGES:
-        recs, total = _fetch_page(
-            token, page, page_size, day_str, origin_id=origin_id
-        )
-        if total is not None and total_expected is None:
-            try:
-                total_expected = int(total)
-            except (TypeError, ValueError):
-                pass
-        if not recs:
-            break
-        added = 0
-        for r in recs:
-            tid = r.get("taskNo")
-            if not tid:
-                continue
-            if tid not in seen_tn:
-                seen_tn.add(tid)
-                rows.append(r)
-                added += 1
-        if added == 0:
-            # 本页无新单号（重复页或异常），避免死循环
-            break
-        page += 1
-        if sleep_between > 0:
-            time.sleep(sleep_between)
-    else:
-        print(
-            f"警告: {day_str} 已达到最大页数 {MAX_PAGES}，可能未拉全",
-            file=sys.stderr,
-        )
-    if total_expected is not None and len(seen_tn) != total_expected:
-        print(
-            f"警告: {day_str} API total={total_expected} 去重后 task 数={len(seen_tn)}，"
-            f"合并行数={len(rows)}，请核对接口",
-            file=sys.stderr,
-        )
+
+    actual_rows, _ = _fetch_all_pages_for_mode(
+        token, day_str, origin_id=origin_id, page_size=page_size,
+        sleep_between=sleep_between,
+    )
+    fetched_before_row_filter = len(actual_rows)
+    rows = _filter_rows_actual_departure_window(actual_rows, day_str.strip())
 
     conn = sqlite3.connect(DB_PATH)
     inserted = 0
     try:
         cur = conn.cursor()
         _ensure_table(cur)
-        # 先把这一天清空再重灌，避免之前用 planned 过滤留下的“同 record_date 但 actualDeparture 非当天”的脏数据
         cur.execute(f"DELETE FROM {TABLE} WHERE record_date = ?", (day_str,))
         cur.execute(f"DELETE FROM {TABLE_SPLIT} WHERE record_date = ?", (day_str,))
         tuples = []
@@ -491,12 +625,18 @@ def sync_day(
     finally:
         conn.close()
 
+    ds, de = _actual_departure_time_bounds(day_str)
     return {
         "success": True,
         "date": day_str,
         "fetched": len(rows),
+        "fetched_before_row_filter": fetched_before_row_filter,
+        "fetched_before_calendar_filter": fetched_before_row_filter,
+        "departure_window_filter": True,
         "stored": inserted,
-        "total_expected": total_expected,
+        "total_expected": None,
+        "actual_departure_window": {"start": ds, "end": de},
+        "day_start_hour": _day_start_hour(),
         "per_hour": per_hour,
         "db_path": DB_PATH,
         "table": TABLE,
@@ -587,8 +727,14 @@ def main() -> int:
         grand_stored += int(res.get("stored") or 0)
         per_day.append(res)
         print(
-            f"[{res['date']}] 抓取 {res['fetched']} / total {res['total_expected']}，"
-            f"入表 {res['stored']} 行"
+            f"[{res['date']}] 窗口过滤后 {res['fetched']} 条"
+            + (
+                f"（筛前 {res['fetched_before_row_filter']}）"
+                if res.get('fetched_before_row_filter') is not None
+                and res['fetched_before_row_filter'] != res['fetched']
+                else ""
+            )
+            + f"，入表 {res['stored']} 行"
         )
         if args.hour_summary and res.get("per_hour"):
             for hh, n in res["per_hour"].items():

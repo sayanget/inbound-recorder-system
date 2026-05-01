@@ -892,7 +892,7 @@
                 center_collect_backfilling: "正在回补最近 7 天…",
                 center_collect_table_title: "累计数据（按目的中心 × 时段）",
                 tms_shuttle_pivot_title: "短驳发车累计（流向 × 实际发车时段）",
-                tms_shuttle_pivot_hint: "数据来源：TMS 短驳运输任务（已完成 + CNO.H），按【实际发车时间】小时取整聚合。",
+                tms_shuttle_pivot_hint: "按所选日历日 00:00～23:59 的实际发车汇总到 0～23 点列（含可能落在前一日 record_date 的同步行）。业务窗 05:00～次日 04:59 见环境变量 GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1。",
                 center_collect_col_destin: "目的中心",
                 center_collect_col_total: "累计",
                 center_collect_row_sum: "合计",
@@ -1038,7 +1038,7 @@
                 center_collect_backfilling: "Backfilling last 7 days…",
                 center_collect_table_title: "Cumulative data (destination center × hour)",
                 tms_shuttle_pivot_title: "Shuttle dispatches (destination × actual departure hour)",
-                tms_shuttle_pivot_hint: "Source: TMS shuttle tasks (completed + CNO.H), bucketed by actual departure hour.",
+                tms_shuttle_pivot_hint: "Calendar day 00:00–23:59 actual departures → columns 0–23h (includes rows under prior record_date). Business window: env GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1.",
                 center_collect_col_destin: "Destination",
                 center_collect_col_total: "Total",
                 center_collect_row_sum: "Total",
@@ -1175,7 +1175,7 @@
                 center_collect_backfilling: "Rellenando últimos 7 días…",
                 center_collect_table_title: "Datos acumulados (centro destino × hora)",
                 tms_shuttle_pivot_title: "Despachos de lanzadera (destino × hora real de salida)",
-                tms_shuttle_pivot_hint: "Fuente: tareas de lanzadera TMS (completadas + CNO.H), agrupadas por hora real de salida.",
+                tms_shuttle_pivot_hint: "Día natural 00:00–23:59 salidas → columnas 0–23h. Ventana negocio: variable GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1.",
                 center_collect_col_destin: "Destino",
                 center_collect_col_total: "Total",
                 center_collect_row_sum: "Total",
@@ -5229,7 +5229,9 @@
                 const dests = (data && data.destinations) || [];
                 if (meta) {
                     const totalDispatch = (data && data.grand_total) || 0;
-                    meta.textContent = `${data && data.date ? data.date : ''} · 共 ${totalDispatch} 车`;
+                    const w = data && data.departure_window;
+                    const winText = (w && w.start && w.end) ? ` · ${w.start}～${w.end}` : '';
+                    meta.textContent = `${data && data.date ? data.date : ''}${winText} · 共 ${totalDispatch} 车`;
                 }
                 if (!dests.length) {
                     thead.innerHTML = `<tr><th style="padding:8px; color:#6c757d;">${(data && data.note) || (translations[currentLang].center_collect_empty || '暂无数据')}</th></tr>`;

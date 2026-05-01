@@ -682,7 +682,7 @@
                 sync_now: "立即同步",
                 export_csv: "导出 CSV",
                 tms_shuttle_title: "短驳运输任务（已完成 · CNO.H）",
-                tms_shuttle_subtitle: "数据来源：TMS / 同步脚本 sync_tms_shuttle_completed.py",
+                tms_shuttle_subtitle: "统计窗：所选日 05:00～次日 04:59:59 的实际发车（LA）· TMS / sync_tms_shuttle_completed.py",
                 tms_origin: "始发地",
                 tms_destination: "目的地",
                 tms_actual_dep_date: "实际发车日期",
@@ -752,7 +752,7 @@
                 sync_now: "Sync Now",
                 export_csv: "Export CSV",
                 tms_shuttle_title: "Shuttle Tasks (Completed · CNO.H)",
-                tms_shuttle_subtitle: "Source: TMS / sync script sync_tms_shuttle_completed.py",
+                tms_shuttle_subtitle: "Window: chosen day 05:00–next day 04:59:59, actual departure (LA) · TMS / sync_tms_shuttle_completed.py",
                 tms_origin: "Origin",
                 tms_destination: "Destination",
                 tms_actual_dep_date: "Actual Dep. Date",
@@ -822,7 +822,7 @@
                 sync_now: "Sincronizar Ahora",
                 export_csv: "Exportar CSV",
                 tms_shuttle_title: "Tareas de Lanzadera (Completadas · CNO.H)",
-                tms_shuttle_subtitle: "Fuente: TMS / script sync_tms_shuttle_completed.py",
+                tms_shuttle_subtitle: "Ventana: día elegido 05:00–día siguiente 04:59:59, salida real (LA) · TMS / sync_tms_shuttle_completed.py",
                 tms_origin: "Origen",
                 tms_destination: "Destino",
                 tms_actual_dep_date: "Fecha Salida Real",
@@ -916,9 +916,14 @@
         let _tmsShuttleDate = '';
         let _tmsShuttleAutoTimer = null;
 
-        function _todayLocalISO() {
-            const n = new Date();
-            return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+        function _todayLAISO() {
+            try {
+                const la = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+                return `${la.getFullYear()}-${String(la.getMonth() + 1).padStart(2, '0')}-${String(la.getDate()).padStart(2, '0')}`;
+            } catch (e) {
+                const n = new Date();
+                return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+            }
         }
 
         function initTmsShuttleTable() {
@@ -927,10 +932,10 @@
             const syncBtn = document.getElementById('tmsShuttleSyncBtn');
             const exportBtn = document.getElementById('tmsShuttleExportBtn');
             if (!dateInput || !btn) return;
-            dateInput.value = _todayLocalISO();
+            dateInput.value = _todayLAISO();
             btn.addEventListener('click', loadTmsShuttle);
             dateInput.addEventListener('change', loadTmsShuttle);
-            if (syncBtn) syncBtn.addEventListener('click', () => triggerTmsShuttleSync(true));
+            if (syncBtn) syncBtn.addEventListener('click', () => triggerTmsShuttleSync(true, false));
             if (exportBtn) exportBtn.addEventListener('click', exportTmsShuttleCsv);
             loadTmsShuttle();
             scheduleTmsShuttleAutoSync();
@@ -945,7 +950,7 @@
             const wait = Math.max(60_000, nextHour.getTime() - now.getTime());
             _tmsShuttleAutoTimer = setTimeout(async () => {
                 try {
-                    await triggerTmsShuttleSync(false);
+                    await triggerTmsShuttleSync(false, true);
                 } catch (e) {
                     console.warn('TMS shuttle auto-sync failed', e);
                 }
@@ -956,14 +961,22 @@
             if (el) el.textContent = `下次自动同步：${next}（每整点）`;
         }
 
-        async function triggerTmsShuttleSync(showAlert) {
+        async function triggerTmsShuttleSync(showAlert, forceLaToday) {
             const status = document.getElementById('tmsShuttleSyncStatus');
             const syncBtn = document.getElementById('tmsShuttleSyncBtn');
             if (syncBtn) syncBtn.disabled = true;
             if (status) status.textContent = '同步中...';
             try {
-                const resp = await fetch('/api/tms/shuttle-completed/sync',
-                    { method: 'POST', credentials: 'same-origin' });
+                const dateInput = document.getElementById('tmsShuttleDate');
+                const syncDate = forceLaToday
+                    ? _todayLAISO()
+                    : ((dateInput && dateInput.value) ? dateInput.value : _todayLAISO());
+                const resp = await fetch('/api/tms/shuttle-completed/sync', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: syncDate }),
+                });
                 const data = await resp.json().catch(() => ({}));
                 if (!resp.ok || data.success === false) {
                     const msg = (data && (data.error || data.msg)) || `HTTP ${resp.status}`;
@@ -975,11 +988,26 @@
                 const fetched = data.fetched != null ? data.fetched : '?';
                 const stored = data.stored != null ? data.stored : '?';
                 const ts = new Date().toLocaleTimeString();
-                if (status) status.textContent = `已同步 ${date}：抓取 ${fetched} 条 / 入表 ${stored} 条（${ts}）`;
-                const dateInput = document.getElementById('tmsShuttleDate');
-                if (dateInput && (!dateInput.value || dateInput.value === date)) {
-                    dateInput.value = date;
-                    loadTmsShuttle();
+                const win = data.actual_departure_window;
+                const winHint = (win && win.start && win.end)
+                    ? ` · 实际发车 ${win.start}～${win.end}`
+                    : '';
+                const rawN = data.fetched_before_row_filter != null && data.fetched_before_row_filter !== undefined
+                    ? data.fetched_before_row_filter
+                    : data.fetched_before_calendar_filter;
+                const calTag = (rawN != null && rawN !== fetched)
+                    ? `，筛前 ${rawN} 条`
+                    : '';
+                if (status) status.textContent = `已同步 ${date}：抓取 ${fetched} 条 / 入表 ${stored} 条${calTag}${winHint}（${ts}）`;
+                const dEl = document.getElementById('tmsShuttleDate');
+                const syncedDay = date || syncDate;
+                if (dEl) {
+                    if (forceLaToday) {
+                        if (dEl.value === syncedDay) loadTmsShuttle();
+                    } else {
+                        dEl.value = syncedDay;
+                        loadTmsShuttle();
+                    }
                 }
             } catch (err) {
                 if (status) status.textContent = `同步失败：${err.message || err}`;

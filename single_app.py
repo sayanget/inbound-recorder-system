@@ -23,7 +23,7 @@ if sys.platform == 'win32':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
     except:
         pass
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time as dtime
 import pytz
 import threading
 import time
@@ -2442,8 +2442,14 @@ def get_outbound_stats():
         conn.close()
 
 
-def _tms_shuttle_sync_today():
-    """调用 scripts/sync_tms_shuttle_completed.py 的 sync_day 抓今天数据。"""
+def _tms_shuttle_la_calendar_date() -> str:
+    """与 DMS 一致的洛杉矶日历日（短驳业务日）。"""
+    la = pytz.timezone('America/Los_Angeles')
+    return datetime.now(la).strftime('%Y-%m-%d')
+
+
+def _tms_shuttle_sync_date(day_str: str) -> dict:
+    """按指定 YYYY-MM-DD 执行 sync_day（LA 业务日或用户在页面上选择的日期）。"""
     import importlib.util
     base_dir = os.path.dirname(os.path.abspath(__file__))
     script_path = os.path.join(base_dir, 'scripts', 'sync_tms_shuttle_completed.py')
@@ -2452,13 +2458,118 @@ def _tms_shuttle_sync_today():
     spec = importlib.util.spec_from_file_location('sync_tms_shuttle_completed', script_path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    day = datetime.now().strftime('%Y-%m-%d')
-    return mod.sync_day(day)
+    return mod.sync_day(day_str)
+
+
+def _tms_shuttle_pivot_use_business_axis() -> bool:
+    """默认 False：统计 pivot 按自然日 00:00～23:59、列 00～23 点。
+    设 GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1 则与短驳同步业务窗（默认 05:00～次日 04:59）及业务列顺序一致。"""
+    return (os.environ.get('GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY') or '').strip().lower() in (
+        '1', 'true', 'yes', 'on',
+    )
+
+
+def _tms_shuttle_pivot_natural_calendar_bounds(day_str: str):
+    """所选日历日 00:00:00～23:59:59（与时钟 0～23 点列一致）。"""
+    d = datetime.strptime(day_str.strip(), '%Y-%m-%d').date()
+    lo = datetime.combine(d, dtime.min)
+    hi = datetime.combine(d, dtime(23, 59, 59))
+    return lo, hi
+
+
+def _tms_shuttle_pivot_candidate_record_dates(date_str: str):
+    """自然日 pivot：业务日 sync 下「日历 D」的发车可能在 record_date=D 或 D-1，两行都拉。"""
+    d = datetime.strptime(date_str.strip(), '%Y-%m-%d').date()
+    prev = (d - timedelta(days=1)).strftime('%Y-%m-%d')
+    return date_str, prev
+
+
+def _tms_shuttle_pivot_day_start_hour() -> int:
+    """与 sync_tms_shuttle_completed 一致：默认 5→05:00～次日 04:59:59。"""
+    raw = (os.environ.get('GOFO_TMS_SHUTTLE_DAY_START_HOUR') or '5').strip().lower()
+    if raw in ('0', 'calendar', 'midnight'):
+        return 0
+    try:
+        h = int(raw)
+    except ValueError:
+        h = 5
+    return max(0, min(23, h))
+
+
+def _tms_shuttle_pivot_window_bounds(day_str: str):
+    d = datetime.strptime(day_str.strip(), '%Y-%m-%d').date()
+    h0 = _tms_shuttle_pivot_day_start_hour()
+    if h0 <= 0:
+        lo = datetime.combine(d, dtime.min)
+        hi = datetime.combine(d, dtime(23, 59, 59))
+        return lo, hi
+    lo = datetime.combine(d, dtime(h0, 0, 0))
+    hi = lo + timedelta(days=1) - timedelta(seconds=1)
+    return lo, hi
+
+
+def _tms_shuttle_pivot_normalize_date_iso(d_val):
+    if d_val is None:
+        return None
+    ds = str(d_val).strip().replace('/', '-').split()[0]
+    if not ds:
+        return None
+    for fmt in ('%Y-%m-%d', '%m-%d-%Y', '%d-%m-%Y'):
+        try:
+            return datetime.strptime(ds, fmt).date().strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return None
+
+
+def _tms_shuttle_pivot_parse_depart_dt(d_val, t_val):
+    """拆分表 actual_departure_date + actual_departure_time → 本地 naive datetime。"""
+    if d_val is None or t_val is None:
+        return None
+    ds = str(d_val).strip().replace('/', '-')
+    ts = str(t_val).strip()
+    if not ds or not ts:
+        return None
+    if '.' in ts:
+        ts = ts.split('.')[0].strip()
+    pairs = []
+    for df in ('%Y-%m-%d', '%m-%d-%Y', '%d-%m-%Y'):
+        for tf in ('%H:%M:%S', '%H:%M'):
+            pairs.append((df, tf))
+    cand_dts = [ds]
+    if ' ' in ds:
+        cand_dts.append(ds.split()[0])
+    cand_ts = [ts]
+    if len(ts) >= 8 and ts.count(':') >= 1:
+        cand_ts.append(ts[:8])
+    for dpart in cand_dts:
+        for tpart in cand_ts:
+            for df, tf in pairs:
+                try:
+                    return datetime.strptime(f'{dpart} {tpart}', f'{df} {tf}')
+                except ValueError:
+                    continue
+    return None
+
+
+def _tms_shuttle_pivot_business_hour_labels(h0: int):
+    """24 列：自 h0 起顺排，如 5→ 05:00…23:00, 00:00…04:00。"""
+    if h0 <= 0:
+        return [f'{h:02d}:00' for h in range(24)]
+    return [f'{(h0 + i) % 24:02d}:00' for i in range(24)]
+
+
+def _tms_shuttle_pivot_business_hour_index(full_hour: int, h0: int):
+    if h0 <= 0:
+        return full_hour if 0 <= full_hour <= 23 else None
+    if full_hour >= h0:
+        return full_hour - h0
+    return full_hour + (24 - h0)
 
 
 @app.route('/api/tms/shuttle-completed/pivot', methods=['GET'])
 def get_tms_shuttle_pivot():
-    """读取 gofo_tms_shuttle_split，按【目的地 × HH:00（实际发车时段）】聚合返回。"""
+    """短驳 pivot：默认自然日 00:00～23:59，列 00～23 点；可选业务窗见 GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('outbound-stats'):
@@ -2466,23 +2577,38 @@ def get_tms_shuttle_pivot():
 
     date_str = (request.args.get('date') or '').strip()
     if not date_str:
-        date_str = datetime.now().strftime('%Y-%m-%d')
+        date_str = _tms_shuttle_la_calendar_date()
     try:
         datetime.strptime(date_str, '%Y-%m-%d')
     except ValueError:
         return jsonify({'error': '日期格式无效，应为 YYYY-MM-DD'}), 400
 
-    hours = [f"{h:02d}:00" for h in range(24)]
+    use_business = _tms_shuttle_pivot_use_business_axis()
+    if use_business:
+        h0 = _tms_shuttle_pivot_day_start_hour()
+        hours = _tms_shuttle_pivot_business_hour_labels(h0)
+        win_lo, win_hi = _tms_shuttle_pivot_window_bounds(date_str)
+        date_params = (date_str,)
+        where_sql = "record_date = ?"
+    else:
+        h0 = 0
+        hours = _tms_shuttle_pivot_business_hour_labels(0)
+        win_lo, win_hi = _tms_shuttle_pivot_natural_calendar_bounds(date_str)
+        d0, d1 = _tms_shuttle_pivot_candidate_record_dates(date_str)
+        where_sql = "record_date IN (?, ?)"
+        date_params = (d0, d1)
+
     conn = get_db()
     cursor = conn.cursor()
     try:
         cursor.execute(convert_query_placeholders(
-            """
-            SELECT destination, actual_departure_time
+            f"""
+            SELECT destination, actual_departure_date, actual_departure_time,
+                   actual_arrival_date, actual_arrival_time
             FROM gofo_tms_shuttle_split
-            WHERE record_date = ?
+            WHERE {where_sql}
             """
-        ), (date_str,))
+        ), date_params)
         rows = cursor.fetchall()
     except Exception as e:
         msg = str(e)
@@ -2490,7 +2616,13 @@ def get_tms_shuttle_pivot():
             return jsonify({
                 'date': date_str, 'hours': hours,
                 'destinations': [], 'grand_total': 0,
-                'note': '表 gofo_tms_shuttle_split 不存在，请先运行同步'
+                'note': '表 gofo_tms_shuttle_split 不存在，请先运行同步',
+                'pivot_mode': 'business' if use_business else 'natural',
+                'day_start_hour': h0,
+                'departure_window': {
+                    'start': win_lo.strftime('%Y-%m-%d %H:%M:%S'),
+                    'end': win_hi.strftime('%Y-%m-%d %H:%M:%S'),
+                },
             })
         print(f"Error get_tms_shuttle_pivot: {e}")
         return jsonify({'error': msg}), 500
@@ -2500,31 +2632,70 @@ def get_tms_shuttle_pivot():
         except Exception:
             pass
 
+    def _hour_from_clock(s):
+        if not s:
+            return None
+        parts = str(s).strip().split(':')
+        if not parts or not str(parts[0]).isdigit():
+            return None
+        hi = int(parts[0])
+        return hi if 0 <= hi <= 23 else None
+
     matrix = {}
+    dest_orphans = {}
+    skipped_outside = 0
+
     for r in rows:
         try:
             dest = r['destination']
-            t = r['actual_departure_time']
+            dep_d = r['actual_departure_date']
+            dep_t = r['actual_departure_time']
+            arr_d = r['actual_arrival_date']
+            arr_t = r['actual_arrival_time']
         except Exception:
             dest = r[0]
-            t = r[1]
+            dep_d = r[1]
+            dep_t = r[2]
+            arr_d = r[3] if len(r) > 3 else None
+            arr_t = r[4] if len(r) > 4 else None
+
         dest = (dest or '').strip() or '未知'
+        dt_dep = _tms_shuttle_pivot_parse_depart_dt(dep_d, dep_t)
+        dt_use = dt_dep
+        if dt_use is None and arr_d and arr_t:
+            dt_use = _tms_shuttle_pivot_parse_depart_dt(arr_d, arr_t)
+
         hh_idx = None
-        if t:
-            ts = str(t).strip()
-            if len(ts) >= 2 and ts[:2].isdigit():
-                hi = int(ts[:2])
-                if 0 <= hi <= 23:
-                    hh_idx = hi
-        bucket = matrix.setdefault(dest, [0] * 24)
+        if dt_use is not None:
+            if dt_use < win_lo or dt_use > win_hi:
+                skipped_outside += 1
+                continue
+            if use_business:
+                hh_idx = _tms_shuttle_pivot_business_hour_index(dt_use.hour, h0)
+            else:
+                hh_idx = dt_use.hour
         if hh_idx is None:
-            continue
+            t = dep_t if (dep_t and str(dep_t).strip()) else arr_t
+            clock_h = _hour_from_clock(t) if t else None
+            if clock_h is None:
+                dest_orphans[dest] = dest_orphans.get(dest, 0) + 1
+                continue
+            if not use_business:
+                dnorm = _tms_shuttle_pivot_normalize_date_iso(dep_d) or _tms_shuttle_pivot_normalize_date_iso(arr_d)
+                if dnorm != date_str:
+                    dest_orphans[dest] = dest_orphans.get(dest, 0) + 1
+                    continue
+            hh_idx = _tms_shuttle_pivot_business_hour_index(clock_h, h0) if use_business else clock_h
+
+        bucket = matrix.setdefault(dest, [0] * 24)
         bucket[hh_idx] += 1
 
+    all_names = set(matrix.keys()) | set(dest_orphans.keys())
     out_rows = []
-    for name, hourly in matrix.items():
-        total = sum(hourly)
-        out_rows.append({'name': name, 'hourly': hourly, 'total': total})
+    for name in all_names:
+        hourly = matrix.get(name, [0] * 24)
+        ox = dest_orphans.get(name, 0)
+        out_rows.append({'name': name, 'hourly': hourly, 'total': sum(hourly) + ox})
     out_rows.sort(key=lambda x: (-x['total'], x['name']))
     grand = sum(r['total'] for r in out_rows)
     return jsonify({
@@ -2532,18 +2703,34 @@ def get_tms_shuttle_pivot():
         'hours': hours,
         'destinations': out_rows,
         'grand_total': grand,
+        'pivot_mode': 'business' if use_business else 'natural',
+        'day_start_hour': h0,
+        'departure_window': {
+            'start': win_lo.strftime('%Y-%m-%d %H:%M:%S'),
+            'end': win_hi.strftime('%Y-%m-%d %H:%M:%S'),
+        },
+        'skipped_outside_window': skipped_outside,
     })
 
 
 @app.route('/api/tms/shuttle-completed/sync', methods=['POST'])
 def post_tms_shuttle_sync():
-    """触发一次 TMS 短驳『已完成 + CNO.H』当日同步（手动按钮 / 计划任务都用它）。"""
+    """触发 TMS 短驳同步。Body/Query 可选 date=YYYY-MM-DD；省略则用洛杉矶当日（与 DMS 一致）。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('outbound-stats'):
         return jsonify({'error': '无权限'}), 403
+    body = request.get_json(silent=True) or {}
+    day = (body.get('date') or request.args.get('date') or '').strip()
+    if not day:
+        day = _tms_shuttle_la_calendar_date()
+    else:
+        try:
+            datetime.strptime(day, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': '日期格式无效，应为 YYYY-MM-DD'}), 400
     try:
-        res = _tms_shuttle_sync_today()
+        res = _tms_shuttle_sync_date(day)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -2554,8 +2741,13 @@ def post_tms_shuttle_sync():
         'success': True,
         'date': res.get('date'),
         'fetched': res.get('fetched'),
+        'fetched_before_row_filter': res.get('fetched_before_row_filter'),
+        'fetched_before_calendar_filter': res.get('fetched_before_calendar_filter'),
+        'departure_window_filter': res.get('departure_window_filter'),
         'stored': res.get('stored'),
         'total_expected': res.get('total_expected'),
+        'actual_departure_window': res.get('actual_departure_window'),
+        'day_start_hour': res.get('day_start_hour'),
     })
 
 
@@ -2574,7 +2766,7 @@ def get_tms_shuttle_completed():
 
     date_str = (request.args.get('date') or '').strip()
     if not date_str:
-        date_str = datetime.now().strftime('%Y-%m-%d')
+        date_str = _tms_shuttle_la_calendar_date()
     try:
         datetime.strptime(date_str, '%Y-%m-%d')
     except ValueError:
@@ -12303,7 +12495,7 @@ def gofo_hourly_sync_job():
             # TMS 短驳运输任务（已完成 + CNO.H）当天数据同步
             try:
                 print(f"[GofoAutoSync] Triggering TMS shuttle sync at {now_str}...")
-                ts_res = _tms_shuttle_sync_today()
+                ts_res = _tms_shuttle_sync_date(_tms_shuttle_la_calendar_date())
                 if ts_res.get('success'):
                     print(
                         f"[GofoAutoSync] tms shuttle ok: {ts_res.get('date')} "
@@ -12702,14 +12894,21 @@ def api_center_collect_trend():
 
         time_points = []
         labels = []
-        for row in dates_result:
-            rd = _cc_norm_date(row["record_date"])
-            rh = _cc_norm_hour_slot(row["record_hour"])
-            dt_str = _cc_time_point_key(row["record_date"], row["record_hour"])
-            time_points.append(dt_str)
-            dp = rd.split("-")
-            short_date = f"{dp[1]}-{dp[2]}" if len(dp) == 3 else rd
-            labels.append(f"{short_date} {rh}" if not filter_date else rh)
+        # 单日：横轴固定 24 个整点（00:00–23:00），与库里是否已同步无关；缺数据在 series 里填 0
+        if filter_date:
+            for h in range(24):
+                rh = f"{h:02d}:00"
+                time_points.append(_cc_time_point_key(filter_date, rh))
+                labels.append(rh)
+        else:
+            for row in dates_result:
+                rd = _cc_norm_date(row["record_date"])
+                rh = _cc_norm_hour_slot(row["record_hour"])
+                dt_str = _cc_time_point_key(row["record_date"], row["record_hour"])
+                time_points.append(dt_str)
+                dp = rd.split("-")
+                short_date = f"{dp[1]}-{dp[2]}" if len(dp) == 3 else rd
+                labels.append(f"{short_date} {rh}")
 
         if not time_points:
             conn.close()
