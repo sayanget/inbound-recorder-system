@@ -118,14 +118,34 @@ def _task_no_key(rec: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _normalize_datetime_str(val: Any) -> str:
+    """统一为可解析的 'YYYY-MM-DD HH:MM:SS' 形态（兼容 ISO T / 毫秒 / Z 后缀）。"""
+    if val is None:
+        return ""
+    s = str(val).strip()
+    if not s:
+        return ""
+    if s.endswith("Z"):
+        s = s[:-1].strip()
+    # 去掉简单时区后缀，按与请求头一致的本地墙钟解析
+    for tzsuf in ("+00:00", "-00:00", "+08:00", "-08:00", "-07:00"):
+        if len(s) > len(tzsuf) and s.endswith(tzsuf):
+            s = s[: -len(tzsuf)].strip()
+            break
+    if "T" in s:
+        s = s.replace("T", " ", 1)
+    s = s.replace("/", "-")
+    if "." in s and " " in s:
+        s = s.split(".")[0].strip()
+    return s
+
+
 def _parse_actual_departure_datetime(val: Any) -> Optional[datetime]:
     if val is None:
         return None
-    s = str(val).strip()
+    s = _normalize_datetime_str(val)
     if not s:
         return None
-    if "." in s and " " in s:
-        s = s.split(".")[0].strip()
     trial = [s]
     if len(s) >= 19:
         trial.append(s[:19])
@@ -293,6 +313,9 @@ def _fetch_all_pages_for_mode(
                 added += 1
         if total_expected is not None and len(seen_tn) >= total_expected:
             break
+        # 未满一页说明已是末页，避免再多请求一页及误累计 dup_streak
+        if len(recs) < page_size:
+            break
         if added == 0:
             dup_streak += 1
             if dup_streak >= 5:
@@ -323,9 +346,9 @@ def _hour_bucket(actual_dep: Optional[str]) -> Optional[str]:
     """从 'YYYY-MM-DD HH:MM:SS' 抽出 'HH:00'。空值返回 None。"""
     if not actual_dep:
         return None
-    s = str(actual_dep).strip()
+    s = _normalize_datetime_str(actual_dep)
     # 兼容形如 'YYYY-MM-DD HH:MM:SS' 与 'MM/DD/YYYY HH:MM:SS'
-    parts = s.replace("/", "-").split(" ")
+    parts = s.split(" ", 1)
     if len(parts) < 2:
         return None
     hms = parts[1]
@@ -435,13 +458,15 @@ def _to_int(x: Any) -> Optional[int]:
 
 
 def _split_dt(s: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
-    """'YYYY-MM-DD HH:MM:SS' / 'MM/DD/YYYY HH:MM:SS' → (date, time)。空值返回 (None, None)。"""
+    """'YYYY-MM-DD HH:MM:SS' / 'MM/DD/YYYY HH:MM:SS' / ISO → (date, time)。空值返回 (None, None)。"""
     if not s:
         return None, None
-    raw = str(s).strip().replace("/", "-")
+    raw = _normalize_datetime_str(s)
+    if not raw:
+        return None, None
     parts = raw.split(" ", 1)
     if len(parts) != 2:
-        return raw or None, None
+        return None, None
     return parts[0] or None, parts[1] or None
 
 

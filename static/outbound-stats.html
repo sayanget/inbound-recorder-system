@@ -540,11 +540,38 @@
                 <div class="chart-container" style="position: relative; height: 500px;">
                     <canvas id="weeklyChart"></canvas>
                 </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin: 24px 0 4px 0;">
+                    <h4 data-lang="weekly_tb_split_title" style="margin: 0; font-size: 16px;">干线 / 支线（环比）</h4>
+                    <div class="btn-group" role="group" style="display: flex; gap: 5px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-outline-primary" id="btnWeeklyTbExportCsv"
+                            data-lang="export_csv"
+                            style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">导出 CSV</button>
+                        <button type="button" class="btn btn-outline-primary" id="btnWeeklyTbCopyTsv"
+                            data-lang="copy_tsv"
+                            style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">复制 TSV</button>
+                        <button type="button" class="btn btn-outline-primary" id="btnWeeklyTbExportHtml"
+                            data-lang="weekly_tb_export_interactive_html"
+                            style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">导出可交互 HTML</button>
+                    </div>
+                </div>
+                <div class="chart-container" style="position: relative; height: 480px;">
+                    <canvas id="weeklyTrunkBranchChart"></canvas>
+                </div>
             </div>
 
-            <div style="margin-bottom: 8px;">
-                <h3 data-lang="route_distribution" style="margin: 0 0 4px 0;">流向分布</h3>
-                <p data-lang="route_distribution_range" style="margin: 0; font-size: 13px; color: var(--text-muted, #666);">近 2 周（按日）</p>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <h3 data-lang="route_distribution" style="margin: 0 0 4px 0;">流向分布</h3>
+                    <p data-lang="route_distribution_range" style="margin: 0; font-size: 13px; color: var(--text-muted, #666);">近 2 周（按日）</p>
+                </div>
+                <div class="btn-group" role="group" style="display: flex; gap: 5px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-outline-primary" id="btnRouteDistExportCsv"
+                        data-lang="export_csv"
+                        style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">导出 CSV</button>
+                    <button type="button" class="btn btn-outline-primary" id="btnRouteDistCopyTsv"
+                        data-lang="copy_tsv"
+                        style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">复制 TSV</button>
+                </div>
             </div>
             <div class="chart-container" style="height: 500px;">
                 <canvas id="routeChart"></canvas>
@@ -696,6 +723,7 @@
                 total_cost: "总成本",
                 route_distribution: "流向分布",
                 route_distribution_range: "近 2 周（按日）",
+                route_distribution_export_title: "流向分布（近14日每日发车数，规范化目的地）",
                 no_data: "暂无数据",
                 logout: "登出",
                 save_success: "保存成功",
@@ -723,7 +751,20 @@
                 week_start: "周起始",
                 total: "合计",
                 weekly_trend_count_title: "每周趋势 - 发车数",
-                weekly_trend_cost_title: "每周趋势 - 成本（美元）"
+                weekly_trend_cost_title: "每周趋势 - 成本（美元）",
+                weekly_tb_split_title: "干线 / 支线（环比）",
+                wow_vs_prev: "环比上周",
+                weekly_tb_wow_axis: "环比 (%)",
+                weekly_tb_wow_axis_trunk: "干线环比 (%)",
+                weekly_tb_wow_axis_branch: "支线环比 (%)",
+                weekly_tb_legend_trunk_wow: "干线环比",
+                weekly_tb_legend_branch_wow: "支线环比",
+                weekly_tb_legend_total_wow: "总和环比",
+                weekly_tb_wow_axis_total: "总和环比 (%)",
+                weekly_tb_export_title: "干线-支线周统计（车次、环比%，周一起始）",
+                weekly_tb_export_interactive_html: "导出可交互 HTML",
+                weekly_tb_export_interactive_title: "干线支线环比（可交互）",
+                weekly_tb_export_interactive_hint: "请用浏览器打开本文件（需联网加载图表库）。点击图例可切换干线/支线柱及环比折线，与系统内一致。若要在 PowerPoint 中使用：可将此 HTML 与演示文稿放在同一文件夹，在幻灯片中插入「超链接」指向该文件，放映时打开即可交互；或全屏浏览器单独演示。若必须将静态图贴在幻灯片中，请使用「导出 CSV」在 Excel 中做堆积图后粘贴到 PPT，并用图表右上角的「筛选器」勾选或取消干线/支线系列。"
             },
             en: {
                 outbound_stats_title: "Outbound Statistics",
@@ -766,6 +807,7 @@
                 total_cost: "Total Cost",
                 route_distribution: "Route Distribution",
                 route_distribution_range: "Last 2 weeks (daily)",
+                route_distribution_export_title: "Route distribution (daily departures, 14 days, normalized destinations)",
                 no_data: "No data",
                 logout: "Logout",
                 save_success: "Saved successfully",
@@ -793,7 +835,20 @@
                 week_start: "Week Start",
                 total: "Total",
                 weekly_trend_count_title: "Weekly Trend - Vehicle Count",
-                weekly_trend_cost_title: "Weekly Trend - Cost (USD)"
+                weekly_trend_cost_title: "Weekly Trend - Cost (USD)",
+                weekly_tb_split_title: "Trunk / Branch (WoW %)",
+                wow_vs_prev: "WoW",
+                weekly_tb_wow_axis: "WoW (%)",
+                weekly_tb_wow_axis_trunk: "Trunk WoW (%)",
+                weekly_tb_wow_axis_branch: "Branch WoW (%)",
+                weekly_tb_legend_trunk_wow: "Trunk WoW",
+                weekly_tb_legend_branch_wow: "Branch WoW",
+                weekly_tb_legend_total_wow: "Total WoW",
+                weekly_tb_wow_axis_total: "Total WoW (%)",
+                weekly_tb_export_title: "Trunk/branch weekly trips & WoW % (week starts Monday)",
+                weekly_tb_export_interactive_html: "Export interactive HTML",
+                weekly_tb_export_interactive_title: "Trunk / branch WoW (interactive)",
+                weekly_tb_export_interactive_hint: "Open this file in a browser (needs network for chart libraries). Click the legend to show/hide trunk vs branch bars and sync the WoW line, same as in the app. For PowerPoint: keep the HTML next to your deck and add a hyperlink to it, or present it fullscreen in a browser. For a static picture in a slide, export CSV, build a stacked chart in Excel, paste into PPT, and use the chart filter to toggle series."
             },
             es: {
                 outbound_stats_title: "Estadísticas de Salida",
@@ -836,6 +891,7 @@
                 total_cost: "Costo Total",
                 route_distribution: "Distribución de Rutas",
                 route_distribution_range: "Últimas 2 semanas (por día)",
+                route_distribution_export_title: "Distribución de rutas (salidas diarias, 14 días, destinos normalizados)",
                 no_data: "Sin datos",
                 logout: "Cerrar sesión",
                 save_success: "Guardado exitosamente",
@@ -863,7 +919,20 @@
                 week_start: "Inicio de Semana",
                 total: "Total",
                 weekly_trend_count_title: "Tendencia Semanal - Cantidad",
-                weekly_trend_cost_title: "Tendencia Semanal - Costo (USD)"
+                weekly_trend_cost_title: "Tendencia Semanal - Costo (USD)",
+                weekly_tb_split_title: "Troncal / Ramificación (var. % sem. ant.)",
+                wow_vs_prev: "Vs sem. ant.",
+                weekly_tb_wow_axis: "Var. (%)",
+                weekly_tb_wow_axis_trunk: "Troncal var. (%)",
+                weekly_tb_wow_axis_branch: "Rama var. (%)",
+                weekly_tb_legend_trunk_wow: "Troncal var. %",
+                weekly_tb_legend_branch_wow: "Rama var. %",
+                weekly_tb_legend_total_wow: "Total var. %",
+                weekly_tb_wow_axis_total: "Total var. (%)",
+                weekly_tb_export_title: "Semanal troncal/rama viajes y var. % (lunes inicio)",
+                weekly_tb_export_interactive_html: "Exportar HTML interactivo",
+                weekly_tb_export_interactive_title: "Troncal/rama var. (interactivo)",
+                weekly_tb_export_interactive_hint: "Abra este archivo en un navegador (requiere red para las librerías). La leyenda alterna troncal/rama y la línea de variación como en la aplicación. En PowerPoint: enlace al HTML o presente el navegador a pantalla completa. Para imagen fija: exporte CSV, gráfico apilado en Excel, pegue en PPT y use el filtro del gráfico."
             }
         };
 
@@ -872,6 +941,39 @@
             trunk: ['MIA', 'MCO', 'DFW', 'ATL', 'ORD', 'IAH', 'EWR', 'CLT', 'JFK', 'LAS', 'PHX'],
             branch: ['LAX', 'DEN', 'SFO']
         };
+
+        /**
+         * 与 single_app.get_route_type 一致（卡车同步写入 outbound 时的分类）。
+         * 不可仅用 normalizeRoute(前三码/CNO)：复合 route_code 中含支线机场时应对齐后端关键词规则，否则会支→干、橙色柱消失。
+         */
+        function outboundRecordRouteType(record) {
+            const trunkRoutes = ['MIA', 'MCO', 'DFW', 'ATL', 'ORD', 'IAH', 'EWR', 'CLT', 'JFK'];
+            const branchRoutes = ['LAX', 'DEN', 'SFO', 'LAS', 'PHX'];
+            let cleanCode = String(record.route_code || '').trim().toUpperCase();
+            if (cleanCode.endsWith('.H')) cleanCode = cleanCode.slice(0, -2);
+            if (cleanCode.startsWith('LAV')) cleanCode = 'LAV';
+
+            if (trunkRoutes.includes(cleanCode)) return 'trunk';
+            if (branchRoutes.includes(cleanCode)) return 'branch';
+            for (let i = 0; i < trunkRoutes.length; i++) {
+                if (cleanCode.includes(trunkRoutes[i])) return 'trunk';
+            }
+            for (let i = 0; i < branchRoutes.length; i++) {
+                if (cleanCode.includes(branchRoutes[i])) return 'branch';
+            }
+            return 'branch';
+        }
+
+        function isWeeklyTbBranchRecord(record) {
+            return outboundRecordRouteType(record) === 'branch';
+        }
+
+        /** 每条记录贡献的车次（与库字段一致） */
+        function outboundTbTripWeight(record) {
+            const n = parseInt(record && record.vehicle_count, 10);
+            if (Number.isFinite(n) && n >= 1) return n;
+            return 1;
+        }
 
         let currentLang = localStorage.getItem('preferred_language') || localStorage.getItem('language') || 'zh';
         let currentDailyData = []; // Store for export
@@ -1138,6 +1240,10 @@
             if (currentLangText) currentLangText.textContent = langNames[lang];
             const navCurrentLang = document.getElementById('nav-currentLang');
             if (navCurrentLang) navCurrentLang.textContent = (lang || 'zh').toUpperCase();
+
+            if (typeof currentWeeklyData !== 'undefined' && currentWeeklyData && currentWeeklyData.length > 0) {
+                updateWeeklyTrunkBranchSplitChart(currentWeeklyData);
+            }
         }
 
         // Called by nav_component.js language dropdown
@@ -2153,6 +2259,8 @@
         }
 
         let routeChart = null;
+        // 与流向分布图一致：日期 × 规范化目的地 → 发车数；供 CSV/TSV 导出
+        let routeDistributionExportSnapshot = null;
 
         async function updateRouteChart() {
             const canvas = document.getElementById('routeChart');
@@ -2205,6 +2313,16 @@
                 }
             });
 
+            const countsCopy = {};
+            dates.forEach(d => {
+                countsCopy[d] = { ...(dateRouteMap[d] || {}) };
+            });
+            routeDistributionExportSnapshot = {
+                dates: dates.slice(),
+                routes: routeCodes.slice(),
+                counts: countsCopy
+            };
+
             // Colors for routes
             const colors = [
                 '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
@@ -2217,8 +2335,7 @@
                 label: rc,
                 data: dates.map(d => dateRouteMap[d][rc]),
                 backgroundColor: colors[i % colors.length],
-                borderColor: colors[i % colors.length],
-                borderWidth: 1
+                borderWidth: 0,
             }));
 
             // Format date labels as shorter format (MM/DD or weekday)
@@ -2246,7 +2363,7 @@
                         const xPos = x.getPixelForValue(i);
                         const yPos = y.getPixelForValue(total);
                         c.save();
-                        c.font = 'bold 13px Arial';
+                        c.font = 'bold 14px Arial';
                         c.fillStyle = chart.options?.plugins?.title?.color || '#333';
                         c.textAlign = 'center';
                         c.textBaseline = 'bottom';
@@ -2332,12 +2449,96 @@
             });
         }
 
+        function _routeDistributionBuildExportRows() {
+            const snap = routeDistributionExportSnapshot;
+            if (!snap || !snap.dates || !snap.dates.length) return null;
+            const t = translations[currentLang] || {};
+            const dateLabel = t.record_date || 'Date';
+            const totalLabel = t.total || '合计';
+            const title = t.route_distribution_export_title || (t.route_distribution || 'Route distribution');
+            const header = [dateLabel, ...snap.routes, totalLabel];
+            const rows = [];
+            const colTotals = new Array(snap.routes.length).fill(0);
+            let grandTotal = 0;
+            snap.dates.forEach(d => {
+                const row = [d];
+                let rowTotal = 0;
+                snap.routes.forEach((route, idx) => {
+                    const v = (snap.counts[d] && snap.counts[d][route] != null) ? snap.counts[d][route] : 0;
+                    row.push(v);
+                    rowTotal += v;
+                    colTotals[idx] += v;
+                });
+                row.push(rowTotal);
+                grandTotal += rowTotal;
+                rows.push(row);
+            });
+            const totalRow = [totalLabel, ...colTotals, grandTotal];
+            return { title, header, rows, totalRow };
+        }
+
+        function exportRouteDistributionCsv() {
+            const data = _routeDistributionBuildExportRows();
+            const t = translations[currentLang] || {};
+            if (!data) { alert(t.no_export_data || '暂无可导出数据'); return; }
+            const lines = [];
+            if (data.title) lines.push(_csvEscape(data.title));
+            lines.push(data.header.map(_csvEscape).join(','));
+            data.rows.forEach(r => {
+                lines.push(r.map(c => _csvEscape(c)).join(','));
+            });
+            lines.push(data.totalRow.map(c => _csvEscape(c)).join(','));
+            const csv = '\uFEFF' + lines.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const stamp = formatLocalDateISO(new Date());
+            a.href = url;
+            a.download = `route_distribution_${stamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function copyRouteDistributionTsv() {
+            const data = _routeDistributionBuildExportRows();
+            const t = translations[currentLang] || {};
+            if (!data) { alert(t.no_export_data || '暂无可导出数据'); return; }
+            const lines = [];
+            lines.push(data.header.join('\t'));
+            data.rows.forEach(r => lines.push(r.map(c => String(c)).join('\t')));
+            lines.push(data.totalRow.map(c => String(c)).join('\t'));
+            const tsv = lines.join('\r\n');
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(tsv);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = tsv;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                alert(t.copy_success || '已复制到剪贴板');
+            } catch (err) {
+                console.error('copyRouteDistributionTsv failed:', err);
+                alert(t.copy_failed || '复制失败');
+            }
+        }
+
         let weeklyChart = null;
+        let weeklyTrunkBranchChart = null;
         let weeklyChartMode = 'cost'; // 'count' or 'cost'
         let currentWeeklyData = []; // Store weekly data separately
         // Snapshot of the last rendered weekly matrix; consumed by CSV/TSV export
         // Shape: { weeks: [YYYY-MM-DD,...], routes: [code,...], counts: {week: {route: n}}, costs: {week: {route: $}} }
         let weeklyExportSnapshot = null;
+        /** 干线/支线周表：供 CSV/TSV */
+        let weeklyTbExportSnapshot = null;
 
         // Initialize chart toggles
         const btnWeeklyCount = document.getElementById('btnWeeklyCount');
@@ -2497,6 +2698,388 @@
             }
         }
 
+        function _weeklyTbWowExportCell(v) {
+            if (v == null || !Number.isFinite(v)) return '';
+            return (Math.round(v * 100) / 100).toFixed(2);
+        }
+
+        function _weeklyTbBuildExportRows() {
+            const snap = weeklyTbExportSnapshot;
+            if (!snap || !snap.weeks.length) return null;
+            const t = translations[currentLang] || {};
+            const header = [
+                t.week_start || 'Week start',
+                t.trunk_line || 'Trunk',
+                t.branch_line || 'Branch',
+                t.total || 'Total',
+                t.weekly_tb_wow_axis_trunk || 'Trunk WoW %',
+                t.weekly_tb_wow_axis_branch || 'Branch WoW %',
+                t.weekly_tb_wow_axis_total || 'Total WoW %',
+            ];
+            const rows = snap.weeks.map((w, i) => {
+                const trunk = snap.trunk[i] || 0;
+                const branch = snap.branch[i] || 0;
+                const tot = trunk + branch;
+                return [
+                    w,
+                    trunk,
+                    branch,
+                    tot,
+                    _weeklyTbWowExportCell(snap.trunkWow[i]),
+                    _weeklyTbWowExportCell(snap.branchWow[i]),
+                    _weeklyTbWowExportCell(snap.totalWow != null ? snap.totalWow[i] : null),
+                ];
+            });
+            let sumTrunk = 0;
+            let sumBranch = 0;
+            let sumTot = 0;
+            rows.forEach(r => {
+                sumTrunk += r[1];
+                sumBranch += r[2];
+                sumTot += r[3];
+            });
+            const totalLabel = t.total || 'Total';
+            const totalRow = [totalLabel, sumTrunk, sumBranch, sumTot, '', '', ''];
+            return {
+                title: t.weekly_tb_export_title || '',
+                header,
+                rows,
+                totalRow,
+            };
+        }
+
+        function exportWeeklyTbCsv() {
+            const data = _weeklyTbBuildExportRows();
+            const t = translations[currentLang] || {};
+            if (!data) {
+                alert(t.no_export_data || '暂无可导出数据');
+                return;
+            }
+            const lines = [];
+            if (data.title) lines.push(_csvEscape(data.title));
+            lines.push(data.header.map(_csvEscape).join(','));
+            data.rows.forEach(r => {
+                lines.push(r.map(c => _csvEscape(c)).join(','));
+            });
+            lines.push(data.totalRow.map(c => _csvEscape(c)).join(','));
+            const csv = '\uFEFF' + lines.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const stamp = formatLocalDateISO(new Date());
+            a.href = url;
+            a.download = `weekly_trunk_branch_${stamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function copyWeeklyTbTsv() {
+            const data = _weeklyTbBuildExportRows();
+            const t = translations[currentLang] || {};
+            if (!data) {
+                alert(t.no_export_data || '暂无可导出数据');
+                return;
+            }
+            const lines = [];
+            lines.push(data.header.join('\t'));
+            data.rows.forEach(r => lines.push(r.map(c => String(c)).join('\t')));
+            lines.push(data.totalRow.map(c => String(c)).join('\t'));
+            const tsv = lines.join('\r\n');
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(tsv);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = tsv;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                alert(t.copy_success || '已复制到剪贴板');
+            } catch (err) {
+                console.error('copyWeeklyTbTsv failed:', err);
+                alert(t.copy_failed || '复制失败');
+            }
+        }
+
+        /** 独立 HTML 内联脚本：与 updateWeeklyTrunkBranchSplitChart 图例/环比逻辑一致（ES5 语法） */
+        const WEEKLY_TB_EXPORT_BOOTSTRAP = `(function(){
+'use strict';
+var plEl=document.getElementById('pl');
+if(!plEl)return;
+var P=JSON.parse(plEl.textContent||'{}');
+var L=P.i18n||{};
+var M=P.meta||{};
+var h=document.getElementById('hint');
+if(h&&M.hint)h.textContent=M.hint;
+if(M.docTitle)document.title=M.docTitle;
+var axis=P.axisLabels||[];
+var trunkData=P.trunk||[];
+var branchData=P.branch||[];
+var trunkWow=P.trunkWow||[];
+var branchWow=P.branchWow||[];
+var totalWow=P.totalWow||[];
+var weekTotalsTb=axis.map(function(_,i){
+return (trunkData[i]||0)+(branchData[i]||0);
+});
+function wowLine(arr){
+return arr.map(function(v){
+return (v==null||!Number.isFinite(v))?null:v;
+});
+}
+var trunkWowLine=wowLine(trunkWow);
+var branchWowLine=wowLine(branchWow);
+var totalWowLine=wowLine(totalWow);
+var trunkLabel=L.trunk||'Trunk';
+var branchLabel=L.branch||'Branch';
+var trunkWowLegend=L.trunkWowLegend||'';
+var branchWowLegend=L.branchWowLegend||'';
+var totalWowLegend=L.totalWowLegend||'';
+var countTitle=L.countTitle||'';
+var wowAxisSharedTitle=L.wowAxisSharedTitle||'';
+function weeklyTbDataY(ctx){
+var raw=ctx.dataset.data[ctx.dataIndex];
+if(raw==null||raw==='')return null;
+var y=typeof raw==='number'?raw:Number(raw);
+return Number.isFinite(y)?y:null;
+}
+var barDatalabelsWeeklyTb={
+display:function(ctx){var y=weeklyTbDataY(ctx);return y!=null&&y>0;},
+color:'#ffffff',
+align:'center',
+anchor:'center',
+clamp:true,
+font:{size:11,weight:'bold',lineHeight:1.2},
+formatter:function(value,ctx){
+var v=weeklyTbDataY(ctx);
+if(v==null||v<=0)return'';
+var idx=ctx.dataIndex;
+var total=weekTotalsTb[idx]||0;
+var pct=total>0?((v/total)*100).toFixed(1):'0.0';
+return String(Math.round(v))+'\\n'+pct+'%';
+}
+};
+function lineWowDatalabelsWeeklyTb(color,vertical){
+var above=vertical==='above';
+return {
+display:function(ctx){
+var y=weeklyTbDataY(ctx);
+return y!=null&&Number.isFinite(y);
+},
+color:color,
+backgroundColor:'rgba(255,255,255,0.92)',
+borderColor:color,
+borderWidth:1,
+borderRadius:4,
+padding:{top:2,bottom:2,left:4,right:4},
+align:above?'top':'bottom',
+anchor:'center',
+offset:12,
+clip:false,
+font:{size:11,weight:'bold'},
+formatter:function(value,ctx){
+var py=weeklyTbDataY(ctx);
+if(py==null||!Number.isFinite(py))return'';
+var sign=py>0?'+':'';
+return sign+py.toFixed(1)+'%';
+}
+};
+}
+function applyWeeklyTbLegendWowMode(chart){
+if(!chart||!chart.data||chart.data.datasets.length<3)return;
+var v0=chart.isDatasetVisible(0);
+var v1=chart.isDatasetVisible(1);
+var lineDs=chart.data.datasets[2];
+var onlyTrunk=v0&&!v1;
+var onlyBranch=!v0&&v1;
+var both=v0&&v1;
+var neither=!v0&&!v1;
+if(neither){
+chart.setDatasetVisibility(2,false);
+lineDs.data=totalWowLine.map(function(){return null;});
+}else{
+chart.setDatasetVisibility(2,true);
+if(both){
+lineDs.data=totalWowLine.slice();
+lineDs.label=totalWowLegend;
+lineDs.borderColor='#374151';
+lineDs.pointBackgroundColor='#374151';
+lineDs.borderDash=[8,4];
+lineDs.datalabels=lineWowDatalabelsWeeklyTb('#374151','above');
+}else if(onlyTrunk){
+lineDs.data=trunkWowLine.slice();
+lineDs.label=trunkWowLegend;
+lineDs.borderColor='#1e40af';
+lineDs.pointBackgroundColor='#1e40af';
+lineDs.borderDash=[6,3];
+lineDs.datalabels=lineWowDatalabelsWeeklyTb('#1e40af','above');
+}else if(onlyBranch){
+lineDs.data=branchWowLine.slice();
+lineDs.label=branchWowLegend;
+lineDs.borderColor='#c2410c';
+lineDs.pointBackgroundColor='#c2410c';
+lineDs.borderDash=[2,3];
+lineDs.datalabels=lineWowDatalabelsWeeklyTb('#c2410c','above');
+}
+}
+chart.update();
+}
+if(typeof Chart==='undefined'||typeof ChartDataLabels==='undefined')return;
+Chart.register(ChartDataLabels);
+var canvas=document.getElementById('weeklyTbStandaloneCanvas');
+if(!canvas)return;
+var ctx=canvas.getContext('2d');
+var trunkBarFill='rgba(37,99,235,0.92)';
+var branchBarFill='rgba(234,88,12,0.95)';
+var __weeklyTbChart=new Chart(ctx,{
+type:'bar',
+data:{
+labels:axis,
+datasets:[
+{type:'bar',yAxisID:'y',label:trunkLabel,data:trunkData,backgroundColor:axis.map(function(){return trunkBarFill;}),borderWidth:0,hoverBackgroundColor:'#1d4ed8',stack:'tb',order:2,datalabels:barDatalabelsWeeklyTb},
+{type:'bar',yAxisID:'y',label:branchLabel,data:branchData,backgroundColor:axis.map(function(){return branchBarFill;}),borderWidth:0,hoverBackgroundColor:'#ea580c',stack:'tb',order:2,datalabels:barDatalabelsWeeklyTb},
+{type:'line',label:totalWowLegend,data:totalWowLine.slice(),yAxisID:'y1',borderColor:'#374151',backgroundColor:'transparent',borderWidth:2,borderDash:[8,4],tension:0.35,spanGaps:false,pointRadius:7,pointBorderWidth:2,pointBorderColor:'#fff',pointBackgroundColor:'#374151',pointHoverRadius:10,order:1,datalabels:lineWowDatalabelsWeeklyTb('#374151','above')}
+]
+},
+options:{
+responsive:true,
+maintainAspectRatio:false,
+interaction:{mode:'index',intersect:false},
+plugins:{
+legend:{
+position:'bottom',
+labels:{font:{size:15,weight:'600'},boxWidth:56,boxHeight:10,padding:16},
+onClick:function(evt,legendItem,legend){
+var ch=legend.chart;
+var idx=legendItem.datasetIndex;
+ch.setDatasetVisibility(idx,!ch.isDatasetVisible(idx));
+if(idx===0||idx===1){
+applyWeeklyTbLegendWowMode(ch);
+}else{
+ch.update();
+}
+}
+},
+title:{display:true,text:countTitle},
+tooltip:{
+mode:'index',
+intersect:false,
+callbacks:{
+label:function(ctx){
+var ds=ctx.dataset;
+var idx=ctx.dataIndex;
+var y=ctx.parsed!=null?ctx.parsed.y:null;
+if(ds.type==='line'){
+var lab=ds.label||'';
+if(lab)lab+=': ';
+if(y==null||!Number.isFinite(y))return lab+'\\u2014';
+var sign=y>0?'+':'';
+return lab+sign+y.toFixed(1)+'%';
+}
+var label=ds.label||'';
+if(label)label+=': ';
+if(y!=null)label+=y;
+var tot=weekTotalsTb[idx]||0;
+if(tot>0&&y!=null){
+label+=' ('+((y/tot)*100).toFixed(1)+'%)';
+}
+return label;
+}
+}
+}
+},
+scales:{
+x:{stacked:true},
+y:{type:'linear',stacked:true,beginAtZero:true,position:'left',title:{display:true,text:countTitle}},
+y1:{type:'linear',display:true,position:'right',offset:false,grid:{drawOnChartArea:false},title:{display:true,text:wowAxisSharedTitle},ticks:{callback:function(v){return v+'%';}}}
+}
+}
+});
+applyWeeklyTbLegendWowMode(__weeklyTbChart);
+})();`;
+
+        /** 干线/支线图：下载独立 HTML，内含与页面一致的图例切换与环比折线（需 CDN 联网）。 */
+        function exportWeeklyTbInteractiveHtml() {
+            const snap = weeklyTbExportSnapshot;
+            const t = translations[currentLang] || {};
+            if (!snap || !snap.weeks.length) {
+                alert(t.no_export_data || '暂无可导出数据');
+                return;
+            }
+            let totalWowArr = snap.totalWow;
+            if (!totalWowArr || totalWowArr.length !== snap.weeks.length) {
+                totalWowArr = snap.weeks.map((_, i) => {
+                    if (i < 1) return null;
+                    const tr = snap.trunk || [];
+                    const br = snap.branch || [];
+                    const prev = (tr[i - 1] || 0) + (br[i - 1] || 0);
+                    const cur = (tr[i] || 0) + (br[i] || 0);
+                    if (prev <= 0) return null;
+                    return ((cur - prev) / prev) * 100;
+                });
+            }
+            const payload = {
+                axisLabels: weeklyChartAxisLabels(snap.weeks),
+                trunk: snap.trunk,
+                branch: snap.branch,
+                trunkWow: snap.trunkWow,
+                branchWow: snap.branchWow,
+                totalWow: totalWowArr,
+                i18n: {
+                    trunk: t.trunk_line || '干线',
+                    branch: t.branch_line || '支线',
+                    trunkWowLegend: t.weekly_tb_legend_trunk_wow || '干线环比',
+                    branchWowLegend: t.weekly_tb_legend_branch_wow || '支线环比',
+                    totalWowLegend: t.weekly_tb_legend_total_wow || '总和环比',
+                    countTitle: t.vehicle_count || '发车数量',
+                    wowAxisSharedTitle: t.weekly_tb_wow_axis || '环比 (%)',
+                },
+                meta: {
+                    docTitle: t.weekly_tb_export_interactive_title || '干线支线环比',
+                    hint: t.weekly_tb_export_interactive_hint || '',
+                },
+            };
+            const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+            const langAttr = currentLang === 'en' ? 'en' : (currentLang === 'es' ? 'es' : 'zh-CN');
+            const html = `<!DOCTYPE html>
+<html lang="${langAttr}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${(payload.meta.docTitle || '').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" crossorigin="anonymous"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" crossorigin="anonymous"><\/script>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;margin:16px;background:#f5f5f5}
+.hint{font-size:13px;color:#444;max-width:960px;line-height:1.55;margin-bottom:14px}
+.chart-box{height:480px;max-width:960px;background:#fff;padding:10px 12px 18px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+</style>
+</head>
+<body>
+<p class="hint" id="hint"></p>
+<div class="chart-box"><canvas id="weeklyTbStandaloneCanvas"></canvas></div>
+<script type="application/json" id="pl">${safeJson}<\/script>
+<script>
+${WEEKLY_TB_EXPORT_BOOTSTRAP}
+<\/script>
+</body>
+</html>`;
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `weekly_trunk_branch_interactive_${formatLocalDateISO(new Date())}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
         const btnWeeklyExportCsv = document.getElementById('btnWeeklyExportCsv');
         if (btnWeeklyExportCsv) {
             btnWeeklyExportCsv.addEventListener('click', exportWeeklyTrendCsv);
@@ -2506,12 +3089,116 @@
             btnWeeklyCopyTsv.addEventListener('click', copyWeeklyTrendTsv);
         }
 
+        const btnRouteDistExportCsv = document.getElementById('btnRouteDistExportCsv');
+        if (btnRouteDistExportCsv) {
+            btnRouteDistExportCsv.addEventListener('click', exportRouteDistributionCsv);
+        }
+        const btnRouteDistCopyTsv = document.getElementById('btnRouteDistCopyTsv');
+        if (btnRouteDistCopyTsv) {
+            btnRouteDistCopyTsv.addEventListener('click', copyRouteDistributionTsv);
+        }
+
+        const btnWeeklyTbExportCsv = document.getElementById('btnWeeklyTbExportCsv');
+        if (btnWeeklyTbExportCsv) {
+            btnWeeklyTbExportCsv.addEventListener('click', exportWeeklyTbCsv);
+        }
+        const btnWeeklyTbCopyTsv = document.getElementById('btnWeeklyTbCopyTsv');
+        if (btnWeeklyTbCopyTsv) {
+            btnWeeklyTbCopyTsv.addEventListener('click', copyWeeklyTbTsv);
+        }
+        const btnWeeklyTbExportHtml = document.getElementById('btnWeeklyTbExportHtml');
+        if (btnWeeklyTbExportHtml) {
+            btnWeeklyTbExportHtml.addEventListener('click', exportWeeklyTbInteractiveHtml);
+        }
+
         // Local calendar YYYY-MM-DD (avoid UTC shift from toISOString on boundaries)
         function formatLocalDateISO(d) {
             const y = d.getFullYear();
             const m = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
             return `${y}-${m}-${day}`;
+        }
+
+        function weeklyNormalizeRecordDate(val) {
+            if (val == null || val === '') return '';
+            let s = String(val).trim();
+            if (s.includes('T')) s = s.split('T')[0];
+            if (s.includes(' ')) s = s.split(' ')[0];
+            return s.length >= 10 ? s.substring(0, 10) : s;
+        }
+
+        /** 与每周趋势图一致：ISO 日历日 → 该周周一（UTC 计算） */
+        function weeklyGetMonday(dateString) {
+            if (!dateString) return 'Unknown';
+            const normalized = weeklyNormalizeRecordDate(dateString);
+            const parts = normalized.split('-');
+            if (parts.length !== 3) return normalized || 'Unknown';
+
+            const dayNum = parseInt(parts[2], 10);
+            const monthNum = parseInt(parts[1], 10);
+            const yearNum = parseInt(parts[0], 10);
+            if (isNaN(yearNum) || isNaN(monthNum) || isNaN(dayNum)) return 'Unknown';
+
+            const d = new Date(Date.UTC(yearNum, monthNum - 1, dayNum));
+            const day = d.getUTCDay();
+            const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+            d.setUTCDate(diff);
+            return d.toISOString().split('T')[0];
+        }
+
+        /** 给定「周一起始日」ISO 字符串，返回上一周周一（UTC·纯日历，用于环比基期） */
+        function weeklyPrevMondayISO(mondayIso) {
+            const parts = (mondayIso || '').split('-');
+            if (parts.length !== 3) return null;
+            const y = parseInt(parts[0], 10);
+            const mo = parseInt(parts[1], 10) - 1;
+            const da = parseInt(parts[2], 10);
+            if (isNaN(y) || isNaN(mo) || isNaN(da)) return null;
+            const dt = new Date(Date.UTC(y, mo, da));
+            dt.setUTCDate(dt.getUTCDate() - 7);
+            return dt.toISOString().split('T')[0];
+        }
+
+        /** 该周周一 YYYY-MM-DD（UTC，与 weeklyGetMonday 一致）→ ISO 周序号 1–53 */
+        function isoWeekNumberFromUtcMondayISO(mondayIso) {
+            const parts = (mondayIso || '').split('-');
+            if (parts.length !== 3) return null;
+            const y = parseInt(parts[0], 10);
+            const mo = parseInt(parts[1], 10) - 1;
+            const da = parseInt(parts[2], 10);
+            if (isNaN(y) || isNaN(mo) || isNaN(da)) return null;
+            const monday = new Date(Date.UTC(y, mo, da, 12, 0, 0));
+            const thu = new Date(monday);
+            thu.setUTCDate(monday.getUTCDate() + 3);
+            const isoY = thu.getUTCFullYear();
+            const jan4 = new Date(Date.UTC(isoY, 0, 4, 12, 0, 0));
+            let jan4Dow = jan4.getUTCDay();
+            if (jan4Dow === 0) jan4Dow = 7;
+            const week1Mon = new Date(jan4);
+            week1Mon.setUTCDate(jan4.getUTCDate() - (jan4Dow - 1));
+            const diffDays = Math.round((monday.getTime() - week1Mon.getTime()) / 86400000);
+            return Math.floor(diffDays / 7) + 1;
+        }
+
+        /** 不展示、不导出：ISO 第 11 周（与 X 轴「第11周」一致，UTC 周界） */
+        function outboundStatsSkipIsoWeek11(mondayIso) {
+            if (!mondayIso || mondayIso === 'Unknown' || !/^\d{4}-\d{2}-\d{2}$/.test(mondayIso)) return false;
+            const wn = isoWeekNumberFromUtcMondayISO(mondayIso);
+            return wn === 11;
+        }
+
+        /** X 轴：日期换行 + 周数（与数据统计周界一致） */
+        function weeklyChartAxisLabel(mondayIso) {
+            if (!mondayIso || mondayIso === 'Unknown' || !/^\d{4}-\d{2}-\d{2}$/.test(mondayIso)) return mondayIso || '';
+            const wn = isoWeekNumberFromUtcMondayISO(mondayIso);
+            if (wn == null || !Number.isFinite(wn) || wn < 1) return mondayIso;
+            const lang = currentLang || 'zh';
+            if (lang === 'zh') return `${mondayIso}\n第${wn}周`;
+            return `${mondayIso}\nW${String(wn).padStart(2, '0')}`;
+        }
+
+        function weeklyChartAxisLabels(mondayIsoList) {
+            return mondayIsoList.map(weeklyChartAxisLabel);
         }
 
         // Load data for the Weekly Trend chart (Last 12 weeks)
@@ -2538,6 +3225,7 @@
                     console.log(`Loaded ${payload.length} weekly records`);
                     currentWeeklyData = payload;
                     updateWeeklyChart(payload);
+                    updateWeeklyTrunkBranchSplitChart(payload);
                 } else {
                     console.error('Failed to load weekly data');
                 }
@@ -2555,41 +3243,12 @@
             }
             const ctx = canvas.getContext('2d');
 
-            // Normalize API date to YYYY-MM-DD (handles ISO with "T" and timestamps)
-            function normalizeRecordDate(val) {
-                if (val == null || val === '') return '';
-                let s = String(val).trim();
-                if (s.includes('T')) s = s.split('T')[0];
-                if (s.includes(' ')) s = s.split(' ')[0];
-                return s.length >= 10 ? s.substring(0, 10) : s;
-            }
-
-            // Helper to get Week Start Date (Monday)
-            // Use UTC to avoid timezone shifts affecting the "date" part
-            function getMonday(dateString) {
-                if (!dateString) return 'Unknown';
-                const normalized = normalizeRecordDate(dateString);
-                const parts = normalized.split('-');
-                if (parts.length !== 3) return normalized || 'Unknown';
-
-                const dayNum = parseInt(parts[2], 10);
-                const monthNum = parseInt(parts[1], 10);
-                const yearNum = parseInt(parts[0], 10);
-                if (isNaN(yearNum) || isNaN(monthNum) || isNaN(dayNum)) return 'Unknown';
-
-                const d = new Date(Date.UTC(yearNum, monthNum - 1, dayNum));
-                const day = d.getUTCDay();
-                const diff = d.getUTCDate() - day + (day == 0 ? -6 : 1);
-                d.setUTCDate(diff);
-                return d.toISOString().split('T')[0];
-            }
-
-            // Group by Week -> Route
+            // Group by Week -> Route（周界与 weeklyGetMonday 一致）
             const weeks = {};
             const allRoutes = new Set();
 
             data.forEach(record => {
-                const weekStart = getMonday(record.record_date);
+                const weekStart = weeklyGetMonday(record.record_date);
                 const normRC = normalizeRoute(record.route_code);
                 if (!weeks[weekStart]) weeks[weekStart] = {};
                 if (!weeks[weekStart][normRC]) {
@@ -2600,8 +3259,8 @@
                 allRoutes.add(normRC);
             });
 
-            // Sort weeks
-            const sortedWeeks = Object.keys(weeks).sort();
+            // Sort weeks（剔除 ISO 第 11 周）
+            const sortedWeeks = Object.keys(weeks).sort().filter(w => !outboundStatsSkipIsoWeek11(w));
             const routeList = Array.from(allRoutes).sort();
 
             // Cache snapshot for CSV/TSV export (both metrics, regardless of current mode)
@@ -2657,7 +3316,7 @@
                         const model = meta.data[index];
                         if (model) {
                             ctx.save();
-                            ctx.font = 'bold 12px Arial';
+                            ctx.font = 'bold 13px Arial';
                             ctx.fillStyle = '#333';
                             ctx.textAlign = 'center';
 
@@ -2691,7 +3350,7 @@
             weeklyChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: sortedWeeks,
+                    labels: weeklyChartAxisLabels(sortedWeeks),
                     datasets: datasets
                 },
                 plugins: [stackTotalPlugin], // Register local plugin
@@ -2699,7 +3358,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'top' },
+                        legend: { position: 'bottom' },
                         title: {
                             display: true,
                             text: weeklyChartMode === 'count' ? translations[currentLang].vehicle_count : translations[currentLang].cost
@@ -2732,6 +3391,378 @@
                     }
                 }
             });
+        }
+
+        /** 干线/支线堆积柱 + 右轴单条环比折线：车次 = Σvehicle_count；支线划分同 isWeeklyTbBranchRecord；图例两柱均显时为「总和环比」，仅干线/仅支线时为对应单项环比（与柱可见性联动）；环比为图中相邻列、左邻周＞0。 */
+        function updateWeeklyTrunkBranchSplitChart(data) {
+            const canvas = document.getElementById('weeklyTrunkBranchChart');
+            if (!canvas) return;
+            if (!Array.isArray(data)) {
+                console.error('updateWeeklyTrunkBranchSplitChart: expected array');
+                return;
+            }
+            const t = translations[currentLang] || {};
+
+            if (!data.length) {
+                weeklyTbExportSnapshot = null;
+                if (weeklyTrunkBranchChart) {
+                    weeklyTrunkBranchChart.destroy();
+                    weeklyTrunkBranchChart = null;
+                }
+                return;
+            }
+
+            const byWeek = {};
+            data.forEach(record => {
+                const weekStart = weeklyGetMonday(record.record_date);
+                if (!weekStart || weekStart === 'Unknown' || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return;
+                if (!byWeek[weekStart]) byWeek[weekStart] = { trunk: 0, branch: 0 };
+                const w = outboundTbTripWeight(record);
+                if (isWeeklyTbBranchRecord(record)) byWeek[weekStart].branch += w;
+                else byWeek[weekStart].trunk += w;
+            });
+            const sortedWeeks = Object.keys(byWeek).sort().filter(w => !outboundStatsSkipIsoWeek11(w));
+            const trunkData = sortedWeeks.map(w => byWeek[w].trunk);
+            const branchData = sortedWeeks.map(w => byWeek[w].branch);
+            const weekTotalsTb = sortedWeeks.map((_, i) => (trunkData[i] || 0) + (branchData[i] || 0));
+
+            function tbWowPctVsPrevColumn(prevVal, curVal) {
+                const prev = prevVal || 0;
+                const cur = curVal || 0;
+                if (prev <= 0) return null;
+                return ((cur - prev) / prev) * 100;
+            }
+
+            const trunkWow = sortedWeeks.map((weekKey, i) => {
+                if (i < 1) return null;
+                const prevKey = sortedWeeks[i - 1];
+                const prevT = byWeek[prevKey] ? byWeek[prevKey].trunk : 0;
+                const curT = byWeek[weekKey] ? byWeek[weekKey].trunk : 0;
+                return tbWowPctVsPrevColumn(prevT, curT);
+            });
+            const branchWow = sortedWeeks.map((weekKey, i) => {
+                if (i < 1) return null;
+                const prevKey = sortedWeeks[i - 1];
+                const prevB = byWeek[prevKey] ? byWeek[prevKey].branch : 0;
+                const curB = byWeek[weekKey] ? byWeek[weekKey].branch : 0;
+                return tbWowPctVsPrevColumn(prevB, curB);
+            });
+            const totalWow = sortedWeeks.map((_, i) => {
+                if (i < 1) return null;
+                return tbWowPctVsPrevColumn(weekTotalsTb[i - 1], weekTotalsTb[i]);
+            });
+
+            const trunkWowLine = trunkWow.map(v => (v == null || !Number.isFinite(v) ? null : v));
+            const branchWowLine = branchWow.map(v => (v == null || !Number.isFinite(v) ? null : v));
+            const totalWowLine = totalWow.map(v => (v == null || !Number.isFinite(v) ? null : v));
+
+            weeklyTbExportSnapshot = sortedWeeks.length
+                ? {
+                    weeks: sortedWeeks.slice(),
+                    trunk: trunkData.slice(),
+                    branch: branchData.slice(),
+                    trunkWow: trunkWow.slice(),
+                    branchWow: branchWow.slice(),
+                    totalWow: totalWow.slice(),
+                }
+                : null;
+
+            const trunkLabel = t.trunk_line || '干线';
+            const branchLabel = t.branch_line || '支线';
+            const countTitle = t.vehicle_count || '发车数量';
+            const trunkWowLegend = t.weekly_tb_legend_trunk_wow || `${trunkLabel} WoW`;
+            const branchWowLegend = t.weekly_tb_legend_branch_wow || `${branchLabel} WoW`;
+            const totalWowLegend = t.weekly_tb_legend_total_wow || '总和环比';
+            const wowAxisSharedTitle = t.weekly_tb_wow_axis || `${t.wow_vs_prev || '环比'} (%)`;
+
+            if (weeklyTrunkBranchChart) {
+                weeklyTrunkBranchChart.destroy();
+                weeklyTrunkBranchChart = null;
+            }
+
+            function weeklyTbDataY(ctx) {
+                const raw = ctx.dataset.data[ctx.dataIndex];
+                if (raw == null || raw === '') return null;
+                const y = typeof raw === 'number' ? raw : Number(raw);
+                return Number.isFinite(y) ? y : null;
+            }
+
+            const barDatalabelsWeeklyTb = {
+                display(ctx) {
+                    const y = weeklyTbDataY(ctx);
+                    return y != null && y > 0;
+                },
+                color: '#ffffff',
+                align: 'center',
+                anchor: 'center',
+                clamp: true,
+                font: { size: 11, weight: 'bold', lineHeight: 1.2 },
+                formatter(value, ctx) {
+                    const v = weeklyTbDataY(ctx);
+                    if (v == null || v <= 0) return '';
+                    const idx = ctx.dataIndex;
+                    const total = weekTotalsTb[idx] || 0;
+                    const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0.0';
+                    return `${Math.round(v)}\n${pct}%`;
+                },
+            };
+
+            /** 折线数值标签（右轴）；vertical 仅影响 align/anchor 微调 */
+            function lineWowDatalabelsWeeklyTb(color, vertical) {
+                const above = vertical === 'above';
+                return {
+                    display(ctx) {
+                        const y = weeklyTbDataY(ctx);
+                        return y != null && Number.isFinite(y);
+                    },
+                    color: color,
+                    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+                    borderColor: color,
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                    align: above ? 'top' : 'bottom',
+                    anchor: 'center',
+                    offset: 12,
+                    clip: false,
+                    font: { size: 11, weight: 'bold' },
+                    formatter(value, ctx) {
+                        const py = weeklyTbDataY(ctx);
+                        if (py == null || !Number.isFinite(py)) return '';
+                        const sign = py > 0 ? '+' : '';
+                        return `${sign}${py.toFixed(1)}%`;
+                    },
+                };
+            }
+
+            /** 图例：双线柱均显示→仅总和环比；仅干线/仅支线→对应单项环比；两柱均隐藏→折线隐藏。 */
+            function applyWeeklyTbLegendWowMode(chart) {
+                if (!chart || !chart.data || chart.data.datasets.length < 3) return;
+                const v0 = chart.isDatasetVisible(0);
+                const v1 = chart.isDatasetVisible(1);
+                const lineDs = chart.data.datasets[2];
+                const onlyTrunk = v0 && !v1;
+                const onlyBranch = !v0 && v1;
+                const both = v0 && v1;
+                const neither = !v0 && !v1;
+                if (neither) {
+                    chart.setDatasetVisibility(2, false);
+                    lineDs.data = totalWowLine.map(() => null);
+                } else {
+                    chart.setDatasetVisibility(2, true);
+                    if (both) {
+                        lineDs.data = totalWowLine.slice();
+                        lineDs.label = totalWowLegend;
+                        lineDs.borderColor = '#374151';
+                        lineDs.pointBackgroundColor = '#374151';
+                        lineDs.borderDash = [8, 4];
+                        lineDs.datalabels = lineWowDatalabelsWeeklyTb('#374151', 'above');
+                    } else if (onlyTrunk) {
+                        lineDs.data = trunkWowLine.slice();
+                        lineDs.label = trunkWowLegend;
+                        lineDs.borderColor = '#1e40af';
+                        lineDs.pointBackgroundColor = '#1e40af';
+                        lineDs.borderDash = [6, 3];
+                        lineDs.datalabels = lineWowDatalabelsWeeklyTb('#1e40af', 'above');
+                    } else if (onlyBranch) {
+                        lineDs.data = branchWowLine.slice();
+                        lineDs.label = branchWowLegend;
+                        lineDs.borderColor = '#c2410c';
+                        lineDs.pointBackgroundColor = '#c2410c';
+                        lineDs.borderDash = [2, 3];
+                        lineDs.datalabels = lineWowDatalabelsWeeklyTb('#c2410c', 'above');
+                    }
+                }
+                chart.update();
+            }
+
+            const ctx = canvas.getContext('2d');
+            const trunkBarFill = 'rgba(37, 99, 235, 0.92)';
+            const branchBarFill = 'rgba(234, 88, 12, 0.95)';
+            /** 柱顶总和：仅干、支线图例均显示时绘制（只选其一则不显示） */
+            const weeklyTbStackTopLabelsPlugin = {
+                id: 'weeklyTbStackTopLabels',
+                afterDatasetsDraw(chart) {
+                    const v0 = chart.isDatasetVisible(0);
+                    const v1 = chart.isDatasetVisible(1);
+                    if (!v0 || !v1) return;
+                    const meta0 = chart.getDatasetMeta(0);
+                    const meta1 = chart.getDatasetMeta(1);
+                    const n = chart.data.labels.length;
+                    const padFromStack = 6;
+                    const c = chart.ctx;
+                    c.save();
+                    c.textAlign = 'center';
+                    c.textBaseline = 'bottom';
+                    c.font = '600 12px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+                    c.fillStyle = '#374151';
+                    for (let i = 0; i < n; i++) {
+                        let x = null;
+                        let topY = null;
+                        if (v1 && meta1.data[i] && !meta1.data[i].skip) {
+                            topY = meta1.data[i].y;
+                            x = meta1.data[i].x;
+                        } else if (v0 && meta0.data[i] && !meta0.data[i].skip) {
+                            topY = meta0.data[i].y;
+                            x = meta0.data[i].x;
+                        }
+                        if (x == null || topY == null || !Number.isFinite(x) || !Number.isFinite(topY)) continue;
+                        const tot = weekTotalsTb[i] || 0;
+                        const text = String(Math.round(tot));
+                        c.fillText(text, x, topY - padFromStack);
+                    }
+                    c.restore();
+                },
+            };
+            // 根级 type:'bar' 与「按数据集 type:'line'」组合为 Chart.js 3 正式混图写法；缺省时部分环境下两柱同一填充色
+            weeklyTrunkBranchChart = new Chart(ctx, {
+                type: 'bar',
+                plugins: [weeklyTbStackTopLabelsPlugin],
+                data: {
+                    labels: weeklyChartAxisLabels(sortedWeeks),
+                    datasets: [
+                        {
+                            type: 'bar',
+                            yAxisID: 'y',
+                            label: trunkLabel,
+                            data: trunkData,
+                            backgroundColor: sortedWeeks.map(() => trunkBarFill),
+                            borderWidth: 0,
+                            hoverBackgroundColor: '#1d4ed8',
+                            stack: 'tb',
+                            order: 2,
+                            datalabels: barDatalabelsWeeklyTb,
+                        },
+                        {
+                            type: 'bar',
+                            yAxisID: 'y',
+                            label: branchLabel,
+                            data: branchData,
+                            backgroundColor: sortedWeeks.map(() => branchBarFill),
+                            borderWidth: 0,
+                            hoverBackgroundColor: '#ea580c',
+                            stack: 'tb',
+                            order: 2,
+                            datalabels: barDatalabelsWeeklyTb,
+                        },
+                        {
+                            type: 'line',
+                            label: totalWowLegend,
+                            data: totalWowLine.slice(),
+                            yAxisID: 'y1',
+                            borderColor: '#374151',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [8, 4],
+                            tension: 0.35,
+                            spanGaps: false,
+                            pointRadius: 7,
+                            pointBorderWidth: 2,
+                            pointBorderColor: '#fff',
+                            pointBackgroundColor: '#374151',
+                            pointHoverRadius: 10,
+                            order: 1,
+                            datalabels: lineWowDatalabelsWeeklyTb('#374151', 'above'),
+                        },
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: { top: 28 },
+                    },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: { size: 15, weight: '600' },
+                                boxWidth: 56,
+                                boxHeight: 10,
+                                padding: 16,
+                            },
+                            onClick(evt, legendItem, legend) {
+                                const chart = legend.chart;
+                                const idx = legendItem.datasetIndex;
+                                chart.setDatasetVisibility(idx, !chart.isDatasetVisible(idx));
+                                if (idx === 0 || idx === 1) {
+                                    applyWeeklyTbLegendWowMode(chart);
+                                } else {
+                                    chart.update();
+                                }
+                            },
+                        },
+                        title: {
+                            display: true,
+                            text: countTitle,
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label(ctx) {
+                                    const ds = ctx.dataset;
+                                    const idx = ctx.dataIndex;
+                                    const y = ctx.parsed != null ? ctx.parsed.y : null;
+                                    if (ds.type === 'line') {
+                                        let lab = ds.label || '';
+                                        if (lab) lab += ': ';
+                                        if (y == null || !Number.isFinite(y)) return `${lab}—`;
+                                        const sign = y > 0 ? '+' : '';
+                                        return `${lab}${sign}${y.toFixed(1)}%`;
+                                    }
+                                    let label = ds.label || '';
+                                    if (label) label += ': ';
+                                    if (y != null) label += y;
+                                    const tot = weekTotalsTb[idx] || 0;
+                                    if (tot > 0 && y != null) {
+                                        label += ` (${((y / tot) * 100).toFixed(1)}%)`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                        },
+                        y: {
+                            type: 'linear',
+                            stacked: true,
+                            beginAtZero: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: countTitle,
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            offset: false,
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                            title: {
+                                display: true,
+                                text: wowAxisSharedTitle,
+                            },
+                            ticks: {
+                                callback(v) {
+                                    return v + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            applyWeeklyTbLegendWowMode(weeklyTrunkBranchChart);
         }
 
         // Initialization is handled by the first DOMContentLoaded listener

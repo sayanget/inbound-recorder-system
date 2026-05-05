@@ -2522,8 +2522,28 @@ def _tms_shuttle_pivot_normalize_date_iso(d_val):
     return None
 
 
+def _tms_shuttle_normalize_date_time_cols(d_val, t_val):
+    """兼容拆分表里整段 datetime 误存在日期列、时间列为空的旧数据（ISO T / 空格 / 毫秒）。"""
+    if d_val is None:
+        return None, t_val
+    d_s = str(d_val).strip()
+    t_s = (str(t_val).strip() if t_val is not None else '')
+    if t_s:
+        return d_val, t_val
+    u = d_s.replace('/', '-')
+    if len(u) >= 11 and u[10] in 'Tt':
+        u = u[:10] + ' ' + u[11:]
+    if '.' in u:
+        u = u.split('.')[0].strip()
+    parts = u.split(None, 1)
+    if len(parts) == 2 and ':' in parts[1]:
+        return parts[0], parts[1]
+    return d_val, t_val
+
+
 def _tms_shuttle_pivot_parse_depart_dt(d_val, t_val):
     """拆分表 actual_departure_date + actual_departure_time → 本地 naive datetime。"""
+    d_val, t_val = _tms_shuttle_normalize_date_time_cols(d_val, t_val)
     if d_val is None or t_val is None:
         return None
     ds = str(d_val).strip().replace('/', '-')
@@ -2814,14 +2834,20 @@ def get_tms_shuttle_completed():
 
     out = []
     for r in rows:
+        dd = _v(r, 'actual_departure_date', 3)
+        dt = _v(r, 'actual_departure_time', 4)
+        ad = _v(r, 'actual_arrival_date', 5)
+        at = _v(r, 'actual_arrival_time', 6)
+        dd, dt = _tms_shuttle_normalize_date_time_cols(dd, dt)
+        ad, at = _tms_shuttle_normalize_date_time_cols(ad, at)
         out.append({
             'task_no': _v(r, 'task_no', 0),
             'place_of_origin': _v(r, 'place_of_origin', 1),
             'destination': _v(r, 'destination', 2),
-            'actual_departure_date': _v(r, 'actual_departure_date', 3),
-            'actual_departure_time_only': _v(r, 'actual_departure_time', 4),
-            'actual_arrival_date': _v(r, 'actual_arrival_date', 5),
-            'actual_arrival_time_only': _v(r, 'actual_arrival_time', 6),
+            'actual_departure_date': dd,
+            'actual_departure_time_only': dt,
+            'actual_arrival_date': ad,
+            'actual_arrival_time_only': at,
         })
 
     return jsonify({'success': True, 'date': date_str, 'rows': out})
