@@ -600,9 +600,6 @@
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
             </div>
-            <p data-lang="inbound_sorting_comparison_sub" style="font-size: 12px; color: #666; margin: 4px 0 10px; line-height: 1.4;">
-                「入库」系列 = 各时段（人工集包 + 设备集包）− CNO01 集包运单数（与分拣分时数据同源）。
-            </p>
             <div class="chart-container">
                 <canvas id="hourlyComparisonChart"></canvas>
             </div>
@@ -646,11 +643,14 @@
                 </button>
                 </div>
             </div>
-            <p data-lang="cno_narrowbelt_hourly_sub" style="font-size: 12px; color: #666; margin: 4px 0 10px; line-height: 1.4;">
-                横轴与集包产能图一致：所选运营日 洛杉矶 06:00–次日 06:00。
-            </p>
             <div class="chart-container" style="min-height: 320px;">
                 <canvas id="cnoNarrowbeltHourlyCanvas"></canvas>
+            </div>
+            <div id="cnoNarrowbeltHourlyStatsWrap" style="margin-top: 12px; display: none;">
+                <div style="overflow-x: auto;">
+                    <table id="cnoNarrowbeltHourlyStatsTable"
+                        style="width: 100%; max-width: 820px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums;"></table>
+                </div>
             </div>
         </div>
 
@@ -663,8 +663,6 @@
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
             </div>
-            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
-                data-lang="daily_packing_split_hint">按 LA 运营日 06:00–次日 06:00 统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。</p>
             <div class="chart-container" style="height: 380px;">
                 <canvas id="dailyPackingSplitChart"></canvas>
             </div>
@@ -679,8 +677,6 @@
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
             </div>
-            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
-                data-lang="daily_center_collect_split_hint">与上图相同：LA 运营日 06:00–次日 06:00。柱高合计=分拣表「人工+设备」件数（与上图总柱高一致）；干线/支线按集包看板当日干线:支线占比拆分（无看板占比时当日全部计作干线）。</p>
             <div class="chart-container" style="height: 380px;">
                 <canvas id="dailyCenterCollectSplitChart"></canvas>
             </div>
@@ -695,8 +691,6 @@
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
             </div>
-            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
-                data-lang="center_collect_week_comparison_hint">自然周（周一至周日）；每周一柱为干线与支线堆叠（段内为占周比）；周合计与分拣人工+设备一致；折线为周总量环比。</p>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="centerCollectWeekComparisonChart"></canvas>
             </div>
@@ -772,8 +766,6 @@
                 </div>
                 </div>
             </div>
-            <p style="font-size:12px; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;"
-                data-lang="center_checkin_chart_hint">仅展示当前所选统计日期的签入数据。</p>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="centerCheckinTrendChart"></canvas>
             </div>
@@ -878,8 +870,6 @@
                         data-lang="center_collect_export_csv">导出 CSV</button>
                 </div>
             </div>
-            <p style="font-size:12px; color:var(--text-muted); margin:0 0 6px 0; line-height:1.4;"
-                data-lang="tms_shuttle_pivot_hint">数据来源：TMS 短驳运输任务（已完成 + CNO.H），按【实际发车时间】小时取整聚合。</p>
             <div id="tmsShuttlePivotTableWrap"
                 style="max-height:420px; overflow:auto; border:1px solid var(--border-color, #e5e7eb); border-radius:6px;">
                 <table id="tmsShuttlePivotTable"
@@ -979,6 +969,12 @@
                 load_narrowbelt_error: "加载窄带分拣分时数据出错:",
                 render_narrowbelt_error: "渲染窄带分拣图表出错:",
                 cno_narrowbelt_export_csv: "导出 CSV（窄带分时）",
+                cno_narrowbelt_stats_caption: "各产线产能汇总：合计件数、分时均值（产能÷24 个 LA 时段）、有产时段数及有产时段均值（产能÷有产时长）。",
+                cno_narrowbelt_stats_col_line: "产线",
+                cno_narrowbelt_stats_col_total: "合计(件)",
+                cno_narrowbelt_stats_col_mean24: "件/h（÷24h）",
+                cno_narrowbelt_stats_col_active_h: "有产时段(h)",
+                cno_narrowbelt_stats_col_mean_active: "件/h（有产）",
                 pieces: "件数",
                 time_slot: "时间段",
                 pickup_forecast_title: "揽收预估数据",
@@ -1149,6 +1145,12 @@
                 load_narrowbelt_error: "Error loading narrow-belt hourly data:",
                 render_narrowbelt_error: "Error rendering narrow-belt chart:",
                 cno_narrowbelt_export_csv: "Export CSV (narrow-belt hourly)",
+                cno_narrowbelt_stats_caption: "Per line: total pieces, average over all 24 LA slots (volume÷24h), active slot count, and average over active slots only (volume÷active hours).",
+                cno_narrowbelt_stats_col_line: "Line",
+                cno_narrowbelt_stats_col_total: "Total (pcs)",
+                cno_narrowbelt_stats_col_mean24: "pcs/h (÷24h)",
+                cno_narrowbelt_stats_col_active_h: "Active slots (h)",
+                cno_narrowbelt_stats_col_mean_active: "pcs/h (active)",
                 pieces: "Pieces",
                 time_slot: "Time Slot",
                 pickup_forecast_title: "Pickup Forecast",
@@ -1314,6 +1316,12 @@
                 load_narrowbelt_error: "Error al cargar datos horarios del clasificador estrecho:",
                 render_narrowbelt_error: "Error al renderizar gráfico del clasificador estrecho:",
                 cno_narrowbelt_export_csv: "Exportar CSV (por hora estrecho)",
+                cno_narrowbelt_stats_caption: "Por línea: total piezas, promedio en 24 franjas LA (volumen÷24h), franjas con producción y promedio solo en esas franjas (volumen÷horas activas).",
+                cno_narrowbelt_stats_col_line: "Línea",
+                cno_narrowbelt_stats_col_total: "Total (pzas)",
+                cno_narrowbelt_stats_col_mean24: "pzas/h (÷24h)",
+                cno_narrowbelt_stats_col_active_h: "Franjas activas (h)",
+                cno_narrowbelt_stats_col_mean_active: "pzas/h (activas)",
                 pieces: "Piezas",
                 time_slot: "Franja Horaria",
                 pickup_forecast_title: "Previsión de Recogida",
@@ -2374,6 +2382,7 @@
                 })
                 .catch(error => {
                     console.error('Error loading CNO narrowbelt hourly:', error);
+                    clearCnoNarrowbeltHourlyStatsTable();
                     showMessage(
                         (translations[currentLang].load_narrowbelt_error || '加载窄带分拣分时数据出错:') + ' ' + error.message,
                         'error'
@@ -3003,6 +3012,75 @@
             }
         }
 
+        function _narrowbeltHourlyLineStats(hourlyArr) {
+            const vals = (hourlyArr || []).map(v => Number(v) || 0);
+            const total = vals.reduce((a, b) => a + b, 0);
+            let activeCount = 0;
+            for (let i = 0; i < vals.length; i++) {
+                if (vals[i] > 0) activeCount++;
+            }
+            const mean24 = total / 24;
+            const meanActive = activeCount > 0 ? total / activeCount : 0;
+            return { total, activeCount, mean24, meanActive };
+        }
+
+        function _fmtNarrowbeltInt(n) {
+            return Math.round(Number(n) || 0).toLocaleString();
+        }
+
+        function _fmtNarrowbeltRate(n) {
+            const x = Math.round((Number(n) || 0) * 10) / 10;
+            return x.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+        }
+
+        function clearCnoNarrowbeltHourlyStatsTable() {
+            const wrap = document.getElementById('cnoNarrowbeltHourlyStatsWrap');
+            const tbl = document.getElementById('cnoNarrowbeltHourlyStatsTable');
+            if (tbl) tbl.innerHTML = '';
+            if (wrap) wrap.style.display = 'none';
+        }
+
+        function renderCnoNarrowbeltHourlyStatsTable(payload) {
+            const wrap = document.getElementById('cnoNarrowbeltHourlyStatsWrap');
+            const tbl = document.getElementById('cnoNarrowbeltHourlyStatsTable');
+            if (!wrap || !tbl) return;
+            const t = translations[currentLang] || {};
+            const lines = (payload && payload.lines) ? payload.lines : {};
+            const keys = ['A', 'B', 'C', 'D'];
+            const lineTitles = [
+                t.cno_narrowbelt_line_a || '产线 A（AA）',
+                t.cno_narrowbelt_line_b || '产线 B（AB）',
+                t.cno_narrowbelt_line_c || '产线 C（AC）',
+                t.cno_narrowbelt_line_d || '产线 D（AD）'
+            ];
+
+            const border = '1px solid var(--border-color, #e5e7eb)';
+            const thBase = 'text-align:left;padding:8px 10px;font-weight:600;background:var(--table-stripe, #f8f9fa);border-bottom:2px solid var(--border-color,#dee2e6);';
+            const tdL = 'padding:8px 10px;border-top:' + border + ';';
+            const tdR = tdL + 'text-align:right;';
+
+            let html = '<thead><tr>';
+            html += `<th style="${thBase}">${t.cno_narrowbelt_stats_col_line || '产线'}</th>`;
+            html += `<th style="${thBase};text-align:right">${t.cno_narrowbelt_stats_col_total || '合计(件)'}</th>`;
+            html += `<th style="${thBase};text-align:right">${t.cno_narrowbelt_stats_col_mean24 || '件/h（÷24h）'}</th>`;
+            html += `<th style="${thBase};text-align:right">${t.cno_narrowbelt_stats_col_active_h || '有产时段(h)'}</th>`;
+            html += `<th style="${thBase};text-align:right">${t.cno_narrowbelt_stats_col_mean_active || '件/h（有产）'}</th>`;
+            html += '</tr></thead><tbody>';
+            for (let i = 0; i < keys.length; i++) {
+                const st = _narrowbeltHourlyLineStats(lines[keys[i]]);
+                html += '<tr>';
+                html += `<td style="${tdL}">${lineTitles[i]}</td>`;
+                html += `<td style="${tdR}">${_fmtNarrowbeltInt(st.total)}</td>`;
+                html += `<td style="${tdR}">${_fmtNarrowbeltRate(st.mean24)}</td>`;
+                html += `<td style="${tdR}">${st.activeCount}</td>`;
+                html += `<td style="${tdR}">${_fmtNarrowbeltRate(st.meanActive)}</td>`;
+                html += '</tr>';
+            }
+            html += '</tbody>';
+            tbl.innerHTML = html;
+            wrap.style.display = 'block';
+        }
+
         function renderCnoNarrowbeltHourlyChart(payload) {
             try {
                 const labels = (payload && payload.labels) ? payload.labels : [];
@@ -3062,6 +3140,7 @@
                 const maxV = flat.length ? Math.max(0, ...flat.map(v => Number(v) || 0)) : 0;
                 const yAxisMax = maxV > 0 ? Math.ceil(maxV / 100) * 100 + 100 : 500;
                 const isMobile = window.innerWidth < 768;
+                renderCnoNarrowbeltHourlyStatsTable(payload);
                 const canvasEl = document.getElementById('cnoNarrowbeltHourlyCanvas');
                 if (!canvasEl) return;
                 const chartCtx = canvasEl.getContext('2d');
@@ -3121,6 +3200,7 @@
                 });
             } catch (error) {
                 console.error('Error rendering narrowbelt chart:', error);
+                clearCnoNarrowbeltHourlyStatsTable();
                 showMessage(
                     (translations[currentLang].render_narrowbelt_error || '渲染窄带分拣图表出错:') + ' ' + error.message,
                     'error'
