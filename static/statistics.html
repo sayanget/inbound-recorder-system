@@ -617,6 +617,26 @@
             </div>
         </div>
 
+        <!-- Daily packing: trunk vs branch; total aligned to sorting manual+device, split ratio from board -->
+        <div class="stats-section">
+            <h3 data-lang="daily_center_collect_split_chart">每日集包（干线 / 支线）</h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
+                data-lang="daily_center_collect_split_hint">与上图相同：LA 运营日 06:00–次日 06:00。柱高合计=分拣表「人工+设备」件数（与上图总柱高一致）；干线/支线按集包看板当日干线:支线占比拆分（无看板占比时当日全部计作干线）。</p>
+            <div class="chart-container" style="height: 380px;">
+                <canvas id="dailyCenterCollectSplitChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 干线/支线集包：周环比（与上方同一运营日口径） -->
+        <div class="stats-section">
+            <h3 data-lang="center_collect_week_comparison_chart">干线/支线集包周环比</h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
+                data-lang="center_collect_week_comparison_hint">自然周（周一至周日）；每周一柱为干线与支线堆叠（段内为占周比）；周合计与分拣人工+设备一致；折线为周总量环比。</p>
+            <div class="chart-container" style="height: 400px;">
+                <canvas id="centerCollectWeekComparisonChart"></canvas>
+            </div>
+        </div>
+
         <!-- Pallet hourly chart -->
         <div class="stats-section">
             <h3 data-lang="pallet_hourly_comparison">托盘时段统计</h3>
@@ -673,11 +693,11 @@
                 <canvas id="centerCheckinTrendChart"></canvas>
             </div>
 
-            <!-- 同卡片内：集包运单数（按目的中心）堆叠面积图 -->
+            <!-- 同卡片内：干线集包（目的中心）堆叠面积图 -->
             <div style="height:1px; background:var(--border-color, #e5e7eb); margin:22px 0 14px 0;"></div>
             <div
                 style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-                <h3 style="margin:0;" data-lang="center_collect_trend_chart">集包运单数（按目的中心）</h3>
+                <h3 style="margin:0;" data-lang="center_collect_trend_chart">干线集包</h3>
                 <div id="centerCollectSyncWrap" style="display:none; align-items:center; gap:10px;">
                     <button type="button" id="centerCollectSyncBtn" class="nav-btn"
                         style="padding:6px 14px; font-size:13px; cursor:pointer; background:var(--primary-color); color:#fff; border:none; border-radius:4px;">
@@ -687,11 +707,13 @@
                         style="padding:6px 14px; font-size:13px; cursor:pointer; background:var(--secondary-color, #6c757d); color:#fff; border:none; border-radius:4px;">
                         <span data-lang="center_collect_backfill_btn">回补 7 天</span>
                     </button>
-                    <span id="centerCollectSyncStatus" style="font-size:12px; color:var(--text-muted); max-width:220px;"></span>
+                    <button type="button" id="centerCollectBackfill30Btn" class="nav-btn"
+                        style="padding:6px 14px; font-size:13px; cursor:pointer; background:var(--secondary-color, #6c757d); color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="center_collect_backfill_30_btn">回补 30 天</span>
+                    </button>
+                    <span id="centerCollectSyncStatus" style="font-size:12px; color:var(--text-muted); max-width:280px;"></span>
                 </div>
             </div>
-            <p style="font-size:12px; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;"
-                data-lang="center_collect_chart_hint">数据来源：中心看板 → 集包数弹窗（目的组织类型=中心）。堆叠面积图展示每小时、按目的中心分组的集包运单数。</p>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="centerCollectTrendChart"></canvas>
             </div>
@@ -713,6 +735,34 @@
             <div id="centerCollectTableWrap"
                 style="max-height:420px; overflow:auto; border:1px solid var(--border-color, #e5e7eb); border-radius:6px;">
                 <table id="centerCollectTable"
+                    style="width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric: tabular-nums; min-width: 640px;">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- 支线集包（目的站点）：与干线区块同一时间节奏 -->
+            <div style="height:1px; background:var(--border-color, #e5e7eb); margin:22px 0 14px 0;"></div>
+            <h3 style="margin:0;" data-lang="center_collect_site_trend_chart">支线集包</h3>
+            <div class="chart-container" style="height: 400px;">
+                <canvas id="centerCollectSiteTrendChart"></canvas>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:14px 0 6px 0;">
+                <h4 style="margin:0; font-size:15px;" data-lang="center_collect_site_table_title">累计数据（按目的站点 × 时段）</h4>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" id="centerCollectSiteExportCsvBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="center_collect_export_csv">导出 CSV</span>
+                    </button>
+                    <button type="button" id="centerCollectSiteCopyTsvBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#6c757d; color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="center_collect_copy_tsv">复制 TSV</span>
+                    </button>
+                </div>
+            </div>
+            <div id="centerCollectSiteTableWrap"
+                style="max-height:420px; overflow:auto; border:1px solid var(--border-color, #e5e7eb); border-radius:6px;">
+                <table id="centerCollectSiteTable"
                     style="width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric: tabular-nums; min-width: 640px;">
                     <thead></thead>
                     <tbody></tbody>
@@ -863,6 +913,14 @@
                 daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
                 packing_manual: "人工集包",
                 packing_device: "设备集包",
+                daily_center_collect_split_chart: "每日集包（干线 / 支线）",
+                daily_center_collect_split_hint: "与上图相同：LA 运营日 06:00–次日 06:00。柱高合计=分拣表人工+设备件数（与上图总柱高一致）；干线/支线按集包看板当日干线:支线占比拆分；无看板占比时当日全部计作干线。",
+                daily_center_collect_split_tooltip_footer: "（占比 = 分项 / 当日干线与支线合计；合计=人工+设备）",
+                collect_trunk_label: "干线",
+                collect_branch_label: "支线",
+                center_collect_week_comparison_chart: "干线/支线集包周环比",
+                center_collect_week_comparison_hint: "自然周（周一至周日）；每周一柱为干线与支线堆叠（段内为占周比）；周合计与分拣人工+设备一致；折线为周总量环比。",
+                collect_waybills_wan_axis: "集包运单 (万)",
                 packing_sum_label: "日合计",
                 week_comparison_chart: "周环比对比",
                 current_week: "本周",
@@ -884,12 +942,13 @@
                 center_checkin_chart_hint: "仅展示当前统计日期（与上方所选日期一致）的签入分时；库内仍保留全部历史。查看多日可调用 API：days=all 或 days=数字。",
                 center_checkin_sync_btn: "更新签入数据",
                 center_checkin_syncing: "正在从 GoFO 同步…",
-                center_collect_trend_chart: "集包运单数（按目的中心 / 小时）",
-                center_collect_chart_hint: "数据来源：中心看板「集包数」弹窗 → 目的组织类型=中心。堆叠面积图：每小时各目的中心的集包运单数。",
+                center_collect_trend_chart: "干线集包",
                 center_collect_sync_btn: "同步当日集包",
                 center_collect_backfill_btn: "回补 7 天",
+                center_collect_backfill_30_btn: "回补 30 天",
                 center_collect_syncing: "正在从 GoFO 同步集包…",
                 center_collect_backfilling: "正在回补最近 7 天…",
+                center_collect_backfilling_30: "正在回补最近 30 天（含目的站点×时段）…",
                 center_collect_table_title: "累计数据（按目的中心 × 时段）",
                 tms_shuttle_pivot_title: "短驳发车累计（流向 × 实际发车时段）",
                 tms_shuttle_pivot_hint: "按所选日历日 00:00～23:59 的实际发车汇总到 0～23 点列（含可能落在前一日 record_date 的同步行）。业务窗 05:00～次日 04:59 见环境变量 GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1。",
@@ -899,7 +958,10 @@
                 center_collect_export_csv: "导出 CSV",
                 center_collect_copy_tsv: "复制 TSV",
                 center_collect_copied: "已复制到剪贴板",
-                center_collect_empty: "暂无数据"
+                center_collect_empty: "暂无数据",
+                center_collect_site_trend_chart: "支线集包",
+                center_collect_site_table_title: "累计数据（按目的站点 × 时段）",
+                center_collect_col_site: "目的站点",
             },
             en: {
                 statistics_title: "Inbound Statistics",
@@ -1009,6 +1071,14 @@
                 daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
                 packing_manual: "Manual packing",
                 packing_device: "Device packing",
+                daily_center_collect_split_chart: "Daily packing (trunk / branch)",
+                daily_center_collect_split_hint: "Same LA business day 06:00–06:00. Bar total = sorting manual+device (same as chart above). Trunk/branch = board trunk:branch share; if no board split, all counted as trunk.",
+                daily_center_collect_split_tooltip_footer: "(Share = segment / trunk+branch; total = manual+device)",
+                collect_trunk_label: "Trunk",
+                collect_branch_label: "Branch",
+                center_collect_week_comparison_chart: "Trunk/Branch collect — week over week",
+                center_collect_week_comparison_hint: "Calendar weeks (Mon–Sun); each bar stacks trunk vs branch (share of week total); total matches sorting manual+device. Line = week-over-week.",
+                collect_waybills_wan_axis: "Collect waybills (10k)",
                 packing_sum_label: "Daily total",
                 week_comparison_chart: "Week-over-Week Comparison",
                 current_week: "Current Week",
@@ -1030,12 +1100,13 @@
                 center_checkin_chart_hint: "Only the selected statistics date (same as date picker). Full history stays in DB. For multi-day, use API days=all or days=N.",
                 center_checkin_sync_btn: "Refresh check-in data",
                 center_checkin_syncing: "Syncing from GoFO…",
-                center_collect_trend_chart: "Collect waybills (by destination center / hour)",
-                center_collect_chart_hint: "Source: Center Board → Collect popup with 目的组织类型=Center. Stacked-area chart: hourly collect waybills by destination center.",
+                center_collect_trend_chart: "Trunk collect",
                 center_collect_sync_btn: "Sync today's collect",
                 center_collect_backfill_btn: "Backfill 7 days",
+                center_collect_backfill_30_btn: "Backfill 30 days",
                 center_collect_syncing: "Syncing collect from GoFO…",
                 center_collect_backfilling: "Backfilling last 7 days…",
+                center_collect_backfilling_30: "Backfilling last 30 days (centers + sites × hour)…",
                 center_collect_table_title: "Cumulative data (destination center × hour)",
                 tms_shuttle_pivot_title: "Shuttle dispatches (destination × actual departure hour)",
                 tms_shuttle_pivot_hint: "Calendar day 00:00–23:59 actual departures → columns 0–23h (includes rows under prior record_date). Business window: env GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1.",
@@ -1045,7 +1116,10 @@
                 center_collect_export_csv: "Export CSV",
                 center_collect_copy_tsv: "Copy TSV",
                 center_collect_copied: "Copied to clipboard",
-                center_collect_empty: "No data"
+                center_collect_empty: "No data",
+                center_collect_site_trend_chart: "Branch collect",
+                center_collect_site_table_title: "Cumulative data (destination site × hour)",
+                center_collect_col_site: "Site",
             },
             es: {
                 statistics_title: "Estadísticas de Entrada",
@@ -1150,6 +1224,14 @@
                 daily_packing_split_tooltip_footer: "(Proporción respecto al total manual+dispositivo del día)",
                 packing_manual: "Empaque manual",
                 packing_device: "Empaque por dispositivo",
+                daily_center_collect_split_chart: "Empaque diario (troncal / ramal)",
+                daily_center_collect_split_hint: "Mismo día LA 06:00–06:00. Altura total = manual+dispositivo en sorting (igual que arriba). Troncal/ramal = proporción del tablero; sin proporción, todo troncal.",
+                daily_center_collect_split_tooltip_footer: "(Proporción sobre troncal+ramal; total=manual+dispositivo)",
+                collect_trunk_label: "Troncal",
+                collect_branch_label: "Ramal",
+                center_collect_week_comparison_chart: "Empaque troncal/ramal — semana a semana",
+                center_collect_week_comparison_hint: "Semanas naturales; cada barra apila troncal vs ramal (% de la semana); el total coincide con sorting manual+dispositivo. Línea = semana a semana.",
+                collect_waybills_wan_axis: "Guías empaque (×10k)",
                 packing_sum_label: "Total diario",
                 week_comparison_chart: "Comparación Semanal",
                 current_week: "Semana Actual",
@@ -1167,12 +1249,13 @@
                 center_checkin_chart_hint: "Solo la fecha seleccionada en estadísticas. El historial completo sigue en BD. API: days=all o days=N.",
                 center_checkin_sync_btn: "Actualizar datos de ingreso",
                 center_checkin_syncing: "Sincronizando desde GoFO…",
-                center_collect_trend_chart: "Guías de envío (por centro destino / hora)",
-                center_collect_chart_hint: "Fuente: Panel del Centro → ventana emergente de Paquetes con 目的组织类型=Centro. Gráfico de área apilada por centro destino.",
+                center_collect_trend_chart: "Recolección troncal",
                 center_collect_sync_btn: "Sincronizar hoy",
                 center_collect_backfill_btn: "Rellenar 7 días",
+                center_collect_backfill_30_btn: "Rellenar 30 días",
                 center_collect_syncing: "Sincronizando paquetes desde GoFO…",
                 center_collect_backfilling: "Rellenando últimos 7 días…",
+                center_collect_backfilling_30: "Rellenando últimos 30 días (sitios × hora incl.)…",
                 center_collect_table_title: "Datos acumulados (centro destino × hora)",
                 tms_shuttle_pivot_title: "Despachos de lanzadera (destino × hora real de salida)",
                 tms_shuttle_pivot_hint: "Día natural 00:00–23:59 salidas → columnas 0–23h. Ventana negocio: variable GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1.",
@@ -1182,7 +1265,10 @@
                 center_collect_export_csv: "Exportar CSV",
                 center_collect_copy_tsv: "Copiar TSV",
                 center_collect_copied: "Copiado al portapapeles",
-                center_collect_empty: "Sin datos"
+                center_collect_empty: "Sin datos",
+                center_collect_site_trend_chart: "Recolección ramal",
+                center_collect_site_table_title: "Datos acumulados (sitio destino × hora)",
+                center_collect_col_site: "Sitio destino",
             }
         };
 
@@ -1226,6 +1312,13 @@
                 if (ds[0]) ds[0].label = t.packing_manual || '人工集包';
                 if (ds[1]) ds[1].label = t.packing_device || '设备集包';
                 window.dailyPackingSplitChart.update();
+            }
+            if (window.dailyCenterCollectSplitChart && window.dailyCenterCollectSplitChart.data && window.dailyCenterCollectSplitChart.data.datasets) {
+                const ds2 = window.dailyCenterCollectSplitChart.data.datasets;
+                const t2 = translations[lang];
+                if (ds2[0]) ds2[0].label = t2.collect_trunk_label || '干线';
+                if (ds2[1]) ds2[1].label = t2.collect_branch_label || '支线';
+                window.dailyCenterCollectSplitChart.update();
             }
             if (typeof updateFloatingStatsNavState === 'function') {
                 updateFloatingStatsNavState();
@@ -1625,6 +1718,9 @@
                 if (typeof window.loadCenterCollectTrendData === 'function') {
                     window.loadCenterCollectTrendData();
                 }
+                if (typeof window.loadCenterCollectSiteTrendData === 'function') {
+                    window.loadCenterCollectSiteTrendData();
+                }
                 if (typeof window.loadTmsShuttlePivot === 'function') {
                     window.loadTmsShuttlePivot();
                 }
@@ -1723,6 +1819,7 @@
         // Load statistics data
         function loadData() {
             if (typeof loadDailyPackingSplitData === 'function') loadDailyPackingSplitData();
+            if (typeof loadDailyCenterCollectSplitData === 'function') loadDailyCenterCollectSplitData();
             console.log('Loading data for date:', currentDate);
             // Get statistics data
             let url = '/api/stats';
@@ -1923,6 +2020,9 @@
                             if (typeof window.loadCenterCollectTrendData === 'function') {
                                 window.loadCenterCollectTrendData();
                             }
+                            if (typeof window.loadCenterCollectSiteTrendData === 'function') {
+                                window.loadCenterCollectSiteTrendData();
+                            }
                             if (typeof window.loadTmsShuttlePivot === 'function') {
                                 window.loadTmsShuttlePivot();
                             }
@@ -1936,6 +2036,9 @@
                             }
                             if (typeof window.loadCenterCollectTrendData === 'function') {
                                 window.loadCenterCollectTrendData();
+                            }
+                            if (typeof window.loadCenterCollectSiteTrendData === 'function') {
+                                window.loadCenterCollectSiteTrendData();
                             }
                             if (typeof window.loadTmsShuttlePivot === 'function') {
                                 window.loadTmsShuttlePivot();
@@ -3365,6 +3468,189 @@
             });
         }
 
+        function loadDailyCenterCollectSplitData() {
+            let u = '/api/statistics/daily_center_collect_split?days=14';
+            if (currentDate) {
+                u += '&end_date=' + encodeURIComponent(currentDate);
+            }
+            fetch(u)
+                .then(r => {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        console.error('daily_center_collect_split:', data.error);
+                        renderDailyCenterCollectSplitChart(null);
+                        return;
+                    }
+                    renderDailyCenterCollectSplitChart(data);
+                })
+                .catch(err => {
+                    console.error('loadDailyCenterCollectSplitData', err);
+                    renderDailyCenterCollectSplitChart(null);
+                });
+        }
+
+        function renderDailyCenterCollectSplitChart(data) {
+            const canvas = document.getElementById('dailyCenterCollectSplitChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            if (window.dailyCenterCollectSplitChart && typeof window.dailyCenterCollectSplitChart.destroy === 'function') {
+                window.dailyCenterCollectSplitChart.destroy();
+            }
+
+            if (!data || !data.dates || data.dates.length === 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText(translations[currentLang].no_data || '暂无数据', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            const labels = data.dates.map(s => s.substring(5));
+            const trunkRaw = (data.trunk || []).map(v => Number(v) || 0);
+            const branchRaw = (data.branch || []).map(v => Number(v) || 0);
+            const isMobile = window.innerWidth < 768;
+
+            function dayTotal(i) {
+                return (trunkRaw[i] || 0) + (branchRaw[i] || 0);
+            }
+
+            function pctOfDay(raw, i) {
+                const t = dayTotal(i);
+                if (t <= 0) return 0;
+                return (Number(raw) || 0) / t * 100;
+            }
+
+            function formatPctFromContext(value, context) {
+                const i = context.dataIndex;
+                const p = pctOfDay(value, i);
+                if (p < 0.5) return '';
+                return p.toFixed(1).replace(/\.0$/, '') + '%';
+            }
+
+            window.dailyCenterCollectSplitChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: translations[currentLang].collect_trunk_label || '干线',
+                            data: trunkRaw,
+                            backgroundColor: 'rgba(46, 204, 113, 0.85)',
+                            borderColor: 'rgba(39, 174, 96, 1)',
+                            borderWidth: 1,
+                            stack: 'collect',
+                            datalabels: {
+                                display: function (context) {
+                                    const v = Number(context.dataset.data[context.dataIndex]) || 0;
+                                    return pctOfDay(v, context.dataIndex) >= 0.5;
+                                },
+                                color: '#fff',
+                                anchor: 'center',
+                                align: 'center',
+                                formatter: formatPctFromContext,
+                                font: { size: isMobile ? 9 : 11, weight: '600' }
+                            }
+                        },
+                        {
+                            label: translations[currentLang].collect_branch_label || '支线',
+                            data: branchRaw,
+                            backgroundColor: 'rgba(155, 89, 182, 0.85)',
+                            borderColor: 'rgba(142, 68, 173, 1)',
+                            borderWidth: 1,
+                            stack: 'collect',
+                            datalabels: {
+                                labels: {
+                                    segmentPct: {
+                                        display: function (context) {
+                                            const v = Number(context.dataset.data[context.dataIndex]) || 0;
+                                            return pctOfDay(v, context.dataIndex) >= 0.5;
+                                        },
+                                        color: '#fff',
+                                        anchor: 'center',
+                                        align: 'center',
+                                        formatter: formatPctFromContext,
+                                        font: { size: isMobile ? 9 : 11, weight: '600' }
+                                    },
+                                    totalAbove: {
+                                        display: function (context) {
+                                            const i = context.dataIndex;
+                                            const sum = (trunkRaw[i] || 0) + (branchRaw[i] || 0);
+                                            return sum > 0;
+                                        },
+                                        color: '#333',
+                                        anchor: 'end',
+                                        align: 'top',
+                                        offset: 4,
+                                        formatter: function (_value, context) {
+                                            const i = context.dataIndex;
+                                            const sum = (trunkRaw[i] || 0) + (branchRaw[i] || 0);
+                                            return sum > 0 ? sum.toLocaleString() : '';
+                                        },
+                                        font: { size: isMobile ? 10 : 12, weight: '700' }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function (items) {
+                                    if (!items || !items.length) return '';
+                                    const i = items[0].dataIndex;
+                                    return (data.dates && data.dates[i]) ? String(data.dates[i]) : '';
+                                },
+                                label: function (context) {
+                                    const i = context.dataIndex;
+                                    const raw = Number(context.parsed.y) || 0;
+                                    const t = dayTotal(i);
+                                    const pct = t > 0 ? (raw / t) * 100 : 0;
+                                    const name = context.dataset.label || '';
+                                    return name + ': ' + pct.toFixed(1).replace(/\.0$/, '') + '% (' + raw.toLocaleString() + ')';
+                                },
+                                footer: function () {
+                                    return translations[currentLang].daily_center_collect_split_tooltip_footer || '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: isMobile ? 45 : 0,
+                                font: { size: isMobile ? 9 : 11 }
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function (v) {
+                                    return Number(v).toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    interaction: { mode: 'index', intersect: false }
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
         // Export to CSV function
         function exportToExcel() {
             try {
@@ -4341,6 +4627,353 @@
             });
         }
 
+        function loadCenterCollectWeekComparisonData() {
+            let u = '/api/statistics/center_collect_week_comparison';
+            if (currentDate) {
+                u += '?end_date=' + encodeURIComponent(currentDate);
+            }
+            fetch(u)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && !Array.isArray(data) && data.error) {
+                        console.error('center_collect_week_comparison:', data.error);
+                        return;
+                    }
+                    renderCenterCollectWeekComparisonChart(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching center collect week comparison:', error);
+                    try {
+                        const canvas = document.getElementById('centerCollectWeekComparisonChart');
+                        if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.font = '16px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillStyle = '#dc3545';
+                            ctx.fillText(translations[currentLang].error_loading_data || '加载数据出错', canvas.width / 2, canvas.height / 2);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                });
+        }
+
+        function renderCenterCollectWeekComparisonChart(data) {
+            const canvasEl = document.getElementById('centerCollectWeekComparisonChart');
+            if (!canvasEl) return;
+            const ctx = canvasEl.getContext('2d');
+            if (window.centerCollectWeekComparisonChart && typeof window.centerCollectWeekComparisonChart.destroy === 'function') {
+                window.centerCollectWeekComparisonChart.destroy();
+            }
+            if (!data || data.length === 0) {
+                ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText(translations[currentLang].no_data || '暂无数据', canvasEl.width / 2, canvasEl.height / 2);
+                return;
+            }
+
+            const labels = data.map(week => {
+                const md = statsMdShort(week.start_date);
+                const wn = statsISOWeekNumber(week.start_date);
+                const weekLine = (wn === '' || wn == null)
+                    ? week.week_label
+                    : (currentLang === 'zh' ? `第${wn}周` : currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                return [md, weekLine];
+            });
+
+            const isMobile = window.innerWidth < 768;
+            const t = translations[currentLang];
+            const tl = t.collect_trunk_label || '干线';
+            const bl = t.collect_branch_label || '支线';
+
+            function weekPctTrunk(week) {
+                const tot = week.week_total || 0;
+                if (tot <= 0) return 0;
+                return (week.week_total_trunk || 0) / tot * 100;
+            }
+            function weekPctBranch(week) {
+                const tot = week.week_total || 0;
+                if (tot <= 0) return 0;
+                return (week.week_total_branch || 0) / tot * 100;
+            }
+
+            const lastWeekIdx = data.length - 1;
+            const trunkWan = data.map(w => (w.week_total_trunk || 0) / 10000);
+            const branchWan = data.map(w => (w.week_total_branch || 0) / 10000);
+
+            const changePercentData = data.map(week => week.total_change_percent);
+            const pointColors = changePercentData.map(value => {
+                if (value > 0) return '#FF6384';
+                if (value < 0) return '#4BC0C0';
+                return '#999999';
+            });
+
+            const wanSuffix = currentLang === 'en' ? '10k' : (currentLang === 'es' ? '×10k' : '万');
+            const datasets = [
+                {
+                    label: tl,
+                    data: trunkWan,
+                    backgroundColor: 'rgba(46, 204, 113, 0.85)',
+                    borderColor: 'rgba(39, 174, 96, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y',
+                    datalabels: {
+                        display: function (ctx) {
+                            return weekPctTrunk(data[ctx.dataIndex]) >= 8;
+                        },
+                        color: '#fff',
+                        anchor: 'center',
+                        align: 'center',
+                        formatter: function (_value, ctx) {
+                            return weekPctTrunk(data[ctx.dataIndex]).toFixed(1).replace(/\.0$/, '') + '%';
+                        },
+                        font: { size: isMobile ? 10 : 12, weight: '600' }
+                    }
+                },
+                {
+                    label: bl,
+                    data: branchWan,
+                    backgroundColor: 'rgba(155, 89, 182, 0.85)',
+                    borderColor: 'rgba(142, 68, 173, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y',
+                    datalabels: {
+                        labels: {
+                            segmentPct: {
+                                display: function (ctx) {
+                                    return weekPctBranch(data[ctx.dataIndex]) >= 8;
+                                },
+                                color: '#fff',
+                                anchor: 'center',
+                                align: 'center',
+                                formatter: function (_value, ctx) {
+                                    return weekPctBranch(data[ctx.dataIndex]).toFixed(1).replace(/\.0$/, '') + '%';
+                                },
+                                font: { size: isMobile ? 10 : 12, weight: '600' }
+                            },
+                            totalAbove: {
+                                display: function (ctx) {
+                                    return (data[ctx.dataIndex].week_total || 0) > 0;
+                                },
+                                color: '#333',
+                                anchor: 'end',
+                                align: 'top',
+                                offset: 4,
+                                formatter: function (_value, ctx) {
+                                    const w = data[ctx.dataIndex];
+                                    return (w.week_total / 10000).toFixed(1) + wanSuffix;
+                                },
+                                font: { weight: 'bold', size: isMobile ? 11 : 13 }
+                            }
+                        }
+                    }
+                },
+                {
+                    label: t.change_percent || '环比变化',
+                    type: 'line',
+                    data: changePercentData,
+                    borderColor: '#FF6384',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: false,
+                    yAxisID: 'y1',
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: pointColors,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    datalabels: {
+                        display: function (ctx) {
+                            const i = ctx.dataIndex;
+                            if (i === lastWeekIdx) return false;
+                            const p = data[i].total_change_percent;
+                            if (p === undefined || p === null) return false;
+                            if (i === 0 && Number(p) === 0) return false;
+                            return true;
+                        },
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 10,
+                        formatter: function (_value, ctx) {
+                            const p = data[ctx.dataIndex].total_change_percent;
+                            const sign = Number(p) >= 0 ? '+' : '';
+                            return sign + Number(p).toFixed(1) + '%';
+                        },
+                        font: { size: isMobile ? 10 : 12, weight: '600' },
+                        color: function (ctx) {
+                            const p = data[ctx.dataIndex].total_change_percent;
+                            if (p > 0) return '#FF6384';
+                            if (p < 0) return '#4BC0C0';
+                            return '#555';
+                        },
+                        backgroundColor: 'rgba(255,255,255,0.92)',
+                        borderRadius: 4,
+                        padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                        borderWidth: 1,
+                        borderColor: function (ctx) {
+                            const p = data[ctx.dataIndex].total_change_percent;
+                            if (p > 0) return 'rgba(255,99,132,0.5)';
+                            if (p < 0) return 'rgba(75,192,192,0.6)';
+                            return '#ccc';
+                        }
+                    }
+                }
+            ];
+
+            const yBarTitle = (t.collect_waybills_wan_axis || '集包运单 (万)');
+
+            window.centerCollectWeekComparisonChart = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: labels, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: { size: isMobile ? 9 : 11 },
+                                boxWidth: isMobile ? 12 : 15,
+                                padding: isMobile ? 5 : 10
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: t.center_collect_week_comparison_chart || '干线/支线集包周环比',
+                            font: { size: isMobile ? 14 : 16 },
+                            padding: {
+                                top: isMobile ? 2 : 4,
+                                bottom: isMobile ? 22 : 30
+                            }
+                        },
+                        tooltip: {
+                            filter: function (tooltipItem) {
+                                if (tooltipItem.datasetIndex === 2 && tooltipItem.dataIndex === lastWeekIdx) {
+                                    return false;
+                                }
+                                return true;
+                            },
+                            callbacks: {
+                                title: function (context) {
+                                    const weekIndex = context[0].dataIndex;
+                                    const week = data[weekIndex];
+                                    const wn = statsISOWeekNumber(week.start_date);
+                                    const wk = (wn === '' || wn == null)
+                                        ? week.week_label
+                                        : (currentLang === 'zh' ? `第${wn}周` :
+                                            currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                                    return `${statsMdShort(week.start_date)} ${wk} (${week.start_date} ~ ${week.end_date})`;
+                                },
+                                label: function (context) {
+                                    const weekIndex = context.dataIndex;
+                                    const ds = context.datasetIndex;
+                                    const week = data[weekIndex];
+                                    if (ds === 2) {
+                                        const p = week.total_change_percent;
+                                        const sign = p >= 0 ? '+' : '';
+                                        const trend = p > 0 ? '↑' : (p < 0 ? '↓' : '→');
+                                        return `${t.change_percent || '环比'}: ${sign}${Number(p).toFixed(1)}% ${trend}`;
+                                    }
+                                    const pt = weekPctTrunk(week);
+                                    const pb = weekPctBranch(week);
+                                    if (ds === 0) {
+                                        const wan = context.parsed.y.toFixed(2);
+                                        return `${tl}: ${(week.week_total_trunk || 0).toLocaleString()} (${wan}${wanSuffix}) · ${pt.toFixed(1)}%`;
+                                    }
+                                    const wan = context.parsed.y.toFixed(2);
+                                    return `${bl}: ${(week.week_total_branch || 0).toLocaleString()} (${wan}${wanSuffix}) · ${pb.toFixed(1)}%`;
+                                },
+                                footer: function (context) {
+                                    if (context.length === 1 && context[0].datasetIndex === 2) return '';
+                                    const weekIndex = context[0].dataIndex;
+                                    const week = data[weekIndex];
+                                    const totalWan = (week.week_total / 10000).toFixed(2);
+                                    let footer = `\n${t.week_total || '周总计'}: ${week.week_total.toLocaleString()} (${totalWan}${wanSuffix})`;
+                                    footer += `\n${tl}: ${week.week_total_trunk.toLocaleString()} · ${bl}: ${week.week_total_branch.toLocaleString()}`;
+                                    if (weekIndex !== lastWeekIdx && week.total_change_percent !== undefined && week.total_change_percent !== 0) {
+                                        const sign = week.total_change_percent >= 0 ? '+' : '';
+                                        footer += `\n${t.change_percent || '环比'}: ${sign}${week.total_change_percent}%`;
+                                    }
+                                    return footer;
+                                },
+                                labelColor: function (context) {
+                                    if (context.datasetIndex === 2) {
+                                        const p = data[context.dataIndex].total_change_percent;
+                                        let color = '#999999';
+                                        if (p > 0) color = '#FF6384';
+                                        else if (p < 0) color = '#4BC0C0';
+                                        return { borderColor: color, backgroundColor: color };
+                                    }
+                                    return {
+                                        borderColor: context.dataset.borderColor,
+                                        backgroundColor: context.dataset.backgroundColor
+                                    };
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: currentLang === 'zh' ? '日期 / 周数' :
+                                    currentLang === 'en' ? 'Date / Week #' : 'Fecha / Sem.',
+                                font: { size: isMobile ? 12 : 14 }
+                            },
+                            ticks: { font: { size: isMobile ? 8 : 10 } }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: yBarTitle,
+                                font: { size: isMobile ? 12 : 14 }
+                            },
+                            ticks: {
+                                callback: function (value) {
+                                    return Number(value).toFixed(1);
+                                },
+                                font: { size: isMobile ? 10 : 12 }
+                            }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            title: {
+                                display: true,
+                                text: (t.change_percent || '环比') + ' (%)',
+                                font: { size: isMobile ? 12 : 14 }
+                            },
+                            ticks: {
+                                callback: function (value) {
+                                    return Number(value).toFixed(1) + '%';
+                                },
+                                font: { size: isMobile ? 10 : 12 }
+                            }
+                        }
+                    },
+                    interaction: { intersect: false, mode: 'index' },
+                    layout: {
+                        padding: {
+                            top: isMobile ? 44 : 56,
+                            right: isMobile ? 10 : 20,
+                            bottom: isMobile ? 10 : 20,
+                            left: isMobile ? 10 : 20
+                        }
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
         // Show message function
         function showMessage(text, type) {
             const messageDiv = document.getElementById('message');
@@ -4555,6 +5188,9 @@
             loadWeeklyWaybillTrendData();
             loadDailyTrendData();
             loadWeekComparisonData();
+            if (typeof loadCenterCollectWeekComparisonData === 'function') {
+                loadCenterCollectWeekComparisonData();
+            }
         }
 
         function statsFloatingTodayYmd() {
@@ -5169,27 +5805,35 @@
             const centerSyncBtn = document.getElementById('centerCheckinSyncBtn');
             if (centerSyncBtn) centerSyncBtn.addEventListener('click', manualCenterCheckinSync);
 
-            // ====== 集包运单数（目的中心）- 堆叠面积图 ======
-            function loadCenterCollectTrendData() {
-                let url = '/api/center_collect_trend?destin_type=1';
+            // ====== 集包运单数（目的中心 / 目的站点）- 堆叠面积图 ======
+            function loadCenterCollectTrendForDestin(destinType) {
+                let url = '/api/center_collect_trend?destin_type=' + encodeURIComponent(String(destinType));
                 const d = currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value);
                 if (d) url += '&date=' + encodeURIComponent(d);
+                const site = String(destinType) === '2';
                 fetch(url)
                     .then(r => r.json())
                     .then(data => {
                         if (data && data.error) {
                             console.error('center_collect_trend error:', data.error);
-                            renderCenterCollectTrendChart(null);
+                            renderCenterCollectTrendChart(null, site);
                             return;
                         }
-                        renderCenterCollectTrendChart(data);
+                        renderCenterCollectTrendChart(data, site);
                     })
                     .catch(err => {
                         console.error('center_collect_trend fetch failed:', err);
-                        renderCenterCollectTrendChart(null);
+                        renderCenterCollectTrendChart(null, site);
                     });
             }
+            function loadCenterCollectTrendData() {
+                loadCenterCollectTrendForDestin('1');
+            }
+            function loadCenterCollectSiteTrendData() {
+                loadCenterCollectTrendForDestin('2');
+            }
             window.loadCenterCollectTrendData = loadCenterCollectTrendData;
+            window.loadCenterCollectSiteTrendData = loadCenterCollectSiteTrendData;
 
             // ===== TMS 短驳发车累计（流向 × 实际发车时段） =====
             function loadTmsShuttlePivot() {
@@ -5341,16 +5985,22 @@
                 return COLLECT_PALETTE[Math.abs(h) % COLLECT_PALETTE.length];
             }
 
-            function renderCenterCollectTrendChart(data) {
-                const canvas = document.getElementById('centerCollectTrendChart');
+            function renderCenterCollectTrendChart(data, siteMode) {
+                const site = !!siteMode;
+                const canvasId = site ? 'centerCollectSiteTrendChart' : 'centerCollectTrendChart';
+                const chartKey = site ? 'centerCollectSiteTrendChart' : 'centerCollectTrendChart';
+                const canvas = document.getElementById(canvasId);
                 if (!canvas) return;
-                // 始终同步刷新下方表格（包括空状态）
-                renderCenterCollectTable(data);
-                window.__centerCollectLastData = data || null;
+                renderCenterCollectTable(data, site);
+                if (site) {
+                    window.__centerCollectSiteLastData = data || null;
+                } else {
+                    window.__centerCollectLastData = data || null;
+                }
 
                 const ctx = canvas.getContext('2d');
-                if (window.centerCollectTrendChart && typeof window.centerCollectTrendChart.destroy === 'function') {
-                    window.centerCollectTrendChart.destroy();
+                if (window[chartKey] && typeof window[chartKey].destroy === 'function') {
+                    window[chartKey].destroy();
                 }
                 if (!data || !data.dates || data.dates.length === 0 || !data.series || data.series.length === 0) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -5374,7 +6024,7 @@
                         fill: true
                     };
                 });
-                window.centerCollectTrendChart = new Chart(ctx, {
+                window[chartKey] = new Chart(ctx, {
                     type: 'line',
                     data: { labels: data.dates, datasets: datasets },
                     options: {
@@ -5434,6 +6084,7 @@
                             status.style.color = '#28a745';
                         }
                         loadCenterCollectTrendData();
+                        loadCenterCollectSiteTrendData();
                         if (typeof showMessage === 'function') showMessage(data.message || (translations[currentLang].sync_success || '同步成功'), 'success');
                     } else {
                         throw new Error(data.error || 'sync failed');
@@ -5450,13 +6101,22 @@
                 }
             }
 
-            async function manualCenterCollectBackfill() {
-                const btn = document.getElementById('centerCollectBackfillBtn');
+            async function manualCenterCollectBackfill(days, clickedBtn) {
+                const d = Math.max(1, Math.min(parseInt(days, 10) || 7, 93));
+                const btn = clickedBtn
+                    || document.getElementById('centerCollectBackfillBtn')
+                    || document.getElementById('centerCollectBackfill30Btn');
+                const btn7 = document.getElementById('centerCollectBackfillBtn');
+                const btn30 = document.getElementById('centerCollectBackfill30Btn');
                 const status = document.getElementById('centerCollectSyncStatus');
                 if (!btn || btn.disabled) return;
-                btn.disabled = true;
+                const busy = [btn7, btn30].filter(Boolean);
+                busy.forEach(b => { b.disabled = true; });
                 if (status) {
-                    status.textContent = translations[currentLang].center_collect_backfilling || '…';
+                    const bfMsg = (d >= 30 && translations[currentLang].center_collect_backfilling_30)
+                        ? translations[currentLang].center_collect_backfilling_30
+                        : (translations[currentLang].center_collect_backfilling || '…');
+                    status.textContent = bfMsg;
                     status.style.color = '#6c757d';
                 }
                 try {
@@ -5464,7 +6124,7 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'same-origin',
-                        body: JSON.stringify({ days: 7 })
+                        body: JSON.stringify({ days: d })
                     });
                     const data = await res.json();
                     if (data.success) {
@@ -5473,6 +6133,7 @@
                             status.style.color = '#28a745';
                         }
                         loadCenterCollectTrendData();
+                        loadCenterCollectSiteTrendData();
                         if (typeof showMessage === 'function') showMessage(data.message || '回补完成', 'success');
                     } else {
                         throw new Error(data.error || 'backfill failed');
@@ -5485,7 +6146,7 @@
                     }
                     if (typeof showMessage === 'function') showMessage(e.message, 'error');
                 } finally {
-                    btn.disabled = false;
+                    busy.forEach(b => { b.disabled = false; });
                 }
             }
 
@@ -5511,8 +6172,9 @@
 
             function _fmtInt(n) { return (n || 0).toLocaleString(); }
 
-            function renderCenterCollectTable(data) {
-                const table = document.getElementById('centerCollectTable');
+            function renderCenterCollectTable(data, siteMode) {
+                const site = !!siteMode;
+                const table = document.getElementById(site ? 'centerCollectSiteTable' : 'centerCollectTable');
                 if (!table) return;
                 const thead = table.querySelector('thead');
                 const tbody = table.querySelector('tbody');
@@ -5524,7 +6186,9 @@
                     return;
                 }
 
-                const destLabel = translations[currentLang].center_collect_col_destin || '目的中心';
+                const destLabel = site
+                    ? (translations[currentLang].center_collect_col_site || '目的站点')
+                    : (translations[currentLang].center_collect_col_destin || '目的中心');
                 const totalLabel = translations[currentLang].center_collect_col_total || '累计';
                 const sumLabel = translations[currentLang].center_collect_row_sum || '合计';
 
@@ -5558,14 +6222,17 @@
                 tbody.innerHTML = bodyHtml;
             }
 
-            function _collectMatrixToRows(sep) {
+            function _collectMatrixToRows(isSite) {
                 // 从当前表格数据构建二维行（第一行是表头，最后一行是合计）
-                const data = window.__centerCollectLastData;
+                const data = isSite ? window.__centerCollectSiteLastData : window.__centerCollectLastData;
                 const { hours, rows, colSums, grandTotal } = _collectBuildMatrix(data);
                 if (rows.length === 0) return [];
-                const destLabel = translations[currentLang].center_collect_col_destin || '目的中心';
-                const totalLabel = translations[currentLang].center_collect_col_total || '累计';
-                const sumLabel = translations[currentLang].center_collect_row_sum || '合计';
+                const t = translations[currentLang] || {};
+                const destLabel = isSite
+                    ? (t.center_collect_col_site || '目的站点')
+                    : (t.center_collect_col_destin || '目的中心');
+                const totalLabel = t.center_collect_col_total || '累计';
+                const sumLabel = t.center_collect_row_sum || '合计';
                 const header = [destLabel, ...hours, totalLabel];
                 const body = rows.map(r => [r.name, ...r.hourly.map(v => v || 0), r.total]);
                 const footer = [sumLabel, ...colSums, grandTotal];
@@ -5578,14 +6245,15 @@
                 return s;
             }
 
-            function _collectFilename(ext) {
+            function _collectFilename(ext, isSite) {
                 const d = currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value) || '';
                 const datePart = d ? d : new Date().toISOString().slice(0, 10);
-                return `center_collect_${datePart}.${ext}`;
+                const prefix = isSite ? 'center_collect_site_' : 'center_collect_';
+                return `${prefix}${datePart}.${ext}`;
             }
 
             function manualCenterCollectExportCsv() {
-                const rows = _collectMatrixToRows();
+                const rows = _collectMatrixToRows(false);
                 if (rows.length === 0) {
                     if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_empty || '暂无数据', 'error');
                     return;
@@ -5596,14 +6264,52 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = _collectFilename('csv');
+                a.download = _collectFilename('csv', false);
                 document.body.appendChild(a);
                 a.click();
                 setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
             }
 
             async function manualCenterCollectCopyTsv() {
-                const rows = _collectMatrixToRows();
+                const rows = _collectMatrixToRows(false);
+                if (rows.length === 0) {
+                    if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_empty || '暂无数据', 'error');
+                    return;
+                }
+                const tsv = rows.map(r => r.join('\t')).join('\n');
+                try {
+                    await navigator.clipboard.writeText(tsv);
+                    if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_copied || '已复制到剪贴板', 'success');
+                } catch (e) {
+                    // 回退：临时 textarea + execCommand
+                    const ta = document.createElement('textarea');
+                    ta.value = tsv; ta.style.position = 'fixed'; ta.style.top = '-1000px';
+                    document.body.appendChild(ta); ta.select();
+                    try { document.execCommand('copy'); if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_copied || '已复制到剪贴板', 'success'); }
+                    catch (e2) { if (typeof showMessage === 'function') showMessage('copy failed: ' + e2.message, 'error'); }
+                    document.body.removeChild(ta);
+                }
+            }
+
+            function manualCenterCollectSiteExportCsv() {
+                const rows = _collectMatrixToRows(true);
+                if (rows.length === 0) {
+                    if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_empty || '暂无数据', 'error');
+                    return;
+                }
+                const csv = rows.map(r => r.map(_collectCsvEscape).join(',')).join('\r\n');
+                const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = _collectFilename('csv', true);
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+            }
+
+            async function manualCenterCollectSiteCopyTsv() {
+                const rows = _collectMatrixToRows(true);
                 if (rows.length === 0) {
                     if (typeof showMessage === 'function') showMessage(translations[currentLang].center_collect_empty || '暂无数据', 'error');
                     return;
@@ -5636,11 +6342,17 @@
             const cb1 = document.getElementById('centerCollectSyncBtn');
             if (cb1) cb1.addEventListener('click', manualCenterCollectSync);
             const cb2 = document.getElementById('centerCollectBackfillBtn');
-            if (cb2) cb2.addEventListener('click', manualCenterCollectBackfill);
+            if (cb2) cb2.addEventListener('click', function (e) { manualCenterCollectBackfill(7, e.currentTarget); });
+            const cb2m = document.getElementById('centerCollectBackfill30Btn');
+            if (cb2m) cb2m.addEventListener('click', function (e) { manualCenterCollectBackfill(30, e.currentTarget); });
             const cbExp = document.getElementById('centerCollectExportCsvBtn');
             if (cbExp) cbExp.addEventListener('click', manualCenterCollectExportCsv);
             const cbCopy = document.getElementById('centerCollectCopyTsvBtn');
             if (cbCopy) cbCopy.addEventListener('click', manualCenterCollectCopyTsv);
+            const cbSiteExp = document.getElementById('centerCollectSiteExportCsvBtn');
+            if (cbSiteExp) cbSiteExp.addEventListener('click', manualCenterCollectSiteExportCsv);
+            const cbSiteCopy = document.getElementById('centerCollectSiteCopyTsvBtn');
+            if (cbSiteCopy) cbSiteCopy.addEventListener('click', manualCenterCollectSiteCopyTsv);
 
             // 物资统计图导出按钮
             const dtExp = document.getElementById('dailyTrendExportCsvBtn');
@@ -5650,6 +6362,7 @@
 
             // 页面初次载入时拉一次（切日期时会通过下面的 hook 再拉）
             loadCenterCollectTrendData();
+            loadCenterCollectSiteTrendData();
 
             function renderCenterCheckinTrendChart(data) {
                 const ctx = document.getElementById('centerCheckinTrendChart').getContext('2d');

@@ -1853,6 +1853,246 @@ def api_statistics_daily_packing_split():
         return jsonify({'error': str(e)}), 500
 
 
+def _gofo_collect_biz_day_trunk_branch(cursor, d: datetime.date) -> tuple:
+    """LA 运营日 D：06:00(D)–06:00(D+1)，gofo_center_collect_stats 干线(type1)/支线(type2) waybill_cnt。"""
+    ds = d.strftime('%Y-%m-%d')
+    next_d = (d + timedelta(days=1)).strftime('%Y-%m-%d')
+    cursor.execute(
+        convert_query_placeholders(
+            """
+            SELECT COALESCE(SUM(CASE WHEN destin_type = 1 THEN waybill_cnt ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN destin_type = 2 THEN waybill_cnt ELSE 0 END), 0)
+            FROM gofo_center_collect_stats
+            WHERE (record_date = ? AND record_hour >= '06:00')
+               OR (record_date = ? AND record_hour < '06:00')
+            """
+        ),
+        (ds, next_d),
+    )
+    r = cursor.fetchone()
+    return int(_db_row_get(r, 0, 0) or 0), int(_db_row_get(r, 1, 0) or 0)
+
+
+def _sorting_biz_day_manual_device_total(cursor, d: datetime.date) -> int:
+    """与 daily_packing_split 相同：运营日 D 的 sorting_records 人工+设备件数合计。"""
+    ds = d.strftime('%Y-%m-%d')
+    next_d = (d + timedelta(days=1)).strftime('%Y-%m-%d')
+    cursor.execute(
+        convert_query_placeholders(
+            """
+            SELECT COALESCE(SUM(manual_count), 0), COALESCE(SUM(device_count), 0)
+            FROM sorting_records
+            WHERE (sorting_time = ? AND time_slot >= '06:00')
+               OR (sorting_time = ? AND time_slot < '06:00')
+            """
+        ),
+        (ds, next_d),
+    )
+    r = cursor.fetchone()
+    m = int(_db_row_get(r, 0, 0) or 0)
+    dv = int(_db_row_get(r, 1, 0) or 0)
+    return m + dv
+
+
+def _collect_biz_day_trunk_branch_aligned(cursor, d: datetime.date) -> tuple:
+    """干线/支线：集包看板 destin 占比不变，柱高合计强制等于同期分拣人工+设备（与每日集包人工/设备图一致）。
+
+    无看板数据且分拣>0 时，当日全部计入干线。"""
+    tr, br = _gofo_collect_biz_day_trunk_branch(cursor, d)
+    total_sorting = _sorting_biz_day_manual_device_total(cursor, d)
+    if total_sorting <= 0:
+        return 0, 0
+    g = tr + br
+    if g <= 0:
+        return total_sorting, 0
+    tr_adj = int(round(total_sorting * tr / g))
+    br_adj = total_sorting - tr_adj
+    return tr_adj, br_adj
+
+
+@app.route('/api/statistics/daily_center_collect_split', methods=['GET'])
+def api_statistics_daily_center_collect_split():
+    """按 LA 运营日聚合；柱高合计与 daily_packing_split（人工+设备）同源同值。
+
+    干线/支线按 gofo_center_collect_stats 当日干线:支线运单占比拆分（若无看板数据则当日全部计入干线）。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    days = request.args.get('days', type=int)
+    if days is None or days < 1:
+        days = 14
+    days = min(days, 90)
+    try:
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        if end_raw:
+            try:
+                end_date = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+            except ValueError:
+                end_date = datetime.now(LA_TZ).date()
+        else:
+            end_date = datetime.now(LA_TZ).date()
+        start_date = end_date - timedelta(days=days - 1)
+        dates = []
+        d = start_date
+        while d <= end_date:
+            dates.append(d.strftime('%Y-%m-%d'))
+            d += timedelta(days=1)
+
+        trunk_list: list = []
+        branch_list: list = []
+        conn = get_db()
+        cursor = conn.cursor()
+        try:
+            d = start_date
+            while d <= end_date:
+                tr, br = _collect_biz_day_trunk_branch_aligned(cursor, d)
+                trunk_list.append(tr)
+                branch_list.append(br)
+                d += timedelta(days=1)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            trunk_list = [0] * len(dates)
+            branch_list = [0] * len(dates)
+        finally:
+            conn.close()
+
+        return jsonify({
+            'dates': dates,
+            'trunk': trunk_list,
+            'branch': branch_list,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/statistics/center_collect_week_comparison', methods=['GET'])
+def api_statistics_center_collect_week_comparison():
+    """自然周（周一至周日）干线/支线堆叠；每日与 daily_center_collect_split 一致（合计=分拣人工+设备，占比来自看板）。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        min_str = None
+        try:
+            cursor.execute(
+                convert_query_placeholders(
+                    "SELECT MIN(record_date) FROM gofo_center_collect_stats"
+                )
+            )
+            mr = cursor.fetchone()
+            min_str = _db_row_get(mr, 0, None) if mr else None
+        except Exception:
+            min_str = None
+
+        if not min_str:
+            conn.close()
+            return jsonify([])
+
+        try:
+            min_date = datetime.strptime(str(min_str)[:10], '%Y-%m-%d').date()
+        except ValueError:
+            conn.close()
+            return jsonify([])
+
+        max_date = datetime.now(LA_TZ).date()
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        if end_raw:
+            try:
+                ed = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+                max_date = min(max_date, ed)
+            except ValueError:
+                pass
+
+        def get_natural_week_range(date):
+            weekday = date.weekday()
+            week_start = date - timedelta(days=weekday)
+            week_end = week_start + timedelta(days=6)
+            return week_start, week_end
+
+        current_start, current_end = get_natural_week_range(min_date)
+        weeks_data = []
+
+        while current_start <= max_date:
+            daily_data = []
+            week_total_trunk = 0
+            week_total_branch = 0
+
+            for day_offset in range(7):
+                current_day = current_start + timedelta(days=day_offset)
+
+                if current_day > max_date:
+                    daily_data.append({
+                        'date': current_day.strftime('%Y-%m-%d'),
+                        'weekday': current_day.weekday(),
+                        'trunk': 0,
+                        'branch': 0,
+                        'total': 0,
+                    })
+                    continue
+
+                tr, br = _collect_biz_day_trunk_branch_aligned(cursor, current_day)
+                tot = tr + br
+                week_total_trunk += tr
+                week_total_branch += br
+                daily_data.append({
+                    'date': current_day.strftime('%Y-%m-%d'),
+                    'weekday': current_day.weekday(),
+                    'trunk': tr,
+                    'branch': br,
+                    'total': tot,
+                })
+
+            week_total = week_total_trunk + week_total_branch
+            total_change_percent = 0.0
+            if weeks_data:
+                last_tot = int(weeks_data[-1].get('week_total') or 0)
+                if last_tot > 0:
+                    total_change_percent = ((week_total - last_tot) / last_tot) * 100
+                else:
+                    total_change_percent = 100.0 if week_total > 0 else 0.0
+
+            weeks_data.append({
+                'week_label': f"{current_start.strftime('%m/%d')}-{current_end.strftime('%m/%d')}",
+                'start_date': current_start.strftime('%Y-%m-%d'),
+                'end_date': current_end.strftime('%Y-%m-%d'),
+                'daily_data': daily_data,
+                'week_total_trunk': week_total_trunk,
+                'week_total_branch': week_total_branch,
+                'week_total': week_total,
+                'total_change_percent': round(total_change_percent, 2),
+            })
+
+            current_start = current_start + timedelta(days=7)
+            current_end = current_end + timedelta(days=7)
+
+        conn.close()
+
+        if weeks_data and len(weeks_data) > 0:
+            first_week_start = datetime.strptime(weeks_data[0]['start_date'], '%Y-%m-%d').date()
+            if first_week_start < min_date:
+                weeks_data = weeks_data[1:]
+
+        if weeks_data and len(weeks_data) > 0:
+            weeks_data[0]['total_change_percent'] = 0
+
+        return jsonify(weeks_data)
+
+    except Exception as e:
+        if 'conn' in locals():
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return jsonify({'error': f'获取干线支线周环比出错: {str(e)}'}), 500
+
+
 @app.route('/consumables')
 def consumables():
     # 检查用户权限
@@ -12440,8 +12680,8 @@ def truck_booking_hourly_sync_job():
             print(f"[AutoSync] Loop Error in truck booking sync: {e}")
             time.sleep(60)
 
-def _maybe_backfill_center_collect_7d():
-    """首次上线（或表为空）时自动回补最近 7 天集包数据，幂等。"""
+def _maybe_backfill_center_collect_initial():
+    """首次上线（或表为空）时自动回补最近 30 天集包数据（目的中心+站点×时段），幂等。"""
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -12468,8 +12708,8 @@ def _maybe_backfill_center_collect_7d():
         return  # 最近 24 小时内有数据，认为已初始化过
     try:
         import sync_center_collect
-        print("[GofoAutoSync] center_collect first-run: backfilling last 7 days ...")
-        res = sync_center_collect.fetch_center_collect_backfill(days=7)
+        print("[GofoAutoSync] center_collect first-run: backfilling last 30 days ...")
+        res = sync_center_collect.fetch_center_collect_backfill(days=30)
         print(
             f"[GofoAutoSync] center_collect backfill done: "
             f"total_stored_rows={res.get('total_stored_rows')}"
@@ -12483,7 +12723,7 @@ def gofo_hourly_sync_job():
     print(f"[GofoAutoSync] Background job started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     try:
-        _maybe_backfill_center_collect_7d()
+        _maybe_backfill_center_collect_initial()
     except Exception as e:
         print(f"[GofoAutoSync] center_collect backfill guard error: {e}")
     
@@ -13056,7 +13296,7 @@ def api_admin_center_collect_sync():
 
 @app.route('/api/admin/center_collect/backfill', methods=['POST'])
 def api_admin_center_collect_backfill():
-    """回补最近 N 天（默认 7，上限 60）。"""
+    """回补最近 N 天（默认 7，上限 93）。每次按小时抓取，中心与站点写入同表 gofo_center_collect_stats。"""
     if 'user_id' not in session:
         return jsonify({'success': False, 'error': '未登录'}), 401
     conn = get_db()
@@ -13071,7 +13311,7 @@ def api_admin_center_collect_backfill():
         days = int(body.get('days') or 7)
     except (TypeError, ValueError):
         days = 7
-    days = max(1, min(days, 60))
+    days = max(1, min(days, 93))
     try:
         import sync_center_collect
         result = sync_center_collect.fetch_center_collect_backfill(days=days)

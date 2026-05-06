@@ -3,8 +3,8 @@ GoFO 中心看板「集包数」弹窗（collectionPackage/popover）按小时�
 
 - 源：POST https://dms.gofoexpress.com/prod-api/dbu_report/common/magic/center/board/collectionPackage/popover
 - 源中心：CNO.H（centerId=596）
-- 目的组织类型：**中心**（destinType == 1）；destinType==2 是站点、==None 是未归类
-  弹窗里切换"目的组织类型"不改变请求，靠客户端过滤 destinType。
+- 目的组织类型：接口 **每条 record 带 destinType**（1=中心、2=站点、None 未归类），同一次响应可同时含中心与站点。
+  弹窗里切换「目的组织类型」不改请求体，仅前端过滤展示。
 - 粒度：接口一次请求返回 [startTime, endTime] 窗口内汇总值，没有按小时拆分字段。
   所以按整点循环窗口 [HH:00:00, (HH+1):00:00) 每小时一次，拿到那一小时的增量。
 - 表：gofo_center_collect_stats，主键 (record_date, record_hour, source_center_id, destin_id)
@@ -12,7 +12,7 @@ GoFO 中心看板「集包数」弹窗（collectionPackage/popover）按小时�
 对外函数：
   fetch_center_collect_hour(date_str, hour_int)          抓单个小时
   fetch_center_collect_day(date_str, upto_hour=None)     抓一整天（今天自动截到当前整点）
-  fetch_center_collect_backfill(days=7)                  回补最近 N 天
+  fetch_center_collect_backfill(days=7)                  回补最近 N 天（中心+站点同上表）
 """
 from __future__ import annotations
 
@@ -307,7 +307,7 @@ def fetch_center_collect_backfill(
     sleep_between: float = 0.2,
 ) -> Dict:
     """回补过去 N 天（不含今天就是 N-1 天历史 + 今天到现在）。"""
-    days = max(1, min(int(days), 60))
+    days = max(1, min(int(days), 93))
     now = datetime.now(BOARD_TZ)
     today = now.date()
     total_stored = 0
