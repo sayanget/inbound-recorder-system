@@ -775,6 +775,17 @@ def init_db():
         );""")
         cursor.execute(sql)
 
+        # CNO 直线窄带分拣机 AA–AD → 生产线 A–D，按 LA 整点小时 operatelog 产能
+        sql = convert_sql("""CREATE TABLE IF NOT EXISTS cno_narrowbelt_hourly (
+            record_date TEXT NOT NULL,
+            time_slot TEXT NOT NULL,
+            line_code TEXT NOT NULL,
+            pieces INTEGER NOT NULL DEFAULT 0,
+            synced_at TEXT,
+            PRIMARY KEY (record_date, time_slot, line_code)
+        );""")
+        cursor.execute(sql)
+
         # DMS 运单管理查询（WaybillManageQuery）导入
         sql = convert_sql("""CREATE TABLE IF NOT EXISTS gofo_waybill_manage_import (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1967,6 +1978,166 @@ def api_statistics_daily_center_collect_split():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+def _build_cno_narrowbelt_hourly_series(anchor_date):
+    """LA 运营日锚点（当日 06:00–次日 06:00）窄带 A–D 各时段件数，与图表 API 同源。"""
+    if isinstance(anchor_date, datetime):
+        anchor_date = anchor_date.date()
+    next_cal = anchor_date + timedelta(days=1)
+    anchor_str = anchor_date.strftime('%Y-%m-%d')
+    next_str = next_cal.strftime('%Y-%m-%d')
+
+    labels = [f"{((6 + i) % 24):02d}:00" for i in range(24)]
+    slot_to_idx = {s: i for i, s in enumerate(labels)}
+    lines = {'A': [0] * 24, 'B': [0] * 24, 'C': [0] * 24, 'D': [0] * 24}
+
+    def _norm_time_slot(val):
+        s = str(val or '').strip()
+        if not s:
+            return ''
+        if len(s) >= 8 and s[2] == ':' and s[5] == ':':
+            s = f"{int(s[:2]):02d}:{s[3:5]}"
+        elif ':' in s:
+            parts = s.split(':')
+            try:
+                s = f"{int(parts[0]):02d}:{str(parts[1])[:2]}"
+            except (ValueError, IndexError):
+                return ''
+        if len(s) == 5 and s[2] == ':':
+            return s
+        return ''
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            convert_query_placeholders(
+                """
+                SELECT record_date, time_slot, line_code, pieces
+                FROM cno_narrowbelt_hourly
+                WHERE (record_date = ? AND time_slot >= '06:00')
+                   OR (record_date = ? AND time_slot < '06:00')
+                ORDER BY record_date, time_slot, line_code
+                """
+            ),
+            (anchor_str, next_str),
+        )
+        for row in cursor.fetchall():
+            rd = _db_row_get(row, 'record_date', '') or _db_row_get(row, 0, '')
+            if hasattr(rd, 'strftime'):
+                rd = rd.strftime('%Y-%m-%d')
+            rd = str(rd)[:10]
+            slot = _norm_time_slot(
+                _db_row_get(row, 'time_slot', '') or _db_row_get(row, 1, '')
+            )
+            line = str(
+                _db_row_get(row, 'line_code', '') or _db_row_get(row, 2, '')
+            ).strip().upper()
+            try:
+                n = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 3, 0) or 0)
+            except (TypeError, ValueError):
+                n = 0
+            if line not in lines or not slot:
+                continue
+            if rd == anchor_str and slot >= '06:00':
+                pass
+            elif rd == next_str and slot < '06:00':
+                pass
+            else:
+                continue
+            idx = slot_to_idx.get(slot)
+            if idx is None:
+                continue
+            lines[line][idx] = n
+    finally:
+        conn.close()
+
+    return {
+        'timezone': 'America/Los_Angeles',
+        'date': anchor_str,
+        'labels': labels,
+        'lines': lines,
+    }
+
+
+@app.route('/api/statistics/cno_narrowbelt_hourly', methods=['GET'])
+def api_statistics_cno_narrowbelt_hourly():
+    """CNO 直线窄带分拣机 AA–AD → 生产线 A–D，按与 sorting_hourly 相同的 LA 运营日（06:00–次日 06:00）返回 24 个时段。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    raw = request.args.get('date')
+    if raw:
+        try:
+            anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
+        except ValueError:
+            anchor = datetime.now(LA_TZ).date()
+    else:
+        anchor = datetime.now(LA_TZ).date()
+
+    try:
+        return jsonify(_build_cno_narrowbelt_hourly_series(anchor))
+    except Exception as e:
+        labels = [f"{((6 + i) % 24):02d}:00" for i in range(24)]
+        return jsonify({
+            'error': str(e),
+            'date': anchor.strftime('%Y-%m-%d'),
+            'labels': labels,
+            'lines': {'A': [0] * 24, 'B': [0] * 24, 'C': [0] * 24, 'D': [0] * 24},
+        }), 500
+
+
+@app.route('/api/statistics/cno_narrowbelt_hourly/export', methods=['GET'])
+def api_statistics_cno_narrowbelt_hourly_export():
+    """导出窄带分时 CSV（UTF-8 BOM，Excel 友好），口径与图表一致。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    raw = request.args.get('date')
+    if raw:
+        try:
+            anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
+        except ValueError:
+            anchor = datetime.now(LA_TZ).date()
+    else:
+        anchor = datetime.now(LA_TZ).date()
+
+    try:
+        data = _build_cno_narrowbelt_hourly_series(anchor)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([
+        'operating_day_anchor_la',
+        'time_slot_la',
+        'line_a_pieces',
+        'line_b_pieces',
+        'line_c_pieces',
+        'line_d_pieces',
+    ])
+    for i, lab in enumerate(data['labels']):
+        w.writerow([
+            data['date'],
+            lab,
+            data['lines']['A'][i],
+            data['lines']['B'][i],
+            data['lines']['C'][i],
+            data['lines']['D'][i],
+        ])
+
+    fn = f"cno_narrowbelt_hourly_{data['date']}.csv"
+    return Response(
+        buf.getvalue().encode('utf-8-sig'),
+        mimetype='text/csv; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename={fn}',
+        },
+    )
 
 
 @app.route('/api/statistics/center_collect_week_comparison', methods=['GET'])
@@ -5730,6 +5901,12 @@ def perform_gofo_backfill_today():
 def sync_gofo_hourly():
     try:
         result = perform_gofo_hourly_sync()
+        try:
+            import sync_cno_narrowbelt_hourly as _cno_nb
+
+            _cno_nb.sync_today_la_hours()
+        except Exception as _nb_e:
+            print(f"[GofoManualSync] cno narrowbelt: {_nb_e}")
         synced_count = result.get('synced_count', 0)
         pieces = result.get('pieces', 0)
         hour = result.get('synced_hour')
@@ -10361,6 +10538,59 @@ def sync_gofo_piece_rate():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/admin/gofo/cno_narrowbelt_sync_day', methods=['POST'])
+def admin_gofo_cno_narrowbelt_sync_day():
+    """提交后台任务：洛杉矶日历日从 0 点起拉取 CNO 窄带 operatelog（当日截至今、历史日拉满 24h）。
+
+    同步 HTTP 若跑满易超时导致 net::ERR_CONNECTION_RESET，故与计件拉取一样改为守护线程执行。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录', 'success': False}), 401
+    conn = get_db()
+    cursor = conn.cursor()
+    if not require_admin(cursor):
+        conn.close()
+        return jsonify({'error': '无权访问', 'success': False}), 403
+    conn.close()
+
+    data = request.json or {}
+    date_str = (data.get('date') or '').strip()[:10]
+    if not date_str:
+        date_str = datetime.now(LA_TZ).strftime('%Y-%m-%d')
+
+    def _background_narrowbelt_sync():
+        try:
+            import importlib
+
+            import sync_cno_narrowbelt_hourly as _nb
+
+            importlib.reload(_nb)
+            result = _nb.sync_la_calendar_day_hours(date_str)
+            print(
+                f"[CnoNarrowbeltAdminSync] date={date_str} "
+                f"success={result.get('success')} "
+                f"hours={result.get('hours_attempted')} "
+                f"errs={len(result.get('errors') or [])}"
+            )
+            errs = result.get('errors') or []
+            if errs:
+                print(f"[CnoNarrowbeltAdminSync] first errors: {errs[:5]}")
+        except Exception as e:
+            print(f"[CnoNarrowbeltAdminSync] FAILED date={date_str}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    threading.Thread(target=_background_narrowbelt_sync, daemon=True).start()
+    return jsonify({
+        'success': True,
+        'async': True,
+        'date': date_str,
+        'message': (
+            f'已提交后台拉取 {date_str}（洛杉矶日历日 0 点起；Operalog 切片多，可能需数分钟）。'
+            f'请留意服务端日志 [CnoNarrowbeltAdminSync]，完成后刷新统计页。'
+        ),
+    })
+
+
 @app.route('/api/admin/gofo/backfill_sorting_range', methods=['POST'])
 def admin_gofo_backfill_sorting_range():
     """按日期区间从 Gofo 重抓 hourly 集包数据并写回 sorting_records（更正统计图等）。"""
@@ -12733,6 +12963,22 @@ def gofo_hourly_sync_job():
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(f"[GofoAutoSync] Triggering scheduled sync at {now_str}...")
             result = perform_gofo_hourly_sync()
+
+            try:
+                import sync_cno_narrowbelt_hourly as _cno_nb
+
+                nb = _cno_nb.sync_today_la_hours()
+                if nb.get("errors"):
+                    print(
+                        f"[GofoAutoSync] cno narrowbelt partial errors: {nb.get('errors')}"
+                    )
+                else:
+                    print(
+                        f"[GofoAutoSync] cno narrowbelt ok date={nb.get('date')} "
+                        f"hours={nb.get('hours_attempted')}"
+                    )
+            except Exception as e:
+                print(f"[GofoAutoSync] cno narrowbelt failed: {e}")
             
             # Sync the center checkin stats at the same time
             try:

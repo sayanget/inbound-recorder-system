@@ -778,6 +778,20 @@
                     <i class="fas fa-file-csv"></i> 导出计件汇总 (CSV)
                 </button>
             </div>
+            <p style="color: #666; margin: 12px 0 10px; font-size: 13px; line-height: 1.5;">
+                <strong>CNO 直线窄带分拣（统计页曲线）</strong>：按<strong>洛杉矶</strong>日期，从当日 00:00 起逐小时拉取 operatelog（scan 217），直至当前时刻；进行中小时为部分窗口。需有效 Gofo Token。
+            </p>
+            <div class="form-row" style="align-items: flex-end; gap: 12px; flex-wrap: wrap;">
+                <div class="form-group" style="margin: 0;">
+                    <label for="cnoNarrowbeltSyncDate" style="font-size: 12px;">LA 日历日（留空=今天）</label>
+                    <input type="date" id="cnoNarrowbeltSyncDate" style="width: 100%; max-width: 200px;">
+                </div>
+                <button type="button" onclick="syncCnoNarrowbeltDay()" class="action-btn btn-search" id="btnCnoNarrowbeltSyncDay"
+                    style="background-color: #6f42c1; border-color: #6f42c1;">
+                    <i class="fas fa-download"></i> 拉取当日逐小时（窄带 AA–AD）
+                </button>
+                <span id="cnoNarrowbeltSyncDayStatus" style="font-size: 13px; color: #6c757d; max-width: 420px;"></span>
+            </div>
         </div>
 
         <!-- Gofo API 配置 (Admin Only) — 紧凑布局 -->
@@ -2847,6 +2861,48 @@
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-cloud-download-alt"></i> 拉取昨日 Gofo 数据 (06:00-06:00)';
                         alert('网络请求或超时错误');
+                        console.error(err);
+                    });
+            }
+
+            function syncCnoNarrowbeltDay() {
+                const dateEl = document.getElementById('cnoNarrowbeltSyncDate');
+                const btn = document.getElementById('btnCnoNarrowbeltSyncDay');
+                const st = document.getElementById('cnoNarrowbeltSyncDayStatus');
+                const payloadDate = (dateEl && dateEl.value) ? dateEl.value : '';
+                btn.disabled = true;
+                const prevHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 拉取中（可能需几分钟）…';
+                if (st) { st.textContent = ''; st.style.color = '#6c757d'; }
+                fetch('/api/admin/gofo/cno_narrowbelt_sync_day', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: payloadDate })
+                })
+                    .then(r => r.json().then(j => ({ ok: r.ok, status: r.status, j })))
+                    .then(({ ok, status, j: res }) => {
+                        btn.disabled = false;
+                        btn.innerHTML = prevHtml;
+                        if (st) {
+                            if (res.success) {
+                                st.style.color = '#fd7e14';
+                                st.textContent = res.message || '后台任务已提交，请稍后刷新统计页';
+                            } else {
+                                st.style.color = '#dc3545';
+                                st.textContent = res.error || ('HTTP ' + status);
+                            }
+                        }
+                        if (res.success) {
+                            alert(res.message || '后台任务已提交');
+                        } else {
+                            alert('提交失败: ' + (res.error || res.message || status));
+                        }
+                    })
+                    .catch(err => {
+                        btn.disabled = false;
+                        btn.innerHTML = prevHtml;
+                        if (st) { st.style.color = '#dc3545'; st.textContent = '请求失败'; }
+                        alert('网络错误（若曾长时间无响应，任务可能已在后台继续，请看服务器日志 [CnoNarrowbeltAdminSync]）');
                         console.error(err);
                     });
             }

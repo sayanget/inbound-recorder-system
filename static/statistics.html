@@ -433,14 +433,26 @@
 
         <!-- Waybill Trend Chart (Feishu Data) -->
         <div class="stats-section">
-            <h3 data-lang="waybill_trend_title">各流向每日票数趋势</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+                <h3 style="margin:0;" data-lang="waybill_trend_title">各流向每日票数趋势</h3>
+                <button type="button" id="waybillTrendChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <div class="chart-container">
                 <canvas id="waybillTrendChart"></canvas>
             </div>
         </div>
 
         <div class="stats-section">
-            <h3 data-lang="weekly_waybill_trend_title">各流向每周票数趋势 (堆叠)</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+                <h3 style="margin:0;" data-lang="weekly_waybill_trend_title">各流向每周票数趋势 (堆叠)</h3>
+                <button type="button" id="weeklyWaybillTrendChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="weeklyWaybillTrendChart"></canvas>
             </div>
@@ -581,7 +593,13 @@
 
         <!-- Hourly comparison chart -->
         <div class="stats-section">
-            <h3 data-lang="inbound_sorting_comparison">入库与分拣时段对比</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                <h3 style="margin:0;" data-lang="inbound_sorting_comparison">入库与分拣时段对比</h3>
+                <button type="button" id="hourlyComparisonChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <p data-lang="inbound_sorting_comparison_sub" style="font-size: 12px; color: #666; margin: 4px 0 10px; line-height: 1.4;">
                 「入库」系列 = 各时段（人工集包 + 设备集包）− CNO01 集包运单数（与分拣分时数据同源）。
             </p>
@@ -592,7 +610,13 @@
 
         <!-- Sorting Capacity Hourly Chart -->
         <div class="stats-section">
-            <h3 data-lang="sorting_capacity_chart">集包产能分时图</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                <h3 style="margin:0;" data-lang="sorting_capacity_chart">集包产能分时图</h3>
+                <button type="button" id="sortingCapacityChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <div id="autoSyncStatus" style="font-size: 12px; text-align: center; margin-bottom: 8px; font-weight: 500;">
                 <!-- Will be populated by JS -->
             </div>
@@ -607,9 +631,38 @@
             </div>
         </div>
 
+        <!-- CNO 直线窄带分拣机 AA–AD 各产线分时 -->
+        <div class="stats-section">
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                <h3 style="margin:0;" data-lang="cno_narrowbelt_hourly_chart">CNO 直线窄带分拣产能（按线）</h3>
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                <button type="button" id="cnoNarrowbeltChartExportBtn" class="nav-btn"
+                    style="padding:6px 14px; font-size:13px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+                <button type="button" id="cnoNarrowbeltExportCsvBtn" class="nav-btn"
+                    style="padding:6px 14px; font-size:13px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
+                    <span data-lang="cno_narrowbelt_export_csv">导出 CSV</span>
+                </button>
+                </div>
+            </div>
+            <p data-lang="cno_narrowbelt_hourly_sub" style="font-size: 12px; color: #666; margin: 4px 0 10px; line-height: 1.4;">
+                横轴与集包产能图一致：所选运营日 洛杉矶 06:00–次日 06:00。
+            </p>
+            <div class="chart-container" style="min-height: 320px;">
+                <canvas id="cnoNarrowbeltHourlyCanvas"></canvas>
+            </div>
+        </div>
+
         <!-- Daily packing: manual vs device (stacked) -->
         <div class="stats-section">
-            <h3 data-lang="daily_packing_split_chart">每日集包（人工 / 设备）</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                <h3 style="margin:0;" data-lang="daily_packing_split_chart">每日集包（人工 / 设备）</h3>
+                <button type="button" id="dailyPackingSplitChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
                 data-lang="daily_packing_split_hint">按 LA 运营日 06:00–次日 06:00 统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。</p>
             <div class="chart-container" style="height: 380px;">
@@ -619,7 +672,13 @@
 
         <!-- Daily packing: trunk vs branch; total aligned to sorting manual+device, split ratio from board -->
         <div class="stats-section">
-            <h3 data-lang="daily_center_collect_split_chart">每日集包（干线 / 支线）</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                <h3 style="margin:0;" data-lang="daily_center_collect_split_chart">每日集包（干线 / 支线）</h3>
+                <button type="button" id="dailyCenterCollectSplitChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
                 data-lang="daily_center_collect_split_hint">与上图相同：LA 运营日 06:00–次日 06:00。柱高合计=分拣表「人工+设备」件数（与上图总柱高一致）；干线/支线按集包看板当日干线:支线占比拆分（无看板占比时当日全部计作干线）。</p>
             <div class="chart-container" style="height: 380px;">
@@ -629,7 +688,13 @@
 
         <!-- 干线/支线集包：周环比（与上方同一运营日口径） -->
         <div class="stats-section">
-            <h3 data-lang="center_collect_week_comparison_chart">干线/支线集包周环比</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                <h3 style="margin:0;" data-lang="center_collect_week_comparison_chart">干线/支线集包周环比</h3>
+                <button type="button" id="centerCollectWeekComparisonChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 8px 0; text-align: center;"
                 data-lang="center_collect_week_comparison_hint">自然周（周一至周日）；每周一柱为干线与支线堆叠（段内为占周比）；周合计与分拣人工+设备一致；折线为周总量环比。</p>
             <div class="chart-container" style="height: 400px;">
@@ -639,7 +704,13 @@
 
         <!-- Pallet hourly chart -->
         <div class="stats-section">
-            <h3 data-lang="pallet_hourly_comparison">托盘时段统计</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+                <h3 style="margin:0;" data-lang="pallet_hourly_comparison">托盘时段统计</h3>
+                <button type="button" id="palletHourlyChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <div class="chart-container">
                 <canvas id="palletHourlyChart"></canvas>
             </div>
@@ -650,7 +721,10 @@
             <div
                 style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
                 <h3 style="margin:0;" data-lang="daily_trend_chart">物资统计图</h3>
-                <div style="display:flex; gap:8px;">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" id="dailyTrendChartExportBtn" class="nav-btn"
+                        style="padding:5px 12px; font-size:12px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
+                        data-lang="export_excel">导出表格</button>
                     <button type="button" id="dailyTrendExportCsvBtn" class="nav-btn"
                         style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
                         <span data-lang="daily_trend_export_csv">导出 CSV</span>
@@ -668,7 +742,13 @@
 
         <!-- Week Comparison Chart -->
         <div class="stats-section">
-            <h3 data-lang="week_comparison_chart">周环比对比</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+                <h3 style="margin:0;" data-lang="week_comparison_chart">周环比对比</h3>
+                <button type="button" id="weekComparisonChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="weekComparisonChart"></canvas>
             </div>
@@ -679,12 +759,17 @@
             <div
                 style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
                 <h3 style="margin:0;" data-lang="center_checkin_trend_chart">CNO.H签入分类</h3>
+                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                <button type="button" id="centerCheckinTrendChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
                 <div id="centerCheckinSyncWrap" style="display:none; align-items:center; gap:10px;">
                     <button type="button" id="centerCheckinSyncBtn" class="nav-btn"
                         style="padding:6px 14px; font-size:13px; cursor:pointer; background:var(--primary-color); color:#fff; border:none; border-radius:4px;">
                         <span data-lang="center_checkin_sync_btn">更新签入数据</span>
                     </button>
                     <span id="centerCheckinSyncStatus" style="font-size:12px; color:var(--text-muted); max-width:220px;"></span>
+                </div>
                 </div>
             </div>
             <p style="font-size:12px; color:var(--text-muted); margin:0 0 10px 0; line-height:1.4;"
@@ -698,6 +783,10 @@
             <div
                 style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
                 <h3 style="margin:0;" data-lang="center_collect_trend_chart">干线集包</h3>
+                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                <button type="button" id="centerCollectTrendChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
                 <div id="centerCollectSyncWrap" style="display:none; align-items:center; gap:10px;">
                     <button type="button" id="centerCollectSyncBtn" class="nav-btn"
                         style="padding:6px 14px; font-size:13px; cursor:pointer; background:var(--primary-color); color:#fff; border:none; border-radius:4px;">
@@ -712,6 +801,7 @@
                         <span data-lang="center_collect_backfill_30_btn">回补 30 天</span>
                     </button>
                     <span id="centerCollectSyncStatus" style="font-size:12px; color:var(--text-muted); max-width:280px;"></span>
+                </div>
                 </div>
             </div>
             <div class="chart-container" style="height: 400px;">
@@ -743,7 +833,13 @@
 
             <!-- 支线集包（目的站点）：与干线区块同一时间节奏 -->
             <div style="height:1px; background:var(--border-color, #e5e7eb); margin:22px 0 14px 0;"></div>
-            <h3 style="margin:0;" data-lang="center_collect_site_trend_chart">支线集包</h3>
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+                <h3 style="margin:0;" data-lang="center_collect_site_trend_chart">支线集包</h3>
+                <button type="button" id="centerCollectSiteTrendChartExportBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
+                    data-lang="export_excel">导出表格</button>
+            </div>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="centerCollectSiteTrendChart"></canvas>
             </div>
@@ -856,6 +952,8 @@
                 load_pallet_error: "加载托盘时段数据出错:",
                 export_error: "导出表格文件出错:",
                 export_success: "正在导出数据,请稍候...",
+                chart_export_no_data: "当前图表无数据可导出",
+                chart_export_category_col: "类别",
                 processing_error: "处理时段对比数据出错:",
                 processing_pallet_error: "处理托盘时段数据出错:",
                 render_error: "渲染时段对比图表出错:",
@@ -871,6 +969,16 @@
                 inbound_sorting_difference: "入库与分拣差异",
                 inbound_sorting_comparison_chart_title: "集包净入与分拣件数时段对比",
                 sorting_capacity_chart_title: "集包产能分时图",
+                cno_narrowbelt_hourly_chart: "CNO 直线窄带分拣产能（按线）",
+                cno_narrowbelt_hourly_sub: "数据来源：Gofo 操作日志（scan 217）；横轴与上方集包产能图一致，为所选「运营日」洛杉矶 06:00–次日 06:00。",
+                cno_narrowbelt_hourly_title: "CNO 窄带分拣机 各产线分时件数",
+                cno_narrowbelt_line_a: "产线 A（AA）",
+                cno_narrowbelt_line_b: "产线 B（AB）",
+                cno_narrowbelt_line_c: "产线 C（AC）",
+                cno_narrowbelt_line_d: "产线 D（AD）",
+                load_narrowbelt_error: "加载窄带分拣分时数据出错:",
+                render_narrowbelt_error: "渲染窄带分拣图表出错:",
+                cno_narrowbelt_export_csv: "导出 CSV（窄带分时）",
                 pieces: "件数",
                 time_slot: "时间段",
                 pickup_forecast_title: "揽收预估数据",
@@ -1014,6 +1122,8 @@
                 load_pallet_error: "Error loading pallet hourly stats:",
                 export_error: "Export error:",
                 export_success: "Exporting data...",
+                chart_export_no_data: "No chart data to export",
+                chart_export_category_col: "Category",
                 processing_error: "Processing hourly data error:",
                 processing_pallet_error: "Processing pallet data error:",
                 render_error: "Error rendering hourly chart:",
@@ -1029,6 +1139,16 @@
                 inbound_sorting_difference: "Inbound vs Sorting Diff.",
                 inbound_sorting_comparison_chart_title: "Net pack-in vs sorted pieces by hour",
                 sorting_capacity_chart_title: "Sorting Capacity Hourly Chart",
+                cno_narrowbelt_hourly_chart: "CNO narrow-belt sorter (by line)",
+                cno_narrowbelt_hourly_sub: "Gofo operation log (scan 217). X-axis matches capacity chart: LA business day 06:00–06:00 for the selected date.",
+                cno_narrowbelt_hourly_title: "Pieces per hour by production line",
+                cno_narrowbelt_line_a: "Line A (AA)",
+                cno_narrowbelt_line_b: "Line B (AB)",
+                cno_narrowbelt_line_c: "Line C (AC)",
+                cno_narrowbelt_line_d: "Line D (AD)",
+                load_narrowbelt_error: "Error loading narrow-belt hourly data:",
+                render_narrowbelt_error: "Error rendering narrow-belt chart:",
+                cno_narrowbelt_export_csv: "Export CSV (narrow-belt hourly)",
                 pieces: "Pieces",
                 time_slot: "Time Slot",
                 pickup_forecast_title: "Pickup Forecast",
@@ -1162,6 +1282,8 @@
                 load_pallet_error: "Error al cargar datos horarios de palets:",
                 export_error: "Error al exportar archivo de tabla:",
                 export_success: "Exportando datos, por favor espere...",
+                chart_export_no_data: "No hay datos del gráfico para exportar",
+                chart_export_category_col: "Categoría",
                 processing_error: "Error al procesar datos de comparación horaria:",
                 processing_pallet_error: "Error al procesar datos horarios de palets:",
                 render_error: "Error al renderizar gráfico de comparación horaria:",
@@ -1182,6 +1304,16 @@
                 combined_capacity: "Manual + equipo (total)",
                 cno01_collect_waybills: "CNO01 empaquetado (guías)",
                 sorting_capacity_chart_title: "Gráfico Horario de Capacidad de Clasificación",
+                cno_narrowbelt_hourly_chart: "Clasificador estrecho CNO (por línea)",
+                cno_narrowbelt_hourly_sub: "Registro Gofo (scan 217). Eje X = mismo día operativo LA 06:00–06:00 que el gráfico de capacidad.",
+                cno_narrowbelt_hourly_title: "Piezas por hora por línea",
+                cno_narrowbelt_line_a: "Línea A (AA)",
+                cno_narrowbelt_line_b: "Línea B (AB)",
+                cno_narrowbelt_line_c: "Línea C (AC)",
+                cno_narrowbelt_line_d: "Línea D (AD)",
+                load_narrowbelt_error: "Error al cargar datos horarios del clasificador estrecho:",
+                render_narrowbelt_error: "Error al renderizar gráfico del clasificador estrecho:",
+                cno_narrowbelt_export_csv: "Exportar CSV (por hora estrecho)",
                 pieces: "Piezas",
                 time_slot: "Franja Horaria",
                 pickup_forecast_title: "Previsión de Recogida",
@@ -1305,6 +1437,9 @@
             // Re-render chart if it exists
             if (window.hourlyChart) {
                 loadHourlyComparisonData();
+            }
+            if (window.cnoNarrowbeltHourlyChartInstance) {
+                loadCnoNarrowbeltHourlyData();
             }
             if (window.dailyPackingSplitChart && window.dailyPackingSplitChart.data && window.dailyPackingSplitChart.data.datasets) {
                 const ds = window.dailyPackingSplitChart.data.datasets;
@@ -1516,6 +1651,22 @@
             if (exportExcelEl) exportExcelEl.addEventListener('click', exportToExcel);
             const manualSyncBtnEl = document.getElementById('manualSyncBtn');
             if (manualSyncBtnEl) manualSyncBtnEl.addEventListener('click', manualGofoSync);
+            const cnoNbExp = document.getElementById('cnoNarrowbeltExportCsvBtn');
+            if (cnoNbExp) cnoNbExp.addEventListener('click', exportCnoNarrowbeltHourlyCsv);
+            bindStatsChartExportBtn('cnoNarrowbeltChartExportBtn', function () { return window.cnoNarrowbeltHourlyChartInstance; }, 'cno_narrowbelt_hourly_chart');
+            bindStatsChartExportBtn('waybillTrendChartExportBtn', function () { return window.waybillTrendChartInstance; }, 'waybill_trend_daily');
+            bindStatsChartExportBtn('weeklyWaybillTrendChartExportBtn', function () { return window.weeklyWaybillTrendChartInstance; }, 'waybill_trend_weekly_stacked');
+            bindStatsChartExportBtn('hourlyComparisonChartExportBtn', function () { return window.hourlyChart; }, 'inbound_sorting_hourly_comparison');
+            bindStatsChartExportBtn('sortingCapacityChartExportBtn', function () { return window.capacityChart; }, 'sorting_capacity_hourly');
+            bindStatsChartExportBtn('dailyPackingSplitChartExportBtn', function () { return window.dailyPackingSplitChart; }, 'daily_packing_manual_device');
+            bindStatsChartExportBtn('dailyCenterCollectSplitChartExportBtn', function () { return window.dailyCenterCollectSplitChart; }, 'daily_center_collect_trunk_branch');
+            bindStatsChartExportBtn('centerCollectWeekComparisonChartExportBtn', function () { return window.centerCollectWeekComparisonChart; }, 'center_collect_week_wow');
+            bindStatsChartExportBtn('palletHourlyChartExportBtn', function () { return window.palletHourlyChart; }, 'pallet_hourly');
+            bindStatsChartExportBtn('dailyTrendChartExportBtn', function () { return window.dailyTrendChart; }, 'daily_trend_chart');
+            bindStatsChartExportBtn('weekComparisonChartExportBtn', function () { return window.weekComparisonChart; }, 'week_comparison');
+            bindStatsChartExportBtn('centerCheckinTrendChartExportBtn', function () { return window.centerCheckinTrendChart; }, 'center_checkin_trend');
+            bindStatsChartExportBtn('centerCollectTrendChartExportBtn', function () { return window.centerCollectTrendChart; }, 'center_collect_trunk_trend');
+            bindStatsChartExportBtn('centerCollectSiteTrendChartExportBtn', function () { return window.centerCollectSiteTrendChart; }, 'center_collect_branch_site_trend');
 
             // Bind pickup forecast save button event
             setTimeout(function () {
@@ -2200,9 +2351,44 @@
 
             // Load pallet hourly data
             loadPalletHourlyData();
+            loadCnoNarrowbeltHourlyData();
         }
 
-        // Load pallet hourly data
+        function loadCnoNarrowbeltHourlyData() {
+            let url = '/api/statistics/cno_narrowbelt_hourly';
+            if (currentDate) {
+                url += '?date=' + encodeURIComponent(currentDate);
+            }
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    renderCnoNarrowbeltHourlyChart(data);
+                })
+                .catch(error => {
+                    console.error('Error loading CNO narrowbelt hourly:', error);
+                    showMessage(
+                        (translations[currentLang].load_narrowbelt_error || '加载窄带分拣分时数据出错:') + ' ' + error.message,
+                        'error'
+                    );
+                });
+        }
+
+        function exportCnoNarrowbeltHourlyCsv() {
+            let url = '/api/statistics/cno_narrowbelt_hourly/export';
+            if (currentDate) {
+                url += '?date=' + encodeURIComponent(currentDate);
+            }
+            window.location.href = url;
+        }
+
         function loadPalletHourlyData() {
             let palletUrl = '/api/pallet_hourly';
             if (currentDate) {
@@ -2814,6 +3000,131 @@
             } catch (error) {
                 console.error('Error rendering capacity chart:', error);
                 showMessage(translations[currentLang].render_capacity_error || '渲染集包产能图表出错: ' + error.message, 'error');
+            }
+        }
+
+        function renderCnoNarrowbeltHourlyChart(payload) {
+            try {
+                const labels = (payload && payload.labels) ? payload.labels : [];
+                const lines = (payload && payload.lines) ? payload.lines : {};
+                const t = translations[currentLang];
+                const datasets = [
+                    {
+                        label: t.cno_narrowbelt_line_a || '产线 A（AA）',
+                        data: (lines.A || []).slice(),
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.08)',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.35,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        datalabels: { display: false }
+                    },
+                    {
+                        label: t.cno_narrowbelt_line_b || '产线 B（AB）',
+                        data: (lines.B || []).slice(),
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.08)',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.35,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        datalabels: { display: false }
+                    },
+                    {
+                        label: t.cno_narrowbelt_line_c || '产线 C（AC）',
+                        data: (lines.C || []).slice(),
+                        borderColor: 'rgba(255, 206, 86, 1)',
+                        backgroundColor: 'rgba(255, 206, 86, 0.08)',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.35,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        datalabels: { display: false }
+                    },
+                    {
+                        label: t.cno_narrowbelt_line_d || '产线 D（AD）',
+                        data: (lines.D || []).slice(),
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.08)',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.35,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        datalabels: { display: false }
+                    }
+                ];
+                const flat = datasets.flatMap(d => d.data || []);
+                const maxV = flat.length ? Math.max(0, ...flat.map(v => Number(v) || 0)) : 0;
+                const yAxisMax = maxV > 0 ? Math.ceil(maxV / 100) * 100 + 100 : 500;
+                const isMobile = window.innerWidth < 768;
+                const canvasEl = document.getElementById('cnoNarrowbeltHourlyCanvas');
+                if (!canvasEl) return;
+                const chartCtx = canvasEl.getContext('2d');
+
+                if (window.cnoNarrowbeltHourlyChartInstance) {
+                    if (typeof window.cnoNarrowbeltHourlyChartInstance.destroy === 'function') {
+                        window.cnoNarrowbeltHourlyChartInstance.destroy();
+                    }
+                    window.cnoNarrowbeltHourlyChartInstance = null;
+                }
+
+                const dateTxt = (payload && payload.date) ? payload.date : '';
+                const titleBase = t.cno_narrowbelt_hourly_title || 'CNO 窄带分拣机 各产线分时件数';
+                const titleText = dateTxt ? `${titleBase} (${dateTxt})` : titleBase;
+
+                window.cnoNarrowbeltHourlyChartInstance = new Chart(chartCtx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { font: { size: isMobile ? 10 : 12 } }
+                            },
+                            title: {
+                                display: true,
+                                text: titleText,
+                                font: { size: isMobile ? 14 : 16 }
+                            },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: yAxisMax > 0 ? yAxisMax : undefined,
+                                title: {
+                                    display: true,
+                                    text: t.pieces || '件数'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: !isMobile,
+                                    text: (t.time_slot || '时间段') + ' (LA 运营日 06:00 起)'
+                                },
+                                ticks: {
+                                    font: { size: isMobile ? 9 : 11 },
+                                    maxRotation: 45,
+                                    minRotation: isMobile ? 45 : 0
+                                }
+                            }
+                        },
+                        interaction: { intersect: false, mode: 'index' }
+                    }
+                });
+            } catch (error) {
+                console.error('Error rendering narrowbelt chart:', error);
+                showMessage(
+                    (translations[currentLang].render_narrowbelt_error || '渲染窄带分拣图表出错:') + ' ' + error.message,
+                    'error'
+                );
             }
         }
 
@@ -3648,6 +3959,76 @@
                     interaction: { mode: 'index', intersect: false }
                 },
                 plugins: [ChartDataLabels]
+            });
+        }
+
+        function _statsCsvEscape(value) {
+            const s = String(value ?? '');
+            if (/[",\r\n]/.test(s)) {
+                return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+        }
+
+        function _statsExportDateSuffix() {
+            let dateStr = currentDate;
+            if (!dateStr) {
+                const el = document.getElementById('selectedDate');
+                if (el && el.value) dateStr = el.value;
+            }
+            if (!dateStr) {
+                const now = new Date();
+                dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            }
+            return dateStr;
+        }
+
+        function _chartDatasetYAtIndex(dataset, index) {
+            const d = dataset && dataset.data;
+            if (!d) return '';
+            const pt = d[index];
+            if (pt == null || pt === undefined) return '';
+            if (typeof pt === 'number') return pt;
+            if (typeof pt === 'object') {
+                if (typeof pt.y === 'number') return pt.y;
+                if (pt.parsed && typeof pt.parsed.y === 'number') return pt.parsed.y;
+            }
+            return String(pt);
+        }
+
+        function exportChartJsToCsv(chart, filenameStem) {
+            const t = translations[currentLang] || {};
+            if (!chart || chart.destroyed === true || !chart.data || !Array.isArray(chart.data.labels)) {
+                alert(t.chart_export_no_data || '暂无数据');
+                return;
+            }
+            const labels = chart.data.labels;
+            const datasets = chart.data.datasets || [];
+            if (!labels.length || !datasets.length) {
+                alert(t.chart_export_no_data || '暂无数据');
+                return;
+            }
+            const catLabel = t.chart_export_category_col || '类别';
+            const header = [catLabel, ...datasets.map(ds => (ds && ds.label) ? ds.label : '')];
+            const rows = labels.map((lb, i) => [lb, ...datasets.map(ds => _chartDatasetYAtIndex(ds, i))]);
+            const lines = [header.map(_statsCsvEscape).join(',')];
+            rows.forEach(r => lines.push(r.map(_statsCsvEscape).join(',')));
+            const csv = '\uFEFF' + lines.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${filenameStem}_${_statsExportDateSuffix()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+        }
+
+        function bindStatsChartExportBtn(btnId, chartGetter, filenameStem) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.addEventListener('click', function () {
+                exportChartJsToCsv(chartGetter(), filenameStem);
             });
         }
 
@@ -6107,6 +6488,7 @@
                     window[chartKey].destroy();
                 }
                 if (!data || !data.dates || data.dates.length === 0 || !data.series || data.series.length === 0) {
+                    window[chartKey] = null;
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.font = '16px Arial';
                     ctx.textAlign = 'center';
@@ -6477,6 +6859,7 @@
 
                 if (!data || !data.dates || data.dates.length === 0 || !data.series || data.series.length === 0) {
                     const canvas = document.getElementById('centerCheckinTrendChart');
+                    window.centerCheckinTrendChart = null;
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.font = '16px Arial';
                     ctx.textAlign = 'center';
