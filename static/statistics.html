@@ -4705,11 +4705,41 @@
             const branchWan = data.map(w => (w.week_total_branch || 0) / 10000);
 
             const changePercentData = data.map(week => week.total_change_percent);
-            const pointColors = changePercentData.map(value => {
-                if (value > 0) return '#FF6384';
-                if (value < 0) return '#4BC0C0';
-                return '#999999';
-            });
+
+            function computeWeekFieldChangePercent(weeks, field) {
+                return weeks.map((w, i) => {
+                    if (i === 0) return 0;
+                    const prev = Number(weeks[i - 1][field]) || 0;
+                    const cur = Number(w[field]) || 0;
+                    if (prev > 0) return Math.round(((cur - prev) / prev) * 10000) / 100;
+                    return cur > 0 ? 100 : 0;
+                });
+            }
+            const trunkChangeData = computeWeekFieldChangePercent(data, 'week_total_trunk');
+            const branchChangeData = computeWeekFieldChangePercent(data, 'week_total_branch');
+
+            function pointColorsForSeries(series) {
+                return series.map(value => {
+                    if (value > 0) return '#FF6384';
+                    if (value < 0) return '#4BC0C0';
+                    return '#999999';
+                });
+            }
+            function pointColorsTrunk(series) {
+                return series.map(value => {
+                    if (value > 0) return '#27ae60';
+                    if (value < 0) return '#1e8449';
+                    return '#999999';
+                });
+            }
+            function pointColorsBranch(series) {
+                return series.map(value => {
+                    if (value > 0) return '#9b59b6';
+                    if (value < 0) return '#7d3c98';
+                    return '#999999';
+                });
+            }
+            const pointColors = pointColorsForSeries(changePercentData);
 
             const wanSuffix = currentLang === 'en' ? '10k' : (currentLang === 'es' ? '×10k' : '万');
             const datasets = [
@@ -4790,8 +4820,8 @@
                         display: function (ctx) {
                             const i = ctx.dataIndex;
                             if (i === lastWeekIdx) return false;
-                            const p = data[i].total_change_percent;
-                            if (p === undefined || p === null) return false;
+                            const p = Number(ctx.dataset.data[i]);
+                            if (p === undefined || p === null || Number.isNaN(p)) return false;
                             if (i === 0 && Number(p) === 0) return false;
                             return true;
                         },
@@ -4799,14 +4829,14 @@
                         align: 'top',
                         offset: 10,
                         formatter: function (_value, ctx) {
-                            const p = data[ctx.dataIndex].total_change_percent;
-                            const sign = Number(p) >= 0 ? '+' : '';
-                            return sign + Number(p).toFixed(1) + '%';
+                            const p = Number(ctx.dataset.data[ctx.dataIndex]);
+                            const sign = p >= 0 ? '+' : '';
+                            return sign + p.toFixed(1) + '%';
                         },
                         font: { size: isMobile ? 10 : 12, weight: '600' },
                         color: function (ctx) {
-                            const p = data[ctx.dataIndex].total_change_percent;
-                            if (p > 0) return '#FF6384';
+                            const p = Number(ctx.dataset.data[ctx.dataIndex]);
+                            if (p > 0) return ctx.dataset.borderColor || '#FF6384';
                             if (p < 0) return '#4BC0C0';
                             return '#555';
                         },
@@ -4815,14 +4845,67 @@
                         padding: { top: 2, bottom: 2, left: 4, right: 4 },
                         borderWidth: 1,
                         borderColor: function (ctx) {
-                            const p = data[ctx.dataIndex].total_change_percent;
-                            if (p > 0) return 'rgba(255,99,132,0.5)';
+                            const p = Number(ctx.dataset.data[ctx.dataIndex]);
                             if (p < 0) return 'rgba(75,192,192,0.6)';
+                            if (p > 0) {
+                                const bc = ctx.dataset.borderColor;
+                                if (bc === '#FF6384') return 'rgba(255,99,132,0.5)';
+                                if (bc === 'rgba(39, 174, 96, 1)') return 'rgba(39,174,96,0.5)';
+                                if (bc === 'rgba(142, 68, 173, 1)') return 'rgba(142,68,173,0.5)';
+                                return 'rgba(0,0,0,0.12)';
+                            }
                             return '#ccc';
                         }
                     }
                 }
             ];
+
+            function syncCenterCollectWeekLineFromBars(chart) {
+                if (!chart || !chart.data || !chart.data.datasets[2]) return;
+                const v0 = chart.isDatasetVisible(0);
+                const v1 = chart.isDatasetVisible(1);
+                const lineDs = chart.data.datasets[2];
+                if (!v0 && !v1) {
+                    chart.hide(2);
+                    return;
+                }
+                chart.show(2);
+                let series;
+                let label;
+                let border;
+                let pts;
+                if (v0 && v1) {
+                    series = changePercentData;
+                    label = t.change_percent || '环比变化';
+                    border = '#FF6384';
+                    pts = pointColorsForSeries(series);
+                } else if (v0) {
+                    series = trunkChangeData;
+                    label = `${tl} · ${t.change_percent || '环比'}`;
+                    border = 'rgba(39, 174, 96, 1)';
+                    pts = pointColorsTrunk(series);
+                } else {
+                    series = branchChangeData;
+                    label = `${bl} · ${t.change_percent || '环比'}`;
+                    border = 'rgba(142, 68, 173, 1)';
+                    pts = pointColorsBranch(series);
+                }
+                lineDs.data = series.slice();
+                lineDs.label = label;
+                lineDs.borderColor = border;
+                lineDs.pointBackgroundColor = pts;
+            }
+
+            function activeCenterCollectWowPercent(weekIndex) {
+                const chart = window.centerCollectWeekComparisonChart;
+                if (!chart) return data[weekIndex].total_change_percent;
+                const v0 = chart.isDatasetVisible(0);
+                const v1 = chart.isDatasetVisible(1);
+                if (v0 && v1) return data[weekIndex].total_change_percent;
+                if (v0) return trunkChangeData[weekIndex];
+                if (v1) return branchChangeData[weekIndex];
+                return data[weekIndex].total_change_percent;
+            }
 
             const yBarTitle = (t.collect_waybills_wan_axis || '集包运单 (万)');
 
@@ -4835,6 +4918,21 @@
                     plugins: {
                         legend: {
                             position: 'bottom',
+                            onClick: function (e, legendItem, legend) {
+                                const chart = legend.chart;
+                                const i = legendItem.datasetIndex;
+                                if (chart.isDatasetVisible(i)) {
+                                    chart.hide(i);
+                                    legendItem.hidden = true;
+                                } else {
+                                    chart.show(i);
+                                    legendItem.hidden = false;
+                                }
+                                if (i !== 2) {
+                                    syncCenterCollectWeekLineFromBars(chart);
+                                }
+                                chart.update();
+                            },
                             labels: {
                                 font: { size: isMobile ? 9 : 11 },
                                 boxWidth: isMobile ? 12 : 15,
@@ -4873,10 +4971,11 @@
                                     const ds = context.datasetIndex;
                                     const week = data[weekIndex];
                                     if (ds === 2) {
-                                        const p = week.total_change_percent;
+                                        const p = context.parsed.y;
                                         const sign = p >= 0 ? '+' : '';
                                         const trend = p > 0 ? '↑' : (p < 0 ? '↓' : '→');
-                                        return `${t.change_percent || '环比'}: ${sign}${Number(p).toFixed(1)}% ${trend}`;
+                                        const lineLegend = context.chart.data.datasets[2].label || (t.change_percent || '环比');
+                                        return `${lineLegend}: ${sign}${Number(p).toFixed(1)}% ${trend}`;
                                     }
                                     const pt = weekPctTrunk(week);
                                     const pb = weekPctBranch(week);
@@ -4894,17 +4993,20 @@
                                     const totalWan = (week.week_total / 10000).toFixed(2);
                                     let footer = `\n${t.week_total || '周总计'}: ${week.week_total.toLocaleString()} (${totalWan}${wanSuffix})`;
                                     footer += `\n${tl}: ${week.week_total_trunk.toLocaleString()} · ${bl}: ${week.week_total_branch.toLocaleString()}`;
-                                    if (weekIndex !== lastWeekIdx && week.total_change_percent !== undefined && week.total_change_percent !== 0) {
-                                        const sign = week.total_change_percent >= 0 ? '+' : '';
-                                        footer += `\n${t.change_percent || '环比'}: ${sign}${week.total_change_percent}%`;
+                                    if (weekIndex !== lastWeekIdx) {
+                                        const wow = activeCenterCollectWowPercent(weekIndex);
+                                        if (wow !== undefined && wow !== null && Number(wow) !== 0) {
+                                            const sign = Number(wow) >= 0 ? '+' : '';
+                                            footer += `\n${t.change_percent || '环比'}: ${sign}${wow}%`;
+                                        }
                                     }
                                     return footer;
                                 },
                                 labelColor: function (context) {
                                     if (context.datasetIndex === 2) {
-                                        const p = data[context.dataIndex].total_change_percent;
+                                        const p = context.parsed.y;
                                         let color = '#999999';
-                                        if (p > 0) color = '#FF6384';
+                                        if (p > 0) color = context.dataset.borderColor || '#FF6384';
                                         else if (p < 0) color = '#4BC0C0';
                                         return { borderColor: color, backgroundColor: color };
                                     }
@@ -4972,6 +5074,8 @@
                 },
                 plugins: [ChartDataLabels]
             });
+            syncCenterCollectWeekLineFromBars(window.centerCollectWeekComparisonChart);
+            window.centerCollectWeekComparisonChart.update();
         }
 
         // Show message function
