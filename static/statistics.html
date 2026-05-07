@@ -375,6 +375,33 @@
             color: var(--text-color);
             border-color: var(--border-color);
         }
+
+        .stats-window-seg {
+            display: inline-flex;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .stats-window-seg .segment-btn {
+            border: none;
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+
+        .stats-window-seg .segment-btn.active {
+            background: var(--primary-color);
+            color: #fff;
+        }
+
+        .stats-window-seg .segment-btn:not(.active):hover {
+            filter: brightness(1.05);
+        }
     </style>
 </head>
 
@@ -400,6 +427,16 @@
                 <input type="date" id="selectedDate">
                 <button id="loadDataBtn" data-lang="load_data">加载数据</button>
                 <button id="todayBtn" data-lang="today">今天</button>
+            </div>
+            <div class="stats-window-toggle"
+                style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;">
+                <span data-lang="stats_window_label" style="color: var(--text-muted, #666); font-size: 13px;">统计口径</span>
+                <div class="stats-window-seg" role="group" aria-label="stats window mode">
+                    <button type="button" id="statsWindowCalendarBtn" class="segment-btn active"
+                        data-lang="stats_window_calendar_short">自然日（0–24h）</button>
+                    <button type="button" id="statsWindowBusinessBtn" class="segment-btn"
+                        data-lang="stats_window_business_short">5:00–次日5:00</button>
+                </div>
             </div>
         </div>
 
@@ -452,6 +489,24 @@
                 <button type="button" id="weeklyWaybillTrendChartExportBtn" class="nav-btn"
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
+            </div>
+            <div id="weeklyWaybillChartsWeekRangeBar"
+                style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 10px 0; font-size:13px;">
+                <span data-lang="weekly_waybill_week_range_label" style="color:var(--text-muted, #555); max-width:520px; line-height:1.35;"></span>
+                <label style="display:inline-flex; align-items:center; gap:6px;">
+                    <span data-lang="wow_week_range_start">周区间起</span>
+                    <input type="date" id="weeklyWaybillChartsWeekStart"
+                        style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px;" />
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:6px;">
+                    <span data-lang="wow_week_range_end">周区间止</span>
+                    <input type="date" id="weeklyWaybillChartsWeekEnd"
+                        style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px;" />
+                </label>
+                <button type="button" id="weeklyWaybillChartsApplyWeekRangeBtn" class="nav-btn"
+                    style="padding:5px 14px; font-size:12px; cursor:pointer; background:var(--primary-color); color:#fff; border:none; border-radius:4px;">
+                    <span data-lang="wow_week_range_apply">应用</span>
+                </button>
             </div>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="weeklyWaybillTrendChart"></canvas>
@@ -663,6 +718,24 @@
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
             </div>
+            <div id="dailyPackingChartsRangeBar"
+                style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 10px 0; font-size:13px;">
+                <span data-lang="daily_packing_range_label" style="color:var(--text-muted, #555); max-width:420px; line-height:1.35;"></span>
+                <label style="display:inline-flex; align-items:center; gap:6px;">
+                    <span data-lang="daily_packing_range_start">起</span>
+                    <input type="date" id="dailyPackingChartsStart"
+                        style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px;" />
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:6px;">
+                    <span data-lang="daily_packing_range_end">止</span>
+                    <input type="date" id="dailyPackingChartsEnd"
+                        style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px;" />
+                </label>
+                <button type="button" id="dailyPackingChartsApplyRangeBtn" class="nav-btn"
+                    style="padding:5px 14px; font-size:12px; cursor:pointer; background:var(--primary-color); color:#fff; border:none; border-radius:4px;">
+                    <span data-lang="daily_packing_range_apply">应用</span>
+                </button>
+            </div>
             <div class="chart-container" style="height: 380px;">
                 <canvas id="dailyPackingSplitChart"></canvas>
             </div>
@@ -690,6 +763,24 @@
                 <button type="button" id="centerCollectWeekComparisonChartExportBtn" class="nav-btn"
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
+            </div>
+            <div id="wowChartsWeekRangeBar"
+                style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 10px 0; font-size:13px;">
+                <span data-lang="wow_week_range_label" style="color:var(--text-muted, #555); max-width:480px; line-height:1.35;"></span>
+                <label style="display:inline-flex; align-items:center; gap:6px;">
+                    <span data-lang="wow_week_range_start">周区间起</span>
+                    <input type="date" id="wowChartsWeekStart"
+                        style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px;" />
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:6px;">
+                    <span data-lang="wow_week_range_end">周区间止</span>
+                    <input type="date" id="wowChartsWeekEnd"
+                        style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px;" />
+                </label>
+                <button type="button" id="wowChartsApplyWeekRangeBtn" class="nav-btn"
+                    style="padding:5px 14px; font-size:12px; cursor:pointer; background:var(--primary-color); color:#fff; border:none; border-radius:4px;">
+                    <span data-lang="wow_week_range_apply">应用</span>
+                </button>
             </div>
             <div class="chart-container" style="height: 400px;">
                 <canvas id="centerCollectWeekComparisonChart"></canvas>
@@ -904,6 +995,9 @@
                 floating_stats_next_day: "后一天",
                 load_data: "加载数据",
                 today: "今天",
+                stats_window_label: "统计口径",
+                stats_window_calendar_short: "自然日（0–24h）",
+                stats_window_business_short: "5:00–次日5:00",
                 statistics_summary: "统计摘要",
                 schedule_info_prefix: "分拣机排班:",
                 schedule_info_detail: "17:00-23:00 (机器) + 23:00-05:00 (夜班) = 共12小时",
@@ -969,10 +1063,9 @@
                 load_narrowbelt_error: "加载窄带分拣分时数据出错:",
                 render_narrowbelt_error: "渲染窄带分拣图表出错:",
                 cno_narrowbelt_export_csv: "导出 CSV（窄带分时）",
-                cno_narrowbelt_stats_caption: "各产线产能汇总：合计件数、分时均值（产能÷24 个 LA 时段）、有产时段数及有产时段均值（产能÷有产时长）。",
+                cno_narrowbelt_stats_caption: "各产线产能汇总：合计件数、有产时段数及有产时段均值（产能÷有产时长）。",
                 cno_narrowbelt_stats_col_line: "产线",
                 cno_narrowbelt_stats_col_total: "合计(件)",
-                cno_narrowbelt_stats_col_mean24: "件/h（÷24h）",
                 cno_narrowbelt_stats_col_active_h: "有产时段(h)",
                 cno_narrowbelt_stats_col_mean_active: "件/h（有产）",
                 pieces: "件数",
@@ -1015,6 +1108,13 @@
                 daily_packing_split_chart: "每日集包（人工 / 设备）",
                 daily_packing_split_hint: "按 LA 运营日 06:00–次日 06:00 统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
                 daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
+                daily_packing_range_label: "显示区间（LA 运营日锚点，含首尾；下图「干线/支线」同步）",
+                daily_packing_range_start: "起",
+                daily_packing_range_end: "止",
+                daily_packing_range_apply: "应用",
+                daily_packing_range_need_both: "请同时选择起始日与结束日。",
+                daily_packing_range_order: "起始日不能晚于结束日。",
+                daily_packing_range_max_days: "区间最长 90 天。",
                 packing_manual: "人工集包",
                 packing_device: "设备集包",
                 daily_center_collect_split_chart: "每日集包（干线 / 支线）",
@@ -1027,6 +1127,13 @@
                 collect_waybills_wan_axis: "集包运单 (万)",
                 packing_sum_label: "日合计",
                 week_comparison_chart: "周环比对比",
+                wow_week_range_label: "自然周（周一至周日）；任选周内日期。下图「周环比对比」与上图共用区间。",
+                wow_week_range_start: "周区间起",
+                wow_week_range_end: "周区间止",
+                wow_week_range_apply: "应用",
+                wow_week_range_need_both: "请选择周区间起、止日期（各占一周，任填该周一天）。",
+                wow_week_range_order: "起始周不能晚于结束周。",
+                wow_week_range_max_weeks: "最多选择 104 个自然周。",
                 current_week: "本周",
                 previous_week: "上周",
                 change_percent: "环比变化",
@@ -1042,6 +1149,7 @@
                 sync_failed: "同步失败",
                 waybill_trend_title: "各流向每日票数趋势",
                 weekly_waybill_trend_title: "各流向每周票数趋势 (堆叠)",
+                weekly_waybill_week_range_label: "自然周（周一至周日）；任选周内日期。起止均填写并应用后按周截取柱图；仅填「止」且「起」空白时自动取最近 8 周。均留空则显示截止业务日前全部有数据的周。",
                 center_checkin_trend_chart: "CNO.H签入分类",
                 center_checkin_chart_hint: "仅展示当前统计日期（与上方所选日期一致）的签入分时；库内仍保留全部历史。查看多日可调用 API：days=all 或 days=数字。",
                 center_checkin_sync_btn: "更新签入数据",
@@ -1080,6 +1188,9 @@
                 floating_stats_next_day: "Next day",
                 load_data: "Load Data",
                 today: "Today",
+                stats_window_label: "Stats window",
+                stats_window_calendar_short: "Calendar day (midnight–midnight)",
+                stats_window_business_short: "5:00–next day 5:00",
                 statistics_summary: "Statistics Summary",
                 schedule_info_prefix: "Sorter Schedule:",
                 schedule_info_detail: "17:00-23:00 (Machine) + 23:00-05:00 (Night) = 12h Total",
@@ -1145,10 +1256,9 @@
                 load_narrowbelt_error: "Error loading narrow-belt hourly data:",
                 render_narrowbelt_error: "Error rendering narrow-belt chart:",
                 cno_narrowbelt_export_csv: "Export CSV (narrow-belt hourly)",
-                cno_narrowbelt_stats_caption: "Per line: total pieces, average over all 24 LA slots (volume÷24h), active slot count, and average over active slots only (volume÷active hours).",
+                cno_narrowbelt_stats_caption: "Per line: total pieces, active slot count, and average over active slots only (volume÷active hours).",
                 cno_narrowbelt_stats_col_line: "Line",
                 cno_narrowbelt_stats_col_total: "Total (pcs)",
-                cno_narrowbelt_stats_col_mean24: "pcs/h (÷24h)",
                 cno_narrowbelt_stats_col_active_h: "Active slots (h)",
                 cno_narrowbelt_stats_col_mean_active: "pcs/h (active)",
                 pieces: "Pieces",
@@ -1191,6 +1301,13 @@
                 daily_packing_split_chart: "Daily packing (manual / device)",
                 daily_packing_split_hint: "LA business day 06:00–06:00, last 14 days; bar height = daily total (manual+device); segment labels show share.",
                 daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
+                daily_packing_range_label: "Range (LA business-day anchors, inclusive; trunk/branch chart below uses the same)",
+                daily_packing_range_start: "From",
+                daily_packing_range_end: "To",
+                daily_packing_range_apply: "Apply",
+                daily_packing_range_need_both: "Please select both start and end dates.",
+                daily_packing_range_order: "Start date cannot be after end date.",
+                daily_packing_range_max_days: "Maximum range is 90 days.",
                 packing_manual: "Manual packing",
                 packing_device: "Device packing",
                 daily_center_collect_split_chart: "Daily packing (trunk / branch)",
@@ -1203,6 +1320,13 @@
                 collect_waybills_wan_axis: "Collect waybills (10k)",
                 packing_sum_label: "Daily total",
                 week_comparison_chart: "Week-over-Week Comparison",
+                wow_week_range_label: "Calendar weeks (Mon–Sun); pick any day in each week. The chart below shares this range.",
+                wow_week_range_start: "From (week)",
+                wow_week_range_end: "To (week)",
+                wow_week_range_apply: "Apply",
+                wow_week_range_need_both: "Select both start and end dates (any day in each week).",
+                wow_week_range_order: "Start week cannot be after end week.",
+                wow_week_range_max_weeks: "At most 104 calendar weeks.",
                 current_week: "Current Week",
                 previous_week: "Previous Week",
                 change_percent: "WoW Change",
@@ -1218,6 +1342,7 @@
                 sync_failed: "Sync Failed",
                 waybill_trend_title: "Daily Waybill Trend by Direction (Feishu Data)",
                 weekly_waybill_trend_title: "Weekly Waybill Trend by Direction (Stacked)",
+                weekly_waybill_week_range_label: "Calendar weeks (Mon–Sun); pick any day in each week. With both dates set and Apply, the chart shows only weeks in range. If only end is set, start auto-fills to the prior 7 weeks. If both blank, all weeks up to the selected business end date are shown.",
                 center_checkin_trend_chart: "CNO.H check-in breakdown",
                 center_checkin_chart_hint: "Only the selected statistics date (same as date picker). Full history stays in DB. For multi-day, use API days=all or days=N.",
                 center_checkin_sync_btn: "Refresh check-in data",
@@ -1259,6 +1384,9 @@
                 floating_stats_next_day: "Día siguiente",
                 load_data: "Cargar Datos",
                 today: "Hoy",
+                stats_window_label: "Ventana de estadísticas",
+                stats_window_calendar_short: "Día natural (0–24 h)",
+                stats_window_business_short: "5:00–día siguiente 5:00",
                 statistics_summary: "Resumen Estadístico",
                 total_vehicles: "Vehículos Totales",
                 predicted_vehicles_next_hour: "Llegadas Previstas (Próxima Hora)",
@@ -1316,10 +1444,9 @@
                 load_narrowbelt_error: "Error al cargar datos horarios del clasificador estrecho:",
                 render_narrowbelt_error: "Error al renderizar gráfico del clasificador estrecho:",
                 cno_narrowbelt_export_csv: "Exportar CSV (por hora estrecho)",
-                cno_narrowbelt_stats_caption: "Por línea: total piezas, promedio en 24 franjas LA (volumen÷24h), franjas con producción y promedio solo en esas franjas (volumen÷horas activas).",
+                cno_narrowbelt_stats_caption: "Por línea: total piezas, franjas con producción y promedio solo en esas franjas (volumen÷horas activas).",
                 cno_narrowbelt_stats_col_line: "Línea",
                 cno_narrowbelt_stats_col_total: "Total (pzas)",
-                cno_narrowbelt_stats_col_mean24: "pzas/h (÷24h)",
                 cno_narrowbelt_stats_col_active_h: "Franjas activas (h)",
                 cno_narrowbelt_stats_col_mean_active: "pzas/h (activas)",
                 pieces: "Piezas",
@@ -1362,6 +1489,13 @@
                 daily_packing_split_chart: "Empaque diario (manual / dispositivo)",
                 daily_packing_split_hint: "Día operativo LA 06:00–06:00, últimos 14 días; altura = total diario (manual+dispositivo); etiquetas = proporción.",
                 daily_packing_split_tooltip_footer: "(Proporción respecto al total manual+dispositivo del día)",
+                daily_packing_range_label: "Rango (ancla día operativo LA, inclusive; el gráfico troncal/ramal debajo usa el mismo)",
+                daily_packing_range_start: "Desde",
+                daily_packing_range_end: "Hasta",
+                daily_packing_range_apply: "Aplicar",
+                daily_packing_range_need_both: "Seleccione fecha inicial y final.",
+                daily_packing_range_order: "La fecha inicial no puede ser posterior a la final.",
+                daily_packing_range_max_days: "El rango máximo es de 90 días.",
                 packing_manual: "Empaque manual",
                 packing_device: "Empaque por dispositivo",
                 daily_center_collect_split_chart: "Empaque diario (troncal / ramal)",
@@ -1374,6 +1508,13 @@
                 collect_waybills_wan_axis: "Guías empaque (×10k)",
                 packing_sum_label: "Total diario",
                 week_comparison_chart: "Comparación Semanal",
+                wow_week_range_label: "Semanas naturales (lun–dom); elija cualquier día de cada semana. El gráfico de abajo usa el mismo rango.",
+                wow_week_range_start: "Desde (semana)",
+                wow_week_range_end: "Hasta (semana)",
+                wow_week_range_apply: "Aplicar",
+                wow_week_range_need_both: "Seleccione inicio y fin (cualquier día de cada semana).",
+                wow_week_range_order: "La semana inicial no puede ser posterior a la final.",
+                wow_week_range_max_weeks: "Máximo 104 semanas naturales.",
                 current_week: "Semana Actual",
                 previous_week: "Semana Anterior",
                 change_percent: "Cambio %",
@@ -1385,6 +1526,7 @@
                 capacity_planning: "Planificación de Capacidad",
                 waybill_trend_title: "Tendencia Diaria de Guías por Dirección",
                 weekly_waybill_trend_title: "Tendencia Semanal de Guías por Dirección (Apilado)",
+                weekly_waybill_week_range_label: "Semanas naturales (lun–dom); cualquier día de cada semana. Con inicio y fin y Aplicar, el gráfico filtra por semanas. Si solo fin está definido, inicio se rellena a 8 semanas. Si ambos vacíos, se muestran todas las semanas hasta la fecha de negocio.",
                 center_checkin_trend_chart: "Clasificación de check-in CNO.H",
                 center_checkin_chart_hint: "Solo la fecha seleccionada en estadísticas. El historial completo sigue en BD. API: days=all o days=N.",
                 center_checkin_sync_btn: "Actualizar datos de ingreso",
@@ -1491,6 +1633,267 @@
         // Current selected date
         let currentDate = null;
 
+        /** calendar = 本地自然日 00:00–次日 00:00；business = 本地 05:00–次日 05:00（与 /api/stats 一致） */
+        let statsWindowMode = localStorage.getItem('stats_window') === 'business' ? 'business' : 'calendar';
+
+        function formatLocalYmd(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function getDefaultStatsAnchorYmd() {
+            const now = new Date();
+            if (statsWindowMode === 'business' && now.getHours() < 5) {
+                const prev = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                return formatLocalYmd(prev);
+            }
+            return formatLocalYmd(now);
+        }
+
+        function withStatsWindowParams(path, extraParams) {
+            const p = new URLSearchParams();
+            let base = path;
+            const qIdx = path.indexOf('?');
+            if (qIdx >= 0) {
+                base = path.slice(0, qIdx);
+                new URLSearchParams(path.slice(qIdx + 1)).forEach((v, k) => p.set(k, v));
+            }
+            if (extraParams && typeof extraParams === 'object') {
+                for (const k of Object.keys(extraParams)) {
+                    const v = extraParams[k];
+                    if (v !== undefined && v !== null && v !== '') p.set(k, v);
+                }
+            }
+            p.set('stats_window', statsWindowMode);
+            const q = p.toString();
+            return q ? `${base}?${q}` : base;
+        }
+
+        function syncStatsWindowToggleUi() {
+            const cb = document.getElementById('statsWindowCalendarBtn');
+            const bb = document.getElementById('statsWindowBusinessBtn');
+            if (!cb || !bb) return;
+            const cal = statsWindowMode === 'calendar';
+            cb.classList.toggle('active', cal);
+            bb.classList.toggle('active', !cal);
+            cb.setAttribute('aria-pressed', cal ? 'true' : 'false');
+            bb.setAttribute('aria-pressed', cal ? 'false' : 'true');
+        }
+
+        function setStatsWindowMode(mode) {
+            statsWindowMode = (mode === 'business') ? 'business' : 'calendar';
+            localStorage.setItem('stats_window', statsWindowMode);
+            syncStatsWindowToggleUi();
+        }
+
+        let loadedStatsData = null;
+
+        const DAILY_PACKING_CHARTS_DEFAULT_RANGE = { start: '2026-04-20', end: '2026-05-03' };
+
+        function dailyPackingChartsRangeForFetch() {
+            const sEl = document.getElementById('dailyPackingChartsStart');
+            const eEl = document.getElementById('dailyPackingChartsEnd');
+            let start = (sEl && sEl.value && sEl.value.trim()) || '';
+            let end = (eEl && eEl.value && eEl.value.trim()) || '';
+            if (!start || !end) {
+                start = DAILY_PACKING_CHARTS_DEFAULT_RANGE.start;
+                end = DAILY_PACKING_CHARTS_DEFAULT_RANGE.end;
+            }
+            if (start > end) {
+                const x = start; start = end; end = x;
+            }
+            return { start, end };
+        }
+
+        function dailyPackingChartsParseRangeStrict() {
+            const t = translations[currentLang] || {};
+            const sEl = document.getElementById('dailyPackingChartsStart');
+            const eEl = document.getElementById('dailyPackingChartsEnd');
+            const start = (sEl && sEl.value || '').trim();
+            const end = (eEl && eEl.value || '').trim();
+            if (!start || !end) {
+                alert(t.daily_packing_range_need_both || '请同时选择起始日与结束日。');
+                return null;
+            }
+            if (start > end) {
+                alert(t.daily_packing_range_order || '起始日不能晚于结束日。');
+                return null;
+            }
+            const t0 = new Date(start + 'T12:00:00').getTime();
+            const t1 = new Date(end + 'T12:00:00').getTime();
+            const days = Math.floor((t1 - t0) / 86400000) + 1;
+            if (days > 90) {
+                alert(t.daily_packing_range_max_days || '区间最长 90 天。');
+                return null;
+            }
+            return { start, end };
+        }
+
+        function applyDailyPackingChartsRange() {
+            const r = dailyPackingChartsParseRangeStrict();
+            if (!r) return;
+            loadDailyPackingSplitData();
+            loadDailyCenterCollectSplitData();
+        }
+
+        const WOW_CHARTS_DEFAULT_WEEK_COUNT = 8;
+
+        function wowChartsWeekRangeForFetch() {
+            const sEl = document.getElementById('wowChartsWeekStart');
+            const eEl = document.getElementById('wowChartsWeekEnd');
+            let ws = (sEl && sEl.value && sEl.value.trim()) || '';
+            let we = (eEl && eEl.value && eEl.value.trim()) || '';
+            if (!we && currentDate) we = currentDate;
+            if (!ws && we) {
+                const p = we.split('-').map(x => parseInt(x, 10));
+                if (p.length !== 3 || p.some(n => Number.isNaN(n))) return { week_start: '', week_end: we };
+                const endD = new Date(p[0], p[1] - 1, p[2]);
+                const mon = new Date(endD.getTime());
+                mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+                mon.setDate(mon.getDate() - 7 * (WOW_CHARTS_DEFAULT_WEEK_COUNT - 1));
+                ws = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function wowChartsParseWeekRangeStrict() {
+            const t = translations[currentLang] || {};
+            const sEl = document.getElementById('wowChartsWeekStart');
+            const eEl = document.getElementById('wowChartsWeekEnd');
+            const ws = (sEl && sEl.value || '').trim();
+            const we = (eEl && eEl.value || '').trim();
+            if (!ws || !we) {
+                alert(t.wow_week_range_need_both || '请选择周区间起、止日期。');
+                return null;
+            }
+            const p0 = ws.split('-').map(x => parseInt(x, 10));
+            const p1 = we.split('-').map(x => parseInt(x, 10));
+            if (p0.length !== 3 || p1.length !== 3 || p0.some(n => Number.isNaN(n)) || p1.some(n => Number.isNaN(n))) {
+                alert(t.wow_week_range_need_both || '请选择周区间起、止日期。');
+                return null;
+            }
+            const d0 = new Date(p0[0], p0[1] - 1, p0[2]);
+            const d1 = new Date(p1[0], p1[1] - 1, p1[2]);
+            const m0 = new Date(d0.getTime());
+            m0.setDate(m0.getDate() - ((m0.getDay() + 6) % 7));
+            const m1 = new Date(d1.getTime());
+            m1.setDate(m1.getDate() - ((m1.getDay() + 6) % 7));
+            if (m0 > m1) {
+                alert(t.wow_week_range_order || '起始周不能晚于结束周。');
+                return null;
+            }
+            const weekCount = Math.floor((m1.getTime() - m0.getTime()) / (7 * 86400000)) + 1;
+            if (weekCount > 104) {
+                alert(t.wow_week_range_max_weeks || '最多 104 周。');
+                return null;
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function applyWowChartsWeekRange() {
+            if (!wowChartsParseWeekRangeStrict()) return;
+            loadWeekComparisonData();
+            if (typeof loadCenterCollectWeekComparisonData === 'function') loadCenterCollectWeekComparisonData();
+        }
+
+        function weeklyWaybillChartsWeekRangeForFetch() {
+            const sEl = document.getElementById('weeklyWaybillChartsWeekStart');
+            const eEl = document.getElementById('weeklyWaybillChartsWeekEnd');
+            let ws = (sEl && sEl.value && sEl.value.trim()) || '';
+            let we = (eEl && eEl.value && eEl.value.trim()) || '';
+            if (!ws && !we) {
+                return { week_start: '', week_end: '' };
+            }
+            if (!we && currentDate) we = currentDate;
+            if (!ws && we) {
+                const p = we.split('-').map(x => parseInt(x, 10));
+                if (p.length !== 3 || p.some(n => Number.isNaN(n))) return { week_start: '', week_end: we };
+                const endD = new Date(p[0], p[1] - 1, p[2]);
+                const mon = new Date(endD.getTime());
+                mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+                mon.setDate(mon.getDate() - 7 * (WOW_CHARTS_DEFAULT_WEEK_COUNT - 1));
+                ws = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function weeklyWaybillChartsParseWeekRangeStrict() {
+            const t = translations[currentLang] || {};
+            const sEl = document.getElementById('weeklyWaybillChartsWeekStart');
+            const eEl = document.getElementById('weeklyWaybillChartsWeekEnd');
+            const ws = (sEl && sEl.value || '').trim();
+            const we = (eEl && eEl.value || '').trim();
+            if (!ws || !we) {
+                alert(t.wow_week_range_need_both || '请选择周区间起、止日期。');
+                return null;
+            }
+            const p0 = ws.split('-').map(x => parseInt(x, 10));
+            const p1 = we.split('-').map(x => parseInt(x, 10));
+            if (p0.length !== 3 || p1.length !== 3 || p0.some(n => Number.isNaN(n)) || p1.some(n => Number.isNaN(n))) {
+                alert(t.wow_week_range_need_both || '周区间日期无效。');
+                return null;
+            }
+            const d0 = new Date(p0[0], p0[1] - 1, p0[2]);
+            const d1 = new Date(p1[0], p1[1] - 1, p1[2]);
+            const m0 = new Date(d0.getTime());
+            m0.setDate(m0.getDate() - ((m0.getDay() + 6) % 7));
+            const m1 = new Date(d1.getTime());
+            m1.setDate(m1.getDate() - ((m1.getDay() + 6) % 7));
+            if (m0 > m1) {
+                alert(t.wow_week_range_order || '起始周不能晚于结束周。');
+                return null;
+            }
+            const weekCount = Math.floor((m1.getTime() - m0.getTime()) / (7 * 86400000)) + 1;
+            if (weekCount > 104) {
+                alert(t.wow_week_range_max_weeks || '最多 104 周。');
+                return null;
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function applyWeeklyWaybillChartsWeekRange() {
+            if (!weeklyWaybillChartsParseWeekRangeStrict()) return;
+            loadWeeklyWaybillTrendData();
+        }
+
+        function initWeeklyWaybillChartsWeekRangeInputs(statsDateYmd) {
+            const s = document.getElementById('weeklyWaybillChartsWeekStart');
+            const e = document.getElementById('weeklyWaybillChartsWeekEnd');
+            const endBase = statsDateYmd || currentDate || '';
+            if (e && endBase) e.value = endBase;
+            const we = (e && e.value) || endBase;
+            if (s && we) {
+                const p = we.split('-').map(x => parseInt(x, 10));
+                if (p.length === 3 && !p.some(n => Number.isNaN(n))) {
+                    const endD = new Date(p[0], p[1] - 1, p[2]);
+                    const mon = new Date(endD.getTime());
+                    mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+                    mon.setDate(mon.getDate() - 7 * (WOW_CHARTS_DEFAULT_WEEK_COUNT - 1));
+                    s.value = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+                }
+            }
+        }
+
+        function initWowChartsWeekRangeInputs(statsDateYmd) {
+            const s = document.getElementById('wowChartsWeekStart');
+            const e = document.getElementById('wowChartsWeekEnd');
+            const endBase = statsDateYmd || currentDate || '';
+            if (e && endBase) e.value = endBase;
+            const we = (e && e.value) || endBase;
+            if (s && we) {
+                const p = we.split('-').map(x => parseInt(x, 10));
+                if (p.length === 3 && !p.some(n => Number.isNaN(n))) {
+                    const endD = new Date(p[0], p[1] - 1, p[2]);
+                    const mon = new Date(endD.getTime());
+                    mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+                    mon.setDate(mon.getDate() - 7 * (WOW_CHARTS_DEFAULT_WEEK_COUNT - 1));
+                    s.value = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+                }
+            }
+        }
+
         // Convert exact number to range display
         // For example: 1,232,342 -> "1,230,000-1,240,000"
         function convertToRange(value) {
@@ -1584,17 +1987,23 @@
             // Check login status
             checkLoginStatus();
 
-            // Set default date to today (using local date to avoid timezone issues)
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            const formattedDate = `${year}-${month}-${day}`;
+            // Set default anchor date (calendar today or business-day anchor before 05:00)
+            const formattedDate = getDefaultStatsAnchorYmd();
             document.getElementById('selectedDate').value = formattedDate;
             currentDate = formattedDate;
             const floatingDateEl = document.getElementById('floatingStatsDate');
             if (floatingDateEl) floatingDateEl.value = formattedDate;
+            syncStatsWindowToggleUi();
             updateFloatingStatsNavState();
+
+            (function initDailyPackingChartsRangeInputs() {
+                const s = document.getElementById('dailyPackingChartsStart');
+                const e = document.getElementById('dailyPackingChartsEnd');
+                if (s) s.value = DAILY_PACKING_CHARTS_DEFAULT_RANGE.start;
+                if (e) e.value = DAILY_PACKING_CHARTS_DEFAULT_RANGE.end;
+            })();
+            initWowChartsWeekRangeInputs(formattedDate);
+            initWeeklyWaybillChartsWeekRangeInputs(formattedDate);
 
             // Load default data
             loadData();
@@ -1613,12 +2022,7 @@
             });
 
             document.getElementById('todayBtn').addEventListener('click', function () {
-                // Get current date in local timezone
-                const now = new Date();
-                const year = now.getFullYear();
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                const todayFormatted = `${year}-${month}-${day}`;
+                const todayFormatted = getDefaultStatsAnchorYmd();
 
                 document.getElementById('selectedDate').value = todayFormatted;
                 currentDate = todayFormatted;
@@ -1627,6 +2031,25 @@
                 loadData();
                 refreshTrendAndCompareCharts();
             });
+
+            const swCal = document.getElementById('statsWindowCalendarBtn');
+            const swBiz = document.getElementById('statsWindowBusinessBtn');
+            if (swCal) {
+                swCal.addEventListener('click', function () {
+                    if (statsWindowMode === 'calendar') return;
+                    setStatsWindowMode('calendar');
+                    loadData();
+                    refreshTrendAndCompareCharts();
+                });
+            }
+            if (swBiz) {
+                swBiz.addEventListener('click', function () {
+                    if (statsWindowMode === 'business') return;
+                    setStatsWindowMode('business');
+                    loadData();
+                    refreshTrendAndCompareCharts();
+                });
+            }
 
             if (floatingDateEl) {
                 floatingDateEl.addEventListener('change', function () {
@@ -1668,6 +2091,12 @@
             bindStatsChartExportBtn('sortingCapacityChartExportBtn', function () { return window.capacityChart; }, 'sorting_capacity_hourly');
             bindStatsChartExportBtn('dailyPackingSplitChartExportBtn', function () { return window.dailyPackingSplitChart; }, 'daily_packing_manual_device');
             bindStatsChartExportBtn('dailyCenterCollectSplitChartExportBtn', function () { return window.dailyCenterCollectSplitChart; }, 'daily_center_collect_trunk_branch');
+            const dailyPackRangeBtn = document.getElementById('dailyPackingChartsApplyRangeBtn');
+            if (dailyPackRangeBtn) dailyPackRangeBtn.addEventListener('click', applyDailyPackingChartsRange);
+            const wowWeekRangeBtn = document.getElementById('wowChartsApplyWeekRangeBtn');
+            if (wowWeekRangeBtn) wowWeekRangeBtn.addEventListener('click', applyWowChartsWeekRange);
+            const weeklyWbWeekRangeBtn = document.getElementById('weeklyWaybillChartsApplyWeekRangeBtn');
+            if (weeklyWbWeekRangeBtn) weeklyWbWeekRangeBtn.addEventListener('click', applyWeeklyWaybillChartsWeekRange);
             bindStatsChartExportBtn('centerCollectWeekComparisonChartExportBtn', function () { return window.centerCollectWeekComparisonChart; }, 'center_collect_week_wow');
             bindStatsChartExportBtn('palletHourlyChartExportBtn', function () { return window.palletHourlyChart; }, 'pallet_hourly');
             bindStatsChartExportBtn('dailyTrendChartExportBtn', function () { return window.dailyTrendChart; }, 'daily_trend_chart');
@@ -1972,19 +2401,13 @@
             completionRateElement.textContent = completionRate + '%';
         }
 
-        // Global variable to store stats data
-        let loadedStatsData = null;
-
         // Load statistics data
         function loadData() {
             if (typeof loadDailyPackingSplitData === 'function') loadDailyPackingSplitData();
             if (typeof loadDailyCenterCollectSplitData === 'function') loadDailyCenterCollectSplitData();
             console.log('Loading data for date:', currentDate);
-            // Get statistics data
-            let url = '/api/stats';
-            if (currentDate) {
-                url += '?date=' + encodeURIComponent(currentDate);
-            }
+            const statsParams = currentDate ? { date: currentDate } : {};
+            let url = withStatsWindowParams('/api/stats', statsParams);
 
             // Variable to store stats data for use in other parts of the function
             // Variable to store stats data for use in other parts of the function
@@ -2157,10 +2580,7 @@
                 })
                 .then(statsData => {
                     // Get pickup forecast data
-                    let forecastUrl = '/api/pickup_forecast';
-                    if (currentDate) {
-                        forecastUrl += '?date=' + encodeURIComponent(currentDate);
-                    }
+                    let forecastUrl = withStatsWindowParams('/api/pickup_forecast', currentDate ? { date: currentDate } : {});
 
                     fetch(forecastUrl)
                         .then(response => response.json())
@@ -2316,27 +2736,26 @@
         // Load hourly comparison data
         function loadHourlyComparisonData() {
             // 入库与分拣对比：入库系列来自分拣分时 (人工集包+设备集包−CNO01)，不再请求 inbound_hourly
-            let sortingUrl = '/api/sorting_hourly';
-            let inboundAvgUrl = '/api/inbound_hourly_avg';
-            let sortingAvgUrl = '/api/sorting_hourly_avg';
-            if (currentDate) {
-                sortingUrl += '?date=' + encodeURIComponent(currentDate);
-            }
+            const ts = Date.now();
+            let sortingUrl = withStatsWindowParams('/api/sorting_hourly', currentDate ? { date: currentDate, _ts: ts } : { _ts: ts });
+            let inboundAvgUrl = withStatsWindowParams('/api/inbound_hourly_avg', { _ts: ts });
+            let sortingAvgUrl = withStatsWindowParams('/api/sorting_hourly_avg', { _ts: ts });
+            const fetchNoStore = (u) => fetch(u, { cache: 'no-store' });
 
             Promise.all([
-                fetch(sortingUrl).then(response => {
+                fetchNoStore(sortingUrl).then(response => {
                     if (!response.ok) {
                         throw new Error('Sorting data loading failed: ' + response.status);
                     }
                     return response.json();
                 }),
-                fetch(inboundAvgUrl).then(response => {
+                fetchNoStore(inboundAvgUrl).then(response => {
                     if (!response.ok) {
                         throw new Error('Inbound avg data loading failed: ' + response.status);
                     }
                     return response.json();
                 }),
-                fetch(sortingAvgUrl).then(response => {
+                fetchNoStore(sortingAvgUrl).then(response => {
                     if (!response.ok) {
                         throw new Error('Sorting avg data loading failed: ' + response.status);
                     }
@@ -2363,10 +2782,7 @@
         }
 
         function loadCnoNarrowbeltHourlyData() {
-            let url = '/api/statistics/cno_narrowbelt_hourly';
-            if (currentDate) {
-                url += '?date=' + encodeURIComponent(currentDate);
-            }
+            let url = withStatsWindowParams('/api/statistics/cno_narrowbelt_hourly', currentDate ? { date: currentDate } : {});
             fetch(url)
                 .then(response => {
                     if (!response.ok) {
@@ -2391,18 +2807,12 @@
         }
 
         function exportCnoNarrowbeltHourlyCsv() {
-            let url = '/api/statistics/cno_narrowbelt_hourly/export';
-            if (currentDate) {
-                url += '?date=' + encodeURIComponent(currentDate);
-            }
+            let url = withStatsWindowParams('/api/statistics/cno_narrowbelt_hourly/export', currentDate ? { date: currentDate } : {});
             window.location.href = url;
         }
 
         function loadPalletHourlyData() {
-            let palletUrl = '/api/pallet_hourly';
-            if (currentDate) {
-                palletUrl += '?date=' + encodeURIComponent(currentDate);
-            }
+            let palletUrl = withStatsWindowParams('/api/pallet_hourly', currentDate ? { date: currentDate } : {});
 
             fetch(palletUrl)
                 .then(response => {
@@ -2530,12 +2940,13 @@
             try {
                 // Create a map to store data for each time slot
                 const timeSlotMap = {};
+                const unknownLabel = (translations[currentLang].unknown || '未知');
 
                 // Process sorting data
                 if (Array.isArray(sortingData)) {
                     sortingData.forEach(record => {
                         if (record && typeof record === 'object') {
-                            let timeSlot = record.time_slot || translations[currentLang].unknown || '未知';
+                            let timeSlot = record.time_slot || unknownLabel;
 
                             // Standardize time slot format to HH:00
                             if (timeSlot.includes(':')) {
@@ -2561,22 +2972,26 @@
                     });
                 }
 
-                // Convert to array and sort (Custom sort for 06:00 - 06:00 cycle)
-                const result = Object.values(timeSlotMap).sort((a, b) => {
-                    const unknownLabel = (translations[currentLang].unknown || '未知');
-                    const aSlot = a.timeSlot === unknownLabel ? -1 : parseInt(a.timeSlot);
-                    const bSlot = b.timeSlot === unknownLabel ? -1 : parseInt(b.timeSlot);
-
-                    if (aSlot === -1 && bSlot === -1) return 0;
-                    if (aSlot === -1) return 1;
-                    if (bSlot === -1) return -1;
-
-                    // Shift hour so 06:00 is the start (0)
-                    const aVal = (aSlot - 6 + 24) % 24;
-                    const bVal = (bSlot - 6 + 24) % 24;
-
-                    return aVal - bVal;
+                // Build a fixed 24-slot axis to avoid endpoint drift (e.g. rightmost 05:00).
+                // business: 05:00 -> 04:00 ; calendar: 00:00 -> 23:00
+                const startHour = statsWindowMode === 'business' ? 5 : 0;
+                const orderedSlots = [];
+                for (let i = 0; i < 24; i++) {
+                    const h = (startHour + i) % 24;
+                    orderedSlots.push(String(h).padStart(2, '0') + ':00');
+                }
+                const result = orderedSlots.map(slot => {
+                    if (timeSlotMap[slot]) return timeSlotMap[slot];
+                    return {
+                        timeSlot: slot,
+                        manualCount: 0,
+                        deviceCount: 0,
+                        cno01Count: 0
+                    };
                 });
+                if (timeSlotMap[unknownLabel]) {
+                    result.push(timeSlotMap[unknownLabel]);
+                }
 
                 console.log('Processed sorting capacity data:', result);
                 return result;
@@ -3019,9 +3434,8 @@
             for (let i = 0; i < vals.length; i++) {
                 if (vals[i] > 0) activeCount++;
             }
-            const mean24 = total / 24;
             const meanActive = activeCount > 0 ? total / activeCount : 0;
-            return { total, activeCount, mean24, meanActive };
+            return { total, activeCount, meanActive };
         }
 
         function _fmtNarrowbeltInt(n) {
@@ -3062,7 +3476,6 @@
             let html = '<thead><tr>';
             html += `<th style="${thBase}">${t.cno_narrowbelt_stats_col_line || '产线'}</th>`;
             html += `<th style="${thBase};text-align:right">${t.cno_narrowbelt_stats_col_total || '合计(件)'}</th>`;
-            html += `<th style="${thBase};text-align:right">${t.cno_narrowbelt_stats_col_mean24 || '件/h（÷24h）'}</th>`;
             html += `<th style="${thBase};text-align:right">${t.cno_narrowbelt_stats_col_active_h || '有产时段(h)'}</th>`;
             html += `<th style="${thBase};text-align:right">${t.cno_narrowbelt_stats_col_mean_active || '件/h（有产）'}</th>`;
             html += '</tr></thead><tbody>';
@@ -3071,7 +3484,6 @@
                 html += '<tr>';
                 html += `<td style="${tdL}">${lineTitles[i]}</td>`;
                 html += `<td style="${tdR}">${_fmtNarrowbeltInt(st.total)}</td>`;
-                html += `<td style="${tdR}">${_fmtNarrowbeltRate(st.mean24)}</td>`;
                 html += `<td style="${tdR}">${st.activeCount}</td>`;
                 html += `<td style="${tdR}">${_fmtNarrowbeltRate(st.meanActive)}</td>`;
                 html += '</tr>';
@@ -3677,18 +4089,19 @@
         }
 
         function loadDailyPackingSplitData() {
-            let packUrl = '/api/statistics/daily_packing_split?days=14';
-            if (currentDate) {
-                packUrl += '&end_date=' + encodeURIComponent(currentDate);
-            }
+            const r = dailyPackingChartsRangeForFetch();
+            const packUrl = withStatsWindowParams('/api/statistics/daily_packing_split', { start_date: r.start, end_date: r.end });
             fetch(packUrl)
-                .then(r => {
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
-                    return r.json();
+                .then(response => {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
                 })
                 .then(data => {
                     if (data.error) {
                         console.error('daily_packing_split:', data.error);
+                        if (typeof showMessage === 'function') {
+                            showMessage(String(data.error), 'error');
+                        }
                         renderDailyPackingSplitChart(null);
                         return;
                     }
@@ -3860,18 +4273,22 @@
         }
 
         function loadDailyCenterCollectSplitData() {
-            let u = '/api/statistics/daily_center_collect_split?days=14';
-            if (currentDate) {
-                u += '&end_date=' + encodeURIComponent(currentDate);
-            }
+            const r = dailyPackingChartsRangeForFetch();
+            const u = withStatsWindowParams('/api/statistics/daily_center_collect_split', {
+                start_date: r.start,
+                end_date: r.end
+            });
             fetch(u)
-                .then(r => {
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
-                    return r.json();
+                .then(response => {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
                 })
                 .then(data => {
                     if (data.error) {
                         console.error('daily_center_collect_split:', data.error);
+                        if (typeof showMessage === 'function') {
+                            showMessage(String(data.error), 'error');
+                        }
                         renderDailyCenterCollectSplitChart(null);
                         return;
                     }
@@ -4127,11 +4544,7 @@
                     dateStr = `${year}-${month}-${day}`;
                 }
 
-                // Build export URL
-                let exportUrl = '/api/export_csv';
-                if (dateStr) {
-                    exportUrl += `?date=${encodeURIComponent(dateStr)}`;
-                }
+                let exportUrl = withStatsWindowParams('/api/export_csv', { date: dateStr });
 
                 // Create temporary link and trigger download
                 const link = document.createElement('a');
@@ -4236,10 +4649,7 @@
 
         // Load weekly pallet trend chart data (with outbound overlay)
         function loadDailyTrendData() {
-            let trendUrl = '/api/weekly_pallet_trend';
-            if (currentDate) {
-                trendUrl += '?end_date=' + encodeURIComponent(currentDate);
-            }
+            const trendUrl = withStatsWindowParams('/api/weekly_pallet_trend', currentDate ? { end_date: currentDate } : {});
             fetch(trendUrl)
                 .then(response => response.json())
                 .then(async data => {
@@ -4710,16 +5120,25 @@
 
         // Load week comparison chart data
         function loadWeekComparisonData() {
-            let wcUrl = '/api/week_comparison';
-            if (currentDate) {
-                wcUrl += '?end_date=' + encodeURIComponent(currentDate);
-            }
+            const r = wowChartsWeekRangeForFetch();
+            const qp = {};
+            if (currentDate) qp.end_date = currentDate;
+            if (r.week_start) qp.week_start = r.week_start;
+            if (r.week_end) qp.week_end = r.week_end;
+            const wcUrl = withStatsWindowParams('/api/week_comparison', qp);
             fetch(wcUrl)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(j => Promise.reject(new Error(j.error || ('HTTP ' + response.status))));
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     // Check if it's an error object (not an array)
                     if (data && !Array.isArray(data) && data.error) {
                         console.error('Error loading week comparison data:', data.error);
+                        if (typeof showMessage === 'function') showMessage(String(data.error), 'error');
+                        renderWeekComparisonChart(null);
                         return;
                     }
                     renderWeekComparisonChart(data);
@@ -5089,15 +5508,24 @@
         }
 
         function loadCenterCollectWeekComparisonData() {
-            let u = '/api/statistics/center_collect_week_comparison';
-            if (currentDate) {
-                u += '?end_date=' + encodeURIComponent(currentDate);
-            }
+            const r = wowChartsWeekRangeForFetch();
+            const qp = {};
+            if (currentDate) qp.end_date = currentDate;
+            if (r.week_start) qp.week_start = r.week_start;
+            if (r.week_end) qp.week_end = r.week_end;
+            const u = withStatsWindowParams('/api/statistics/center_collect_week_comparison', qp);
             fetch(u)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(j => Promise.reject(new Error(j.error || ('HTTP ' + response.status))));
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data && !Array.isArray(data) && data.error) {
                         console.error('center_collect_week_comparison:', data.error);
+                        if (typeof showMessage === 'function') showMessage(String(data.error), 'error');
+                        renderCenterCollectWeekComparisonChart(null);
                         return;
                     }
                     renderCenterCollectWeekComparisonChart(data);
@@ -5556,10 +5984,19 @@
 
         // Auto-refresh sorting metrics every 30 seconds
         function refreshSortingMetrics() {
-            // Only auto-refresh if we are looking at today's data (currentDate is null or empty)
-            if (currentDate) return;
+            // Only auto-refresh when selected date is today's anchor date under current window mode.
+            // selectedDate is often a non-empty YYYY-MM-DD even for "today", so do not treat non-empty as historical by itself.
+            const selected = (currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value) || '').trim();
+            const todayAnchor = getDefaultStatsAnchorYmd();
+            if (selected && selected !== todayAnchor) return;
 
-            fetch('/api/stats')
+            const refreshHourlyCharts = () => {
+                if (typeof loadHourlyComparisonData === 'function') {
+                    loadHourlyComparisonData();
+                }
+            };
+
+            fetch(withStatsWindowParams('/api/stats'))
                 .then(response => response.json())
                 .then(data => {
                     // Update summary statistics
@@ -5608,11 +6045,6 @@
                         }
                     }
 
-                    // Refresh all charts
-                    if (typeof loadHourlyComparisonData === 'function') {
-                        loadHourlyComparisonData();
-                    }
-
                     if (typeof loadWaybillTrendData === 'function') {
                         loadWaybillTrendData();
                     }
@@ -5648,6 +6080,10 @@
                 })
                 .catch(error => {
                     console.error('Error refreshing sorting metrics:', error);
+                })
+                .finally(() => {
+                    // Keep the two hourly charts moving even if /api/stats is temporarily unavailable.
+                    refreshHourlyCharts();
                 });
         }
 
@@ -5803,10 +6239,10 @@
 
         // Load Waybill Trend Chart data (Feishu Data)
         function loadWaybillTrendData() {
-            let wtUrl = '/api/admin/statistics/waybill-trends?days=14';
-            if (currentDate) {
-                wtUrl += '&end_date=' + encodeURIComponent(currentDate);
-            }
+            const wtUrl = withStatsWindowParams('/api/admin/statistics/waybill-trends', {
+                days: '14',
+                ...(currentDate ? { end_date: currentDate } : {})
+            });
             fetch(wtUrl)
                 .then(response => response.json())
                 .then(data => {
@@ -5831,10 +6267,11 @@
 
         // Load Weekly Waybill Trend Chart data
         function loadWeeklyWaybillTrendData() {
-            let wkUrl = '/api/admin/statistics/weekly-waybill-trends';
-            if (currentDate) {
-                wkUrl += '?end_date=' + encodeURIComponent(currentDate);
-            }
+            const wr = weeklyWaybillChartsWeekRangeForFetch();
+            const qp = { ...(currentDate ? { end_date: currentDate } : {}) };
+            if (wr.week_start) qp.week_start = wr.week_start;
+            if (wr.week_end) qp.week_end = wr.week_end;
+            const wkUrl = withStatsWindowParams('/api/admin/statistics/weekly-waybill-trends', qp);
             fetch(wkUrl)
                 .then(response => response.json())
                 .then(data => {
@@ -5913,7 +6350,25 @@
                     borderWidth: 1,
                     yAxisID: 'y',
                     datalabels: {
-                        display: false
+                        display: function (context) {
+                            const v = Number(context.dataset.data[context.dataIndex]) || 0;
+                            if (v <= 0) return false;
+                            try {
+                                const meta = context.chart.getDatasetMeta(context.datasetIndex);
+                                const el = meta.data[context.dataIndex];
+                                if (!el || typeof el.height !== 'number') return true;
+                                return el.height >= (isMobile ? 12 : 16);
+                            } catch (e) {
+                                return true;
+                            }
+                        },
+                        anchor: 'center',
+                        align: 'center',
+                        formatter: (value) => formatWeeklyVolumeWan(Number(value) || 0),
+                        color: '#ffffff',
+                        textStrokeColor: 'rgba(0,0,0,0.5)',
+                        textStrokeWidth: isMobile ? 2 : 3,
+                        font: { weight: '600', size: isMobile ? 8 : 10 }
                     }
                 };
             });
@@ -6066,12 +6521,10 @@
                             }
                         },
                         datalabels: {
-                            display: (context) => context.dataset.type === 'line',
                             font: {
                                 weight: 'bold',
                                 size: isMobile ? 9 : 11
-                            },
-                            color: '#ff9f43'
+                            }
                         }
                     },
                     scales: {
@@ -6291,11 +6744,8 @@
 
             // ====== 载入 CNO.H 签入分类趋势图 ======
             function loadCenterCheckinTrendData() {
-                let url = '/api/center_checkin_trend';
                 const d = currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value);
-                if (d) {
-                    url += '?date=' + encodeURIComponent(d);
-                }
+                const url = withStatsWindowParams('/api/center_checkin_trend', d ? { date: d } : {});
                 fetch(url)
                     .then(response => response.json())
                     .then(data => {
@@ -6372,9 +6822,10 @@
 
             // ====== 集包运单数（目的中心 / 目的站点）- 堆叠面积图 ======
             function loadCenterCollectTrendForDestin(destinType) {
-                let url = '/api/center_collect_trend?destin_type=' + encodeURIComponent(String(destinType));
                 const d = currentDate || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value);
-                if (d) url += '&date=' + encodeURIComponent(d);
+                const qp = { destin_type: String(destinType) };
+                if (d) qp.date = d;
+                const url = withStatsWindowParams('/api/center_collect_trend', qp);
                 const site = String(destinType) === '2';
                 fetch(url)
                     .then(r => r.json())
@@ -6405,8 +6856,7 @@
                 const d = currentDate
                     || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value)
                     || '';
-                let url = '/api/tms/shuttle-completed/pivot';
-                if (d) url += '?date=' + encodeURIComponent(d);
+                const url = withStatsWindowParams('/api/tms/shuttle-completed/pivot', d ? { date: d } : {});
                 fetch(url, { credentials: 'same-origin' })
                     .then(r => r.json())
                     .then(data => {

@@ -4,6 +4,8 @@ import sqlite3
 from flask import Flask, request, jsonify, send_file, send_from_directory, session, redirect, Response, render_template
 import os
 import sys
+import tempfile
+import atexit
 
 try:
     from dotenv import load_dotenv
@@ -424,6 +426,77 @@ PORT = int(os.environ.get('PORT', 8080))
 
 # 应用初始化标志
 _app_initialized = False
+_background_jobs_lock_handle = None
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _release_background_jobs_lock():
+    global _background_jobs_lock_handle
+    fh = _background_jobs_lock_handle
+    if fh is None:
+        return
+    try:
+        if os.name == "nt":
+            import msvcrt  # type: ignore
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl  # type: ignore
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        pass
+    try:
+        fh.close()
+    except Exception:
+        pass
+    _background_jobs_lock_handle = None
+
+
+def _acquire_background_jobs_lock() -> bool:
+    """Cross-process lock to ensure only one process starts background jobs."""
+    global _background_jobs_lock_handle
+
+    if _background_jobs_lock_handle is not None:
+        return True
+
+    # Optional kill switch for environments where schedulers are externalized.
+    if _bool_env("ENABLE_BACKGROUND_JOBS", True) is False:
+        print("[应用初始化] ENABLE_BACKGROUND_JOBS=0，跳过后台同步线程启动")
+        return False
+
+    lock_path = os.environ.get("BACKGROUND_JOBS_LOCKFILE")
+    if not lock_path:
+        lock_path = os.path.join(tempfile.gettempdir(), "inbound_python_source.background_jobs.lock")
+
+    try:
+        fh = open(lock_path, "a+", encoding="utf-8")
+        if os.name == "nt":
+            import msvcrt  # type: ignore
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl  # type: ignore
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fh.seek(0)
+        fh.truncate()
+        fh.write(f"pid={os.getpid()}\n")
+        fh.flush()
+        _background_jobs_lock_handle = fh
+        atexit.register(_release_background_jobs_lock)
+        print(f"[应用初始化] 获取后台任务锁成功: {lock_path} (pid={os.getpid()})")
+        return True
+    except Exception:
+        try:
+            fh.close()  # type: ignore[name-defined]
+        except Exception:
+            pass
+        print(f"[应用初始化] 后台任务锁已被其他进程持有，当前进程不启动后台线程 (pid={os.getpid()})")
+        return False
 
 
 def initialize_app():
@@ -438,6 +511,9 @@ def initialize_app():
             # 启动后台线程
             # 仅在非开发重新加载环境下启动, 或强制在生产环境下启动
             if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+                if not _acquire_background_jobs_lock():
+                    _app_initialized = True
+                    return
                 print("[应用初始化] 启动后台同步线程...")
                 
                 # 1. 每日重置检查线程
@@ -1811,25 +1887,41 @@ def api_schedule_vs_packaging():
 
 @app.route('/api/statistics/daily_packing_split', methods=['GET'])
 def api_statistics_daily_packing_split():
-    """按运营日 06:00–次日 06:00（LA）聚合每日人工/设备集包件数；供入库统计页堆叠图使用。"""
+    """按 stats_window 聚合每日人工/设备集包件数；calendar=本地自然日，business=本地05:00–次日05:00。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
-    days = request.args.get('days', type=int)
-    if days is None or days < 1:
-        days = 14
-    days = min(days, 90)
     try:
-        end_raw = request.args.get('end_date') or request.args.get('date')
-        if end_raw:
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
+
+        def _parse_d(val):
+            if not val:
+                return None
             try:
-                end_date = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+                return datetime.strptime(str(val)[:10], '%Y-%m-%d').date()
             except ValueError:
-                end_date = datetime.now(LA_TZ).date()
+                return None
+
+        start_in = _parse_d(request.args.get('start_date'))
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        end_in = _parse_d(end_raw)
+
+        if start_in and end_in and start_in <= end_in:
+            span = (end_in - start_in).days + 1
+            if span > 90:
+                return jsonify({'error': '日期跨度不能超过 90 天'}), 400
+            start_date, end_date = start_in, end_in
         else:
-            end_date = datetime.now(LA_TZ).date()
-        start_date = end_date - timedelta(days=days - 1)
+            days = request.args.get('days', type=int)
+            if days is None or days < 1:
+                days = 14
+            days = min(days, 90)
+            if end_in:
+                end_date = end_in
+            else:
+                end_date = datetime.now(LA_TZ).date()
+            start_date = end_date - timedelta(days=days - 1)
         conn = get_db()
         cursor = conn.cursor()
         dates = []
@@ -1839,13 +1931,12 @@ def api_statistics_daily_packing_split():
         d = start_date
         while d <= end_date:
             dates.append(d.strftime('%Y-%m-%d'))
-            next_d = d + timedelta(days=1)
-            cursor.execute(convert_query_placeholders("""
+            clause, binds = _sorting_slot_window_sql_binds(window_mode, d)
+            cursor.execute(convert_query_placeholders(f"""
                 SELECT COALESCE(SUM(manual_count), 0), COALESCE(SUM(device_count), 0), COALESCE(SUM(pieces), 0)
                 FROM sorting_records
-                WHERE (sorting_time = ? AND time_slot >= '06:00')
-                   OR (sorting_time = ? AND time_slot < '06:00')
-            """), (d.strftime('%Y-%m-%d'), next_d.strftime('%Y-%m-%d')))
+                WHERE {clause}
+            """), binds)
             r = cursor.fetchone()
             manual.append(int(r[0]) if r and r[0] is not None else 0)
             device.append(int(r[1]) if r and r[1] is not None else 0)
@@ -1864,40 +1955,36 @@ def api_statistics_daily_packing_split():
         return jsonify({'error': str(e)}), 500
 
 
-def _gofo_collect_biz_day_trunk_branch(cursor, d: datetime.date) -> tuple:
-    """LA 运营日 D：06:00(D)–06:00(D+1)，gofo_center_collect_stats 干线(type1)/支线(type2) waybill_cnt。"""
-    ds = d.strftime('%Y-%m-%d')
-    next_d = (d + timedelta(days=1)).strftime('%Y-%m-%d')
+def _gofo_collect_biz_day_trunk_branch(cursor, d: datetime.date, window_mode: str = 'calendar') -> tuple:
+    """gofo_center_collect_stats 干线/支线；window_mode 与统计页 stats_window 一致。"""
+    clause, binds = _record_date_hour_window_sql_binds(window_mode, d)
     cursor.execute(
         convert_query_placeholders(
-            """
+            f"""
             SELECT COALESCE(SUM(CASE WHEN destin_type = 1 THEN waybill_cnt ELSE 0 END), 0),
                    COALESCE(SUM(CASE WHEN destin_type = 2 THEN waybill_cnt ELSE 0 END), 0)
             FROM gofo_center_collect_stats
-            WHERE (record_date = ? AND record_hour >= '06:00')
-               OR (record_date = ? AND record_hour < '06:00')
+            WHERE {clause}
             """
         ),
-        (ds, next_d),
+        binds,
     )
     r = cursor.fetchone()
     return int(_db_row_get(r, 0, 0) or 0), int(_db_row_get(r, 1, 0) or 0)
 
 
-def _sorting_biz_day_manual_device_total(cursor, d: datetime.date) -> int:
-    """与 daily_packing_split 相同：运营日 D 的 sorting_records 人工+设备件数合计。"""
-    ds = d.strftime('%Y-%m-%d')
-    next_d = (d + timedelta(days=1)).strftime('%Y-%m-%d')
+def _sorting_biz_day_manual_device_total(cursor, d: datetime.date, window_mode: str = 'calendar') -> int:
+    """与 daily_packing_split 相同：锚点日 D 的 sorting_records 人工+设备件数合计。"""
+    clause, binds = _sorting_slot_window_sql_binds(window_mode, d)
     cursor.execute(
         convert_query_placeholders(
-            """
+            f"""
             SELECT COALESCE(SUM(manual_count), 0), COALESCE(SUM(device_count), 0)
             FROM sorting_records
-            WHERE (sorting_time = ? AND time_slot >= '06:00')
-               OR (sorting_time = ? AND time_slot < '06:00')
+            WHERE {clause}
             """
         ),
-        (ds, next_d),
+        binds,
     )
     r = cursor.fetchone()
     m = int(_db_row_get(r, 0, 0) or 0)
@@ -1905,12 +1992,12 @@ def _sorting_biz_day_manual_device_total(cursor, d: datetime.date) -> int:
     return m + dv
 
 
-def _collect_biz_day_trunk_branch_aligned(cursor, d: datetime.date) -> tuple:
+def _collect_biz_day_trunk_branch_aligned(cursor, d: datetime.date, window_mode: str = 'calendar') -> tuple:
     """干线/支线：集包看板 destin 占比不变，柱高合计强制等于同期分拣人工+设备（与每日集包人工/设备图一致）。
 
     无看板数据且分拣>0 时，当日全部计入干线。"""
-    tr, br = _gofo_collect_biz_day_trunk_branch(cursor, d)
-    total_sorting = _sorting_biz_day_manual_device_total(cursor, d)
+    tr, br = _gofo_collect_biz_day_trunk_branch(cursor, d, window_mode)
+    total_sorting = _sorting_biz_day_manual_device_total(cursor, d, window_mode)
     if total_sorting <= 0:
         return 0, 0
     g = tr + br
@@ -1923,27 +2010,41 @@ def _collect_biz_day_trunk_branch_aligned(cursor, d: datetime.date) -> tuple:
 
 @app.route('/api/statistics/daily_center_collect_split', methods=['GET'])
 def api_statistics_daily_center_collect_split():
-    """按 LA 运营日聚合；柱高合计与 daily_packing_split（人工+设备）同源同值。
-
-    干线/支线按 gofo_center_collect_stats 当日干线:支线运单占比拆分（若无看板数据则当日全部计入干线）。"""
+    """按 stats_window 聚合；柱高合计与 daily_packing_split（人工+设备）同源同值。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
-    days = request.args.get('days', type=int)
-    if days is None or days < 1:
-        days = 14
-    days = min(days, 90)
     try:
-        end_raw = request.args.get('end_date') or request.args.get('date')
-        if end_raw:
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
+
+        def _parse_d(val):
+            if not val:
+                return None
             try:
-                end_date = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+                return datetime.strptime(str(val)[:10], '%Y-%m-%d').date()
             except ValueError:
-                end_date = datetime.now(LA_TZ).date()
+                return None
+
+        start_in = _parse_d(request.args.get('start_date'))
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        end_in = _parse_d(end_raw)
+
+        if start_in and end_in and start_in <= end_in:
+            span = (end_in - start_in).days + 1
+            if span > 90:
+                return jsonify({'error': '日期跨度不能超过 90 天'}), 400
+            start_date, end_date = start_in, end_in
         else:
-            end_date = datetime.now(LA_TZ).date()
-        start_date = end_date - timedelta(days=days - 1)
+            days = request.args.get('days', type=int)
+            if days is None or days < 1:
+                days = 14
+            days = min(days, 90)
+            if end_in:
+                end_date = end_in
+            else:
+                end_date = datetime.now(LA_TZ).date()
+            start_date = end_date - timedelta(days=days - 1)
         dates = []
         d = start_date
         while d <= end_date:
@@ -1957,7 +2058,7 @@ def api_statistics_daily_center_collect_split():
         try:
             d = start_date
             while d <= end_date:
-                tr, br = _collect_biz_day_trunk_branch_aligned(cursor, d)
+                tr, br = _collect_biz_day_trunk_branch_aligned(cursor, d, window_mode)
                 trunk_list.append(tr)
                 branch_list.append(br)
                 d += timedelta(days=1)
@@ -1980,15 +2081,18 @@ def api_statistics_daily_center_collect_split():
         return jsonify({'error': str(e)}), 500
 
 
-def _build_cno_narrowbelt_hourly_series(anchor_date):
-    """LA 运营日锚点（当日 06:00–次日 06:00）窄带 A–D 各时段件数，与图表 API 同源。"""
+def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calendar'):
+    """窄带 A–D 各时段件数；calendar=当日00–23；business=05–次日04（与 sorting_hourly 同源）。"""
     if isinstance(anchor_date, datetime):
         anchor_date = anchor_date.date()
     next_cal = anchor_date + timedelta(days=1)
     anchor_str = anchor_date.strftime('%Y-%m-%d')
     next_str = next_cal.strftime('%Y-%m-%d')
 
-    labels = [f"{((6 + i) % 24):02d}:00" for i in range(24)]
+    if window_mode == 'business':
+        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
+    else:
+        labels = [f"{i:02d}:00" for i in range(24)]
     slot_to_idx = {s: i for i, s in enumerate(labels)}
     lines = {'A': [0] * 24, 'B': [0] * 24, 'C': [0] * 24, 'D': [0] * 24}
 
@@ -2008,20 +2112,20 @@ def _build_cno_narrowbelt_hourly_series(anchor_date):
             return s
         return ''
 
+    clause, binds = _record_date_slot_window_sql_binds(window_mode, anchor_date)
     conn = get_db()
     cursor = conn.cursor()
     try:
         cursor.execute(
             convert_query_placeholders(
-                """
+                f"""
                 SELECT record_date, time_slot, line_code, pieces
                 FROM cno_narrowbelt_hourly
-                WHERE (record_date = ? AND time_slot >= '06:00')
-                   OR (record_date = ? AND time_slot < '06:00')
+                WHERE {clause}
                 ORDER BY record_date, time_slot, line_code
                 """
             ),
-            (anchor_str, next_str),
+            binds,
         )
         for row in cursor.fetchall():
             rd = _db_row_get(row, 'record_date', '') or _db_row_get(row, 0, '')
@@ -2040,12 +2144,18 @@ def _build_cno_narrowbelt_hourly_series(anchor_date):
                 n = 0
             if line not in lines or not slot:
                 continue
-            if rd == anchor_str and slot >= '06:00':
-                pass
-            elif rd == next_str and slot < '06:00':
-                pass
+            if window_mode == 'business':
+                if rd == anchor_str and slot >= '05:00':
+                    pass
+                elif rd == next_str and slot < '05:00':
+                    pass
+                else:
+                    continue
             else:
-                continue
+                if rd == anchor_str:
+                    pass
+                else:
+                    continue
             idx = slot_to_idx.get(slot)
             if idx is None:
                 continue
@@ -2054,7 +2164,8 @@ def _build_cno_narrowbelt_hourly_series(anchor_date):
         conn.close()
 
     return {
-        'timezone': 'America/Los_Angeles',
+        'timezone': 'server_local',
+        'stats_window': window_mode,
         'date': anchor_str,
         'labels': labels,
         'lines': lines,
@@ -2063,24 +2174,25 @@ def _build_cno_narrowbelt_hourly_series(anchor_date):
 
 @app.route('/api/statistics/cno_narrowbelt_hourly', methods=['GET'])
 def api_statistics_cno_narrowbelt_hourly():
-    """CNO 直线窄带分拣机 AA–AD → 生产线 A–D，按与 sorting_hourly 相同的 LA 运营日（06:00–次日 06:00）返回 24 个时段。"""
+    """CNO 直线窄带分拣机分时；与 sorting_hourly 相同 stats_window。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
     raw = request.args.get('date')
+    wm = _parse_stats_window_param(request.args.get('stats_window'))
     if raw:
         try:
             anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
         except ValueError:
-            anchor = datetime.now(LA_TZ).date()
+            anchor = _default_stats_request_date(wm)
     else:
-        anchor = datetime.now(LA_TZ).date()
+        anchor = _default_stats_request_date(wm)
 
     try:
-        return jsonify(_build_cno_narrowbelt_hourly_series(anchor))
+        return jsonify(_build_cno_narrowbelt_hourly_series(anchor, wm))
     except Exception as e:
-        labels = [f"{((6 + i) % 24):02d}:00" for i in range(24)]
+        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)] if wm == 'business' else [f"{i:02d}:00" for i in range(24)]
         return jsonify({
             'error': str(e),
             'date': anchor.strftime('%Y-%m-%d'),
@@ -2091,22 +2203,23 @@ def api_statistics_cno_narrowbelt_hourly():
 
 @app.route('/api/statistics/cno_narrowbelt_hourly/export', methods=['GET'])
 def api_statistics_cno_narrowbelt_hourly_export():
-    """导出窄带分时 CSV（UTF-8 BOM，Excel 友好），口径与图表一致。"""
+    """导出窄带分时 CSV；口径与图表一致。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
     raw = request.args.get('date')
+    wm = _parse_stats_window_param(request.args.get('stats_window'))
     if raw:
         try:
             anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
         except ValueError:
-            anchor = datetime.now(LA_TZ).date()
+            anchor = _default_stats_request_date(wm)
     else:
-        anchor = datetime.now(LA_TZ).date()
+        anchor = _default_stats_request_date(wm)
 
     try:
-        data = _build_cno_narrowbelt_hourly_series(anchor)
+        data = _build_cno_narrowbelt_hourly_series(anchor, wm)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -2150,6 +2263,7 @@ def api_statistics_center_collect_week_comparison():
     try:
         conn = get_db()
         cursor = conn.cursor()
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
         min_str = None
         try:
             cursor.execute(
@@ -2187,10 +2301,39 @@ def api_statistics_center_collect_week_comparison():
             week_end = week_start + timedelta(days=6)
             return week_start, week_end
 
-        current_start, current_end = get_natural_week_range(min_date)
+        data_first_monday, _ = get_natural_week_range(min_date)
+        last_monday_to_include, _ = get_natural_week_range(max_date)
+        loop_start = data_first_monday
+        loop_end_monday = last_monday_to_include
+        week_start_raw = request.args.get('week_start')
+        week_end_raw = request.args.get('week_end')
+        if week_start_raw:
+            try:
+                ws = datetime.strptime(str(week_start_raw)[:10], '%Y-%m-%d').date()
+                wm, _ = get_natural_week_range(ws)
+                loop_start = max(loop_start, wm)
+            except ValueError:
+                pass
+        if week_end_raw:
+            try:
+                we = datetime.strptime(str(week_end_raw)[:10], '%Y-%m-%d').date()
+                wm, _ = get_natural_week_range(we)
+                loop_end_monday = min(loop_end_monday, wm)
+            except ValueError:
+                pass
+        if loop_start > loop_end_monday:
+            conn.close()
+            return jsonify([])
+        week_span = (loop_end_monday - loop_start).days // 7 + 1
+        if week_span > 104:
+            conn.close()
+            return jsonify({'error': '周数区间过长（最多 104 周）'}), 400
+
+        current_start = loop_start
+        current_end = current_start + timedelta(days=6)
         weeks_data = []
 
-        while current_start <= max_date:
+        while current_start <= loop_end_monday:
             daily_data = []
             week_total_trunk = 0
             week_total_branch = 0
@@ -2208,7 +2351,7 @@ def api_statistics_center_collect_week_comparison():
                     })
                     continue
 
-                tr, br = _collect_biz_day_trunk_branch_aligned(cursor, current_day)
+                tr, br = _collect_biz_day_trunk_branch_aligned(cursor, current_day, window_mode)
                 tot = tr + br
                 week_total_trunk += tr
                 week_total_branch += br
@@ -3014,17 +3157,20 @@ def get_tms_shuttle_pivot():
     except ValueError:
         return jsonify({'error': '日期格式无效，应为 YYYY-MM-DD'}), 400
 
-    use_business = _tms_shuttle_pivot_use_business_axis()
+    sw_arg = request.args.get('stats_window')
+    if sw_arg is not None and str(sw_arg).strip() != '':
+        use_business = _parse_stats_window_param(sw_arg) == 'business'
+    else:
+        use_business = _tms_shuttle_pivot_use_business_axis()
+    h0 = 5 if use_business else 0
+    hours = _tms_shuttle_pivot_business_hour_labels(h0)
+    d_parse = datetime.strptime(date_str, '%Y-%m-%d').date()
+    win_lo, win_hi_excl = _stats_period_bounds(d_parse, 'business' if use_business else 'calendar')
+    win_hi = win_hi_excl - timedelta(seconds=1)
     if use_business:
-        h0 = _tms_shuttle_pivot_day_start_hour()
-        hours = _tms_shuttle_pivot_business_hour_labels(h0)
-        win_lo, win_hi = _tms_shuttle_pivot_window_bounds(date_str)
         date_params = (date_str,)
         where_sql = "record_date = ?"
     else:
-        h0 = 0
-        hours = _tms_shuttle_pivot_business_hour_labels(0)
-        win_lo, win_hi = _tms_shuttle_pivot_natural_calendar_bounds(date_str)
         d0, d1 = _tms_shuttle_pivot_candidate_record_dates(date_str)
         where_sql = "record_date IN (?, ?)"
         date_params = (d0, d1)
@@ -4511,45 +4657,21 @@ def check_list_updates():
 def inbound_hourly_data():
     # 获取日期参数，默认为今天
     date_str = request.args.get('date')
-    
+    window_mode = _parse_stats_window_param(request.args.get('stats_window'))
+
     conn=get_db()
-    
-    # 获取洛杉矶当前日期
-    la_tz = pytz.timezone('America/Los_Angeles')
-    
+
     if date_str:
-        # 如果提供了日期参数，使用指定日期
         try:
             request_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             conn.close()
             return jsonify({"error": "日期格式无效，请使用YYYY-MM-DD格式"}), 400
     else:
-        # 如果没有提供日期参数，使用今天
-        # 如果当前时间在 06:00 之前，可能用户想看的是从昨天 06:00 开始的整个班次数据
-        now_la = datetime.now(la_tz)
-        if now_la.hour < 6:
-            request_date = now_la.date() - timedelta(days=1)
-        else:
-            request_date = now_la.date()
-    
-    # 计算次日日期
-    next_date = request_date + timedelta(days=1)
-    
-    # 构建日期范围查询条件（使用洛杉矶时区时间进行计算）
-    # 当天06:00:00的时间（洛杉矶时间）
-    request_date_6am_la = la_tz.localize(datetime.combine(request_date, datetime.min.time().replace(hour=6)))
-    
-    # 次日06:00:00的时间（洛杉矶时间，用于上限）
-    next_date_6am_la = la_tz.localize(datetime.combine(next_date, datetime.min.time().replace(hour=6)))
-    
-    # 转换为系统本地时间用于数据库查询
-    # 注意：数据库中存储的是系统本地时间，不是UTC时间
-    request_date_6am_local = request_date_6am_la.astimezone()
-    next_date_6am_local = next_date_6am_la.astimezone()
-    
-    # 查询入库记录，按时间段分组（查询当天06:00之后到次日06:00之前的所有记录）
-    # 同时查询26英尺和53英尺车辆的装载量
+        request_date = _default_stats_request_date(window_mode)
+
+    period_start, period_end = _stats_period_bounds(request_date, window_mode)
+
     cur = conn.cursor(); cur.execute(f"""
         SELECT 
             ir.time_slot, 
@@ -4563,8 +4685,8 @@ def inbound_hourly_data():
             ir.created_at >= ? AND ir.created_at < ? AND ir.time_slot IS NOT NULL
         GROUP BY ir.time_slot
         ORDER BY ir.time_slot""", (
-            request_date_6am_local.strftime('%Y-%m-%d %H:%M:%S'), 
-            next_date_6am_local.strftime('%Y-%m-%d %H:%M:%S')
+            period_start.strftime('%Y-%m-%d %H:%M:%S'),
+            period_end.strftime('%Y-%m-%d %H:%M:%S')
         ))
     rows=[{
         "time_slot": r[0],
@@ -4603,49 +4725,22 @@ def inbound_hourly_avg_data():
 
 @app.route('/api/pallet_hourly')
 def pallet_hourly_data():
-    # 获取日期参数，默认为今天
     date_str = request.args.get('date')
-    
+    window_mode = _parse_stats_window_param(request.args.get('stats_window'))
+
     conn=get_db()
-    
-    # 获取洛杉矶当前日期
-    la_tz = pytz.timezone('America/Los_Angeles')
-    
+
     if date_str:
-        # 如果提供了日期参数，使用指定日期
         try:
             request_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             conn.close()
             return jsonify({"error": "日期格式无效，请使用YYYY-MM-DD格式"}), 400
     else:
-        # 如果没有提供日期参数，使用今天
-        # 但为了确保能看到最新数据，我们需要调整日期范围
-        # 如果当前时间在洛杉矶时间06:00之前，我们应该查看昨天的数据
-        now_la = datetime.now(la_tz)
-        if now_la.hour < 6:
-            # 如果当前洛杉矶时间在06:00之前，使用昨天的日期
-            request_date = now_la.date() - timedelta(days=1)
-        else:
-            # 否则使用今天的日期
-            request_date = now_la.date()
-    
-    # 计算次日日期
-    next_date = request_date + timedelta(days=1)
-    
-    # 构建日期范围查询条件（使用洛杉矶时区时间进行计算）
-    # 当天06:00:00的时间（洛杉矶时间）
-    request_date_6am_la = la_tz.localize(datetime.combine(request_date, datetime.min.time().replace(hour=6)))
-    
-    # 次日06:00:00的时间（洛杉矶时间，用于上限）
-    next_date_6am_la = la_tz.localize(datetime.combine(next_date, datetime.min.time().replace(hour=6)))
-    
-    # 转换为系统本地时间用于数据库查询
-    # 注意：数据库中存储的是系统本地时间，不是UTC时间
-    request_date_6am_local = request_date_6am_la.astimezone()
-    next_date_6am_local = next_date_6am_la.astimezone()
-    
-    # 查询当天数据：入库记录中车辆类型为26英尺或53英尺的记录，按时间段分组
+        request_date = _default_stats_request_date(window_mode)
+
+    period_start, period_end = _stats_period_bounds(request_date, window_mode)
+
     cur = conn.cursor(); cur.execute("""
         SELECT time_slot, SUM(load_amount - COALESCE(plate_excluded_load, 0)) as total_load_amount, COUNT(*) as count
         FROM inbound_records 
@@ -4654,8 +4749,8 @@ def pallet_hourly_data():
             AND NOT (vehicle_type = '53英尺' AND vehicle_no = 'G')
         GROUP BY time_slot
         ORDER BY time_slot""", (
-            request_date_6am_local.strftime('%Y-%m-%d %H:%M:%S'), 
-            next_date_6am_local.strftime('%Y-%m-%d %H:%M:%S')
+            period_start.strftime('%Y-%m-%d %H:%M:%S'),
+            period_end.strftime('%Y-%m-%d %H:%M:%S')
         ))
     current_day_rows=[{
         "time_slot": r[0] if r[0] else '未指定',
@@ -4708,53 +4803,31 @@ def pallet_hourly_data():
 # 新增API：获取按时间段分组的分拣数据
 @app.route('/api/sorting_hourly')
 def sorting_hourly_data():
-    # 获取日期参数，默认为今天
     date_str = request.args.get('date')
-    
+    window_mode = _parse_stats_window_param(request.args.get('stats_window'))
+
     conn=get_db()
-    
+
     if date_str:
-        # 如果提供了日期参数，使用指定日期
         try:
             request_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             conn.close()
             return jsonify({"error": "日期格式无效，请使用YYYY-MM-DD格式"}), 400
     else:
-        # 如果没有提供日期参数，使用系统当前日期
-        request_date = datetime.now().date()
-    
-    # 计算次日日期
-    next_date = request_date + timedelta(days=1)
-    
-    # 获取洛杉矶时区
-    la_tz = pytz.timezone('America/Los_Angeles')
-    
-    # 构建日期范围查询条件（06:00 - 06:00，洛杉矶时间）
-    request_6am_la = la_tz.localize(datetime.combine(request_date, datetime.min.time().replace(hour=6)))
-    next_6am_la = la_tz.localize(datetime.combine(next_date, datetime.min.time().replace(hour=6)))
-    
-    # 转换为系统本地时间
-    start_time_local = request_6am_la.astimezone()
-    end_time_local = next_6am_la.astimezone()
-    
-    # 查询分拣记录，按时间段分组（06:00之后到次日06:00之前）
-    # 由于 sorting_time 字段通常只存储日期字符串 'YYYY-MM-DD'，
-    # 我们需要通过日期和 time_slot 的组合来筛选 06:00 - 06:00 的范围。
-    cur = conn.cursor(); cur.execute("""SELECT 
+        request_date = _default_stats_request_date(window_mode)
+
+    clause, binds = _sorting_slot_window_sql_binds(window_mode, request_date)
+
+    cur = conn.cursor(); cur.execute(f"""SELECT 
                             time_slot, 
                             SUM(pieces) as total_pieces,
                             SUM(manual_count) as manual_total,
                             SUM(device_count) as device_total
                         FROM sorting_records 
-                        WHERE 
-                            (sorting_time = ? AND time_slot >= '06:00') OR
-                            (sorting_time = ? AND time_slot < '06:00')
+                        WHERE {clause}
                         GROUP BY time_slot
-                        ORDER BY time_slot""", (
-                            request_date.strftime('%Y-%m-%d'),
-                            next_date.strftime('%Y-%m-%d')
-                        ))
+                        ORDER BY time_slot""", binds)
     rows=[{
         "time_slot": r[0],
         "total_pieces": int(r[1]) if r[1] else 0,
@@ -4764,12 +4837,11 @@ def sorting_hourly_data():
     _cno_site = os.environ.get("GOFO_CNO01_SITE", "CNO01").strip() or "CNO01"
     try:
         cur.execute(
-            """SELECT time_slot, COALESCE(waybill_no_total, 0)
+            f"""SELECT time_slot, COALESCE(waybill_no_total, 0)
                FROM gofo_collect_destin_hourly
                WHERE destin_site = ?
-                 AND ((sorting_time = ? AND time_slot >= '06:00')
-                   OR (sorting_time = ? AND time_slot < '06:00'))""",
-            (_cno_site, request_date.strftime("%Y-%m-%d"), next_date.strftime("%Y-%m-%d")),
+                 AND ({clause})""",
+            (_cno_site,) + binds,
         )
         cno_map = {r[0]: int(r[1]) for r in cur.fetchall()}
     except Exception:
@@ -6833,10 +6905,77 @@ def _v2_plan_to_schedule_config(plan, request_date):
         "night": {"capacity": 0, "hoursPerShift": 0, "schedule": [0] * 7},
     }
 
+
+def _parse_stats_window_param(raw):
+    """calendar = 本地自然日 00:00–次日 00:00；business = 本地当日 05:00–次日 05:00（与 inbound_records.created_at 同一 naive 本地时钟）。"""
+    if not raw:
+        return 'calendar'
+    r = str(raw).strip().lower()
+    if r in ('business', 'biz', 'b', '5', '05', 'shift', 'operational'):
+        return 'business'
+    return 'calendar'
+
+
+def _default_stats_request_date(window_mode):
+    now = datetime.now()
+    d = now.date()
+    if window_mode == 'business' and now.hour < 5:
+        return d - timedelta(days=1)
+    return d
+
+
+def _stats_period_bounds(request_date, window_mode):
+    next_d = request_date + timedelta(days=1)
+    if window_mode == 'business':
+        start = datetime.combine(request_date, datetime.min.time().replace(hour=5))
+        end = datetime.combine(next_d, datetime.min.time().replace(hour=5))
+    else:
+        start = datetime.combine(request_date, datetime.min.time())
+        end = datetime.combine(next_d, datetime.min.time())
+    return start, end
+
+
+def _sorting_slot_window_sql_binds(window_mode: str, d: date):
+    """sorting_time + time_slot，与 stats_window 一致。"""
+    ds = d.strftime('%Y-%m-%d')
+    nxt = (d + timedelta(days=1)).strftime('%Y-%m-%d')
+    if window_mode == 'business':
+        sql = (
+            "(sorting_time = ? AND time_slot >= '05:00') OR (sorting_time = ? AND time_slot < '05:00')"
+        )
+        return sql, (ds, nxt)
+    return "sorting_time = ?", (ds,)
+
+
+def _record_date_hour_window_sql_binds(window_mode: str, d: date):
+    """record_date + record_hour（签入/集包看板等）。"""
+    ds = d.strftime('%Y-%m-%d')
+    nxt = (d + timedelta(days=1)).strftime('%Y-%m-%d')
+    if window_mode == 'business':
+        sql = (
+            "(record_date = ? AND record_hour >= '05:00') OR (record_date = ? AND record_hour < '05:00')"
+        )
+        return sql, (ds, nxt)
+    return "record_date = ?", (ds,)
+
+
+def _record_date_slot_window_sql_binds(window_mode: str, d: date):
+    """record_date + time_slot（cno_narrowbelt_hourly）。"""
+    ds = d.strftime('%Y-%m-%d')
+    nxt = (d + timedelta(days=1)).strftime('%Y-%m-%d')
+    if window_mode == 'business':
+        sql = (
+            "(record_date = ? AND time_slot >= '05:00') OR (record_date = ? AND time_slot < '05:00')"
+        )
+        return sql, (ds, nxt)
+    return "record_date = ?", (ds,)
+
+
 @app.route('/api/stats')
 def get_statistics():
     # 获取日期参数，默认为今天
     date_str = request.args.get('date')
+    window_mode = _parse_stats_window_param(request.args.get('stats_window'))
     
     # 必须与 /api/record 等写入路径一致：USE_POSTGRES 时读 PostgreSQL，禁止只读本地 SQLite 导致统计恒为旧数据/空
     conn = get_db()
@@ -6853,23 +6992,20 @@ def get_statistics():
             return jsonify({"error": "日期格式无效，请使用YYYY-MM-DD格式"}), 400
     else:
         # 与 inbound_records.created_at 一致：入库使用 datetime.now() 的「服务器本地」naive 时间，
-        # 统计也必须按同一套「本地自然日」切分；若用洛杉矶 5:00 业务日而库内是本地时间，总车次/件数会与列表明细对不上。
-        request_date = datetime.now().date()
+        # 统计窗口必须与同一套本地时间对齐（calendar / business 5–5 均由 _stats_period_bounds 计算）。
+        request_date = _default_stats_request_date(window_mode)
 
-    # 次日日期（本地自然日边界 00:00 ~ 次日 00:00）
-    next_date = request_date + timedelta(days=1)
-    today_start = datetime.combine(request_date, datetime.min.time())
-    next_day_start = datetime.combine(next_date, datetime.min.time())
+    period_start, period_end = _stats_period_bounds(request_date, window_mode)
     
-    # 查询属于指定自然日的记录（本地 00:00 至次日 00:00，与 created_at 一致）
+    # 查询属于当前统计窗口的记录（与 created_at 一致）
     records_query = """
         SELECT id, created_at, vehicle_type, time_slot FROM inbound_records 
         WHERE 
             created_at >= ? AND created_at < ?
     """
     records_cur = conn.cursor(); records_cur.execute(records_query, (
-        today_start.strftime('%Y-%m-%d %H:%M:%S'), 
-        next_day_start.strftime('%Y-%m-%d %H:%M:%S')
+        period_start.strftime('%Y-%m-%d %H:%M:%S'), 
+        period_end.strftime('%Y-%m-%d %H:%M:%S')
     ))
     records = records_cur.fetchall()
     
@@ -6887,8 +7023,8 @@ def get_statistics():
             created_at >= ? AND created_at < ?
     """
     total_cur = conn.cursor(); total_cur.execute(total_query, (
-        today_start.strftime('%Y-%m-%d %H:%M:%S'), 
-        next_day_start.strftime('%Y-%m-%d %H:%M:%S')
+        period_start.strftime('%Y-%m-%d %H:%M:%S'), 
+        period_end.strftime('%Y-%m-%d %H:%M:%S')
     ))
     total_result = total_cur.fetchone()
     total_vehicles = (total_result['total_vehicles'] if USE_POSTGRES else total_result[0]) if total_result else 0
@@ -6907,8 +7043,8 @@ def get_statistics():
             AND NOT (vehicle_type = '53英尺' AND vehicle_no = 'G')
     """
     pallet_cur = conn.cursor(); pallet_cur.execute(pallet_query, (
-        today_start.strftime('%Y-%m-%d %H:%M:%S'), 
-        next_day_start.strftime('%Y-%m-%d %H:%M:%S')
+        period_start.strftime('%Y-%m-%d %H:%M:%S'), 
+        period_end.strftime('%Y-%m-%d %H:%M:%S')
     ))
     pallet_result = pallet_cur.fetchone()
     pallet_val = pallet_result['total_pallets'] if USE_POSTGRES else pallet_result[0]
@@ -6923,8 +7059,8 @@ def get_statistics():
     """
     ex_cur = conn.cursor()
     ex_cur.execute(excluded_totals_query, (
-        today_start.strftime('%Y-%m-%d %H:%M:%S'),
-        next_day_start.strftime('%Y-%m-%d %H:%M:%S'),
+        period_start.strftime('%Y-%m-%d %H:%M:%S'),
+        period_end.strftime('%Y-%m-%d %H:%M:%S'),
     ))
     ex_row = ex_cur.fetchone()
     total_plate_excluded_load = float(ex_row[0] or 0) if ex_row else 0.0
@@ -6945,8 +7081,8 @@ def get_statistics():
         GROUP BY vehicle_type
     """
     vehicle_stats_cur = conn.cursor(); vehicle_stats_cur.execute(vehicle_stats_query, (
-        today_start.strftime('%Y-%m-%d %H:%M:%S'), 
-        next_day_start.strftime('%Y-%m-%d %H:%M:%S')
+        period_start.strftime('%Y-%m-%d %H:%M:%S'), 
+        period_end.strftime('%Y-%m-%d %H:%M:%S')
     ))
     vehicle_stats = [{
         "vehicle_type": r[0],
@@ -6974,8 +7110,8 @@ def get_statistics():
         WHERE sorting_time >= ? AND sorting_time < ?
     """
     sorting_cur = conn.cursor(); sorting_cur.execute(sorting_query, (
-        today_start.strftime('%Y-%m-%d %H:%M:%S'),
-        next_day_start.strftime('%Y-%m-%d %H:%M:%S')
+        period_start.strftime('%Y-%m-%d %H:%M:%S'),
+        period_end.strftime('%Y-%m-%d %H:%M:%S')
     ))
     sorting_result = sorting_cur.fetchone()
     sorting_val = sorting_result['total_sorted'] if USE_POSTGRES else sorting_result[0]
@@ -7050,11 +7186,9 @@ def get_statistics():
                     print(f"处理记录 {record_id} 的时间时出错: {e}")
     
     
-    # === 计算趋势数据 (环比上周同一天) ===（与上方同一套本地自然日边界）
+    # === 计算趋势数据 (环比上周同一统计窗口) ===
     prev_date = request_date - timedelta(days=7)
-    prev_next_date = prev_date + timedelta(days=1)
-    prev_start = datetime.combine(prev_date, datetime.min.time())
-    prev_end = datetime.combine(prev_next_date, datetime.min.time())
+    prev_start, prev_end = _stats_period_bounds(prev_date, window_mode)
     
     # 查询上周同一天的总车次和货量
     trend_query = f"""
@@ -7309,13 +7443,12 @@ def get_statistics():
     remaining_pieces_for_est = max(0, total_pieces - total_sorted_pieces)
 
     if remaining_pieces_for_est > 0:
-        limit_now = datetime.now(la_tz)
-        is_current_business_context = False
-        if request_date == limit_now.date() or (limit_now.hour < 5 and request_date == limit_now.date() - timedelta(days=1)):
-            is_current_business_context = True
+        now_local_naive = datetime.now()
+        is_current_business_context = period_start <= now_local_naive < period_end
 
         if is_current_business_context:
             try:
+                limit_now = datetime.now(la_tz)
                 sim_start = limit_now
                 if earliest_sort_start_la is not None and sim_start < earliest_sort_start_la:
                     sim_start = earliest_sort_start_la
@@ -7455,6 +7588,9 @@ def get_statistics():
         "next_time_slot": next_time_slot,
         "total_plate_excluded_load": round(total_plate_excluded_load, 4),
         "total_excluded_pieces": total_excluded_pieces_stat,
+        "stats_window": window_mode,
+        "stats_window_start": period_start.strftime('%Y-%m-%d %H:%M:%S'),
+        "stats_window_end_exclusive": period_end.strftime('%Y-%m-%d %H:%M:%S'),
     })
 
 
@@ -7463,6 +7599,7 @@ def get_statistics():
 def get_daily_trend():
     """获取每日货物趋势数据（显示所有有记录的日期）"""
     try:
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
         conn = get_db()
         
         # 查询数据库中所有有记录的日期（按日期分组）
@@ -7521,17 +7658,8 @@ def get_daily_trend():
         # 为每个有记录的日期查询数据
         for date_str in record_dates:
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            next_date = target_date + timedelta(days=1)
-            
-            # 构建日期范围查询条件
-            # 运营日: 05:00 到 次日 05:00 (洛杉矶时间)
-            req_5am_la = LA_TZ.localize(datetime.combine(target_date, datetime.min.time().replace(hour=5)))
-            next_5am_la = LA_TZ.localize(datetime.combine(next_date, datetime.min.time().replace(hour=5)))
-            
-            # 转换到数据库使用的本地时区
-            day_start = req_5am_la.astimezone()
-            day_end = next_5am_la.astimezone()
-            
+            day_start, day_end = _stats_period_bounds(target_date, window_mode)
+
             # 查询当天的货物总量、车次总数和托盘总数
             query = f"""
                 SELECT 
@@ -7590,6 +7718,7 @@ def get_daily_trend():
 def get_weekly_pallet_trend():
     """获取每周托盘趋势数据（按自然周汇总）"""
     try:
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
         conn = get_db()
         
         # 查询数据库中所有有记录的日期
@@ -7647,8 +7776,7 @@ def get_weekly_pallet_trend():
             # 循环7天（周一到周日）
             for day_offset in range(7):
                 current_day = current_start + timedelta(days=day_offset)
-                next_day = current_day + timedelta(days=1)
-                
+
                 if current_day > max_date:
                     daily_data.append({
                         'date': current_day.strftime('%Y-%m-%d'),
@@ -7656,15 +7784,9 @@ def get_weekly_pallet_trend():
                         'pallets': 0
                     })
                     continue
-                
-                # 构造当天的日期时间范围 (运营日: 05:00 到 次日 05:00, 洛杉矶时间)
-                req_5am_la = LA_TZ.localize(datetime.combine(current_day, datetime.min.time().replace(hour=5)))
-                next_5am_la = LA_TZ.localize(datetime.combine(next_day, datetime.min.time().replace(hour=5)))
-                
-                # 转换到数据库使用的本地时区
-                day_start_dt = req_5am_la.astimezone()
-                day_end_dt = next_5am_la.astimezone()
-                
+
+                day_start_dt, day_end_dt = _stats_period_bounds(current_day, window_mode)
+
                 # 查询当天托盘数据
                 day_query = """
                     SELECT SUM(CASE 
@@ -7675,7 +7797,7 @@ def get_weekly_pallet_trend():
                     FROM inbound_records
                     WHERE created_at >= ? AND created_at < ?
                 """
-                
+
                 cursor = conn.cursor()
                 cursor.execute(day_query, (
                     day_start_dt.strftime('%Y-%m-%d %H:%M:%S'),
@@ -7724,6 +7846,8 @@ def get_week_comparison():
     """获取所有周的对比数据，包含每周内每天的详细数据（使用自然周：周一00:00到周日23:59）"""
     try:
         conn = get_db()
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
+
         
         # 1. 获取最小日期（第一条记录的时间）
         query = "SELECT MIN(created_at) FROM inbound_records"
@@ -7767,15 +7891,43 @@ def get_week_comparison():
             week_start = date - timedelta(days=weekday)
             week_end = week_start + timedelta(days=6)
             return week_start, week_end
-            
-        # 对齐最小日期到该周的周一
-        current_start, current_end = get_natural_week_range(min_date)
-        
+
+        data_first_monday, _ = get_natural_week_range(min_date)
+        last_monday_to_include, _ = get_natural_week_range(max_date)
+        loop_start = data_first_monday
+        loop_end_monday = last_monday_to_include
+        week_start_raw = request.args.get('week_start')
+        week_end_raw = request.args.get('week_end')
+        if week_start_raw:
+            try:
+                ws = datetime.strptime(str(week_start_raw)[:10], '%Y-%m-%d').date()
+                wm, _ = get_natural_week_range(ws)
+                loop_start = max(loop_start, wm)
+            except ValueError:
+                pass
+        if week_end_raw:
+            try:
+                we = datetime.strptime(str(week_end_raw)[:10], '%Y-%m-%d').date()
+                wm, _ = get_natural_week_range(we)
+                loop_end_monday = min(loop_end_monday, wm)
+            except ValueError:
+                pass
+        if loop_start > loop_end_monday:
+            conn.close()
+            return jsonify([])
+        week_span = (loop_end_monday - loop_start).days // 7 + 1
+        if week_span > 104:
+            conn.close()
+            return jsonify({'error': '周数区间过长（最多 104 周）'}), 400
+
+        current_start = loop_start
+        current_end = current_start + timedelta(days=6)
+
         weeks_data = []
-        
+
         _net_wk = _sql_inbound_net_pieces_actual("")
         # 循环直到包含当前日期
-        while current_start <= max_date:
+        while current_start <= loop_end_monday:
             # 查询该周每一天的数据
             daily_data = []
             week_total_pieces = 0
@@ -7784,8 +7936,7 @@ def get_week_comparison():
             # 循环7天（周一到周日）
             for day_offset in range(7):
                 current_day = current_start + timedelta(days=day_offset)
-                next_day = current_day + timedelta(days=1)
-                
+
                 if current_day > max_date:
                     daily_data.append({
                         'date': current_day.strftime('%Y-%m-%d'),
@@ -7794,15 +7945,9 @@ def get_week_comparison():
                         'vehicles': 0
                     })
                     continue
-                
-                # 构造当天的日期时间范围 (运营日: 05:00 到 次日 05:00, 洛杉矶时间)
-                req_5am_la = LA_TZ.localize(datetime.combine(current_day, datetime.min.time().replace(hour=5)))
-                next_5am_la = LA_TZ.localize(datetime.combine(next_day, datetime.min.time().replace(hour=5)))
-                
-                # 转换到数据库使用的本地时区
-                day_start_dt = req_5am_la.astimezone()
-                day_end_dt = next_5am_la.astimezone()
-                
+
+                day_start_dt, day_end_dt = _stats_period_bounds(current_day, window_mode)
+
                 # 查询当天数据
                 day_query = f"""
                     SELECT 
@@ -7814,7 +7959,7 @@ def get_week_comparison():
                     FROM inbound_records
                     WHERE created_at >= ? AND created_at < ?
                 """
-                
+
                 cursor = conn.cursor(); cursor.execute(day_query, (
                     day_start_dt.strftime('%Y-%m-%d %H:%M:%S'),
                     day_end_dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -7905,27 +8050,16 @@ def get_week_comparison():
 @app.route('/api/export_csv')
 def export_csv():
     try:
-        # 获取查询日期参数，如果没有则使用当天
         date_str = request.args.get('date')
-        
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
+
         if not date_str:
-            # 获取系统当前日期（使用洛杉矶时间）
-            date_str = datetime.now(LA_TZ).strftime('%Y-%m-%d')
-        
+            date_str = _default_stats_request_date(window_mode).strftime('%Y-%m-%d')
+
         conn = get_db()
-        
-        # 解析请求的日期
+
         request_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        
-        # 计算次日日期
-        next_date = request_date + timedelta(days=1)
-        
-        # 构建日期范围查询条件（使用自然日而不是洛杉矶时区时间）
-        # 当天00:00:00的时间（系统时间）
-        today_start = datetime.combine(request_date, datetime.min.time())
-        
-        # 次日00:00:00的时间（系统时间，用于上限）
-        next_day_start = datetime.combine(next_date, datetime.min.time())
+        today_start, next_day_start = _stats_period_bounds(request_date, window_mode)
         
         _net_ex = _sql_inbound_net_pieces_actual("")
         # 总车次和总货物量（查询当天00:00之后到次日00:00之前的所有记录）
@@ -10766,6 +10900,21 @@ def get_weekly_waybill_trends():
         
         if not rows:
             return jsonify({'labels': [], 'datasets': []})
+
+        ws_raw = request.args.get('week_start')
+        we_raw = request.args.get('week_end')
+        week_mon_min = None
+        week_mon_max = None
+        if ws_raw and we_raw:
+            try:
+                d0 = datetime.strptime(str(ws_raw)[:10], '%Y-%m-%d').date()
+                d1 = datetime.strptime(str(we_raw)[:10], '%Y-%m-%d').date()
+                week_mon_min = d0 - timedelta(days=d0.weekday())
+                week_mon_max = d1 - timedelta(days=d1.weekday())
+                if week_mon_min > week_mon_max:
+                    week_mon_min, week_mon_max = week_mon_max, week_mon_min
+            except ValueError:
+                week_mon_min = week_mon_max = None
             
         # 按周聚合数据
         def get_week_label(date_str):
@@ -10811,8 +10960,12 @@ def get_weekly_waybill_trends():
             
         # 排序周
         sorted_week_starts = sorted(weeks_data.keys())
+        if week_mon_min is not None and week_mon_max is not None:
+            sorted_week_starts = [w for w in sorted_week_starts if week_mon_min <= w <= week_mon_max]
         sorted_directions = sorted(list(all_directions))
-        
+        if not sorted_week_starts:
+            return jsonify({'labels': [], 'datasets': [], 'wow_rates': []})
+
         datasets = []
         weekly_totals = []
         for w in sorted_week_starts:
@@ -13052,6 +13205,14 @@ def gofo_hourly_sync_job():
             update_gofo_sync_status("error", f"Auto sync error: {error_msg}")
             log_gofo_sync_event("auto", "error", f"Auto sync failed: {error_msg}")
 
+    # 启动后先立即执行一次，避免服务重启后要等到下一个整点才有新数据。
+    try:
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f"[GofoAutoSync] Bootstrap run at {now_str}...")
+        job()
+    except Exception as e:
+        print(f"[GofoAutoSync] Bootstrap Error: {e}")
+
     # 循环执行
     while True:
         try:
@@ -13108,6 +13269,28 @@ def _cc_time_point_key(rd, rh):
     return f"{_cc_norm_date(rd)} {_cc_norm_hour_slot(rh)}"
 
 
+def _stats_single_day_cc_axis(anchor_yyyy_mm_dd: str, window_mode: str):
+    """签入/集包单日图 24 时点：calendar=当日 00–23；business=05–次日 04（服务器本地锚点日）。"""
+    d = datetime.strptime(anchor_yyyy_mm_dd.strip(), '%Y-%m-%d').date()
+    ds = d.strftime('%Y-%m-%d')
+    next_ds = (d + timedelta(days=1)).strftime('%Y-%m-%d')
+    time_points = []
+    labels = []
+    if window_mode == 'business':
+        for i in range(24):
+            h = (5 + i) % 24
+            rh = f"{h:02d}:00"
+            labels.append(rh)
+            rd_use = ds if h >= 5 else next_ds
+            time_points.append(_cc_time_point_key(rd_use, rh))
+    else:
+        for h in range(24):
+            rh = f"{h:02d}:00"
+            labels.append(rh)
+            time_points.append(_cc_time_point_key(ds, rh))
+    return time_points, labels
+
+
 @app.route('/api/center_checkin_trend', methods=['GET'])
 def api_center_checkin_trend():
     """获取所有目的站点的签入数趋势数据（按小时）。
@@ -13121,6 +13304,7 @@ def api_center_checkin_trend():
     try:
         conn = get_db()
         cursor = conn.cursor()
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
 
         date_param = (request.args.get("date") or "").strip()
         days_raw = (request.args.get("days") or "").strip().lower()
@@ -13154,17 +13338,19 @@ def api_center_checkin_trend():
                 conn.close()
                 return jsonify({"success": False, "error": "日期格式无效，请使用 YYYY-MM-DD"}), 400
             filter_date = date_param
+            anchor_d = datetime.strptime(filter_date, "%Y-%m-%d").date()
+            rh_clause, rh_binds = _record_date_hour_window_sql_binds(window_mode, anchor_d)
             cursor.execute(
                 convert_query_placeholders(
-                    """
+                    f"""
                 SELECT DISTINCT record_date, record_hour 
                 FROM gofo_center_checkin_stats 
                 WHERE record_date IS NOT NULL AND record_hour IS NOT NULL
-                  AND record_date = ?
-                ORDER BY record_hour ASC
+                  AND ({rh_clause})
+                ORDER BY record_date ASC, record_hour ASC
                 """
                 ),
-                (filter_date,),
+                rh_binds,
             )
             dates_result = cursor.fetchall()
         elif days_raw.isdigit():
@@ -13187,48 +13373,52 @@ def api_center_checkin_trend():
             if len(dates_result) > max_points:
                 dates_result = dates_result[-max_points:]
         else:
-            la_tz = pytz.timezone("America/Los_Angeles")
-            filter_date = datetime.now(la_tz).strftime("%Y-%m-%d")
+            anchor_d = _default_stats_request_date(window_mode)
+            filter_date = anchor_d.strftime('%Y-%m-%d')
+            rh_clause, rh_binds = _record_date_hour_window_sql_binds(window_mode, anchor_d)
             cursor.execute(
                 convert_query_placeholders(
-                    """
+                    f"""
                 SELECT DISTINCT record_date, record_hour 
                 FROM gofo_center_checkin_stats 
                 WHERE record_date IS NOT NULL AND record_hour IS NOT NULL
-                  AND record_date = ?
+                  AND ({rh_clause})
                 ORDER BY record_hour ASC
                 """
                 ),
-                (filter_date,),
+                rh_binds,
             )
             dates_result = cursor.fetchall()
-        
+
         time_points = []
         labels = []
-        for row in dates_result:
-            rd = _cc_norm_date(row["record_date"])
-            rh = _cc_norm_hour_slot(row["record_hour"])
-            dt_str = _cc_time_point_key(row["record_date"], row["record_hour"])
-            time_points.append(dt_str)
-
-            # Label format: "04-08 14:00"
-            dp = rd.split("-")
-            short_date = f"{dp[1]}-{dp[2]}" if len(dp) == 3 else rd
-            labels.append(f"{short_date} {rh}")
+        if filter_date:
+            time_points, labels = _stats_single_day_cc_axis(filter_date, window_mode)
+        else:
+            for row in dates_result:
+                rd = _cc_norm_date(row["record_date"])
+                rh = _cc_norm_hour_slot(row["record_hour"])
+                dt_str = _cc_time_point_key(row["record_date"], row["record_hour"])
+                time_points.append(dt_str)
+                dp = rd.split("-")
+                short_date = f"{dp[1]}-{dp[2]}" if len(dp) == 3 else rd
+                labels.append(f"{short_date} {rh}")
             
         if not time_points:
             return jsonify({"success": True, "dates": [], "series": []})
         
         # 提取目的站点（单日模式只取当天有数据的站点）
         if filter_date:
+            anchor_d = datetime.strptime(filter_date, '%Y-%m-%d').date()
+            rh_clause, rh_binds = _record_date_hour_window_sql_binds(window_mode, anchor_d)
             cursor.execute(
                 convert_query_placeholders(
-                    """
+                    f"""
                 SELECT DISTINCT target_site_name FROM gofo_center_checkin_stats 
-                WHERE target_site_name IS NOT NULL AND record_date = ?
+                WHERE target_site_name IS NOT NULL AND ({rh_clause})
                 """
                 ),
-                (filter_date,),
+                rh_binds,
             )
         else:
             cursor.execute(
@@ -13241,16 +13431,18 @@ def api_center_checkin_trend():
         series = []
         for site in sites:
             if filter_date:
+                anchor_d = datetime.strptime(filter_date, '%Y-%m-%d').date()
+                rh_clause, rh_binds = _record_date_hour_window_sql_binds(window_mode, anchor_d)
                 cursor.execute(
                     convert_query_placeholders(
-                        """
+                        f"""
                 SELECT record_date, record_hour, check_in_waybill_cnt 
                 FROM gofo_center_checkin_stats 
-                WHERE target_site_name = ? AND record_date = ?
-                ORDER BY record_hour ASC
+                WHERE target_site_name = ? AND ({rh_clause})
+                ORDER BY record_date ASC, record_hour ASC
                 """
                     ),
-                    (site, filter_date),
+                    (site,) + rh_binds,
                 )
             else:
                 cursor.execute(
@@ -13338,6 +13530,7 @@ def api_center_collect_trend():
     try:
         conn = get_db()
         cursor = conn.cursor()
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
 
         date_param = (request.args.get("date") or "").strip()
         days_raw = (request.args.get("days") or "").strip().lower()
@@ -13376,11 +13569,14 @@ def api_center_collect_trend():
                 conn.close()
                 return jsonify({"success": False, "error": "日期格式无效，请使用 YYYY-MM-DD"}), 400
             filter_date = date_param
+            anchor_d = datetime.strptime(filter_date, '%Y-%m-%d').date()
+            rh_clause, rh_binds = _record_date_hour_window_sql_binds(window_mode, anchor_d)
             sql = (
-                "SELECT DISTINCT record_date, record_hour FROM gofo_center_collect_stats "
-                "WHERE record_date = ?" + dt_filter_sql + " ORDER BY record_hour ASC"
+                f"SELECT DISTINCT record_date, record_hour FROM gofo_center_collect_stats "
+                f"WHERE record_date IS NOT NULL AND record_hour IS NOT NULL AND ({rh_clause})"
+                + dt_filter_sql + " ORDER BY record_date ASC, record_hour ASC"
             )
-            cursor.execute(convert_query_placeholders(sql), tuple([filter_date] + dt_params))
+            cursor.execute(convert_query_placeholders(sql), tuple(list(rh_binds) + dt_params))
             dates_result = cursor.fetchall()
         elif days_raw.isdigit():
             days = min(max(int(days_raw), 1), 3650)
@@ -13395,23 +13591,21 @@ def api_center_collect_trend():
             if len(dates_result) > max_points:
                 dates_result = dates_result[-max_points:]
         else:
-            la_tz = pytz.timezone("America/Los_Angeles")
-            filter_date = datetime.now(la_tz).strftime("%Y-%m-%d")
+            anchor_d = _default_stats_request_date(window_mode)
+            filter_date = anchor_d.strftime('%Y-%m-%d')
+            rh_clause, rh_binds = _record_date_hour_window_sql_binds(window_mode, anchor_d)
             sql = (
-                "SELECT DISTINCT record_date, record_hour FROM gofo_center_collect_stats "
-                "WHERE record_date = ?" + dt_filter_sql + " ORDER BY record_hour ASC"
+                f"SELECT DISTINCT record_date, record_hour FROM gofo_center_collect_stats "
+                f"WHERE record_date IS NOT NULL AND record_hour IS NOT NULL AND ({rh_clause})"
+                + dt_filter_sql + " ORDER BY record_hour ASC"
             )
-            cursor.execute(convert_query_placeholders(sql), tuple([filter_date] + dt_params))
+            cursor.execute(convert_query_placeholders(sql), tuple(list(rh_binds) + dt_params))
             dates_result = cursor.fetchall()
 
         time_points = []
         labels = []
-        # 单日：横轴固定 24 个整点（00:00–23:00），与库里是否已同步无关；缺数据在 series 里填 0
         if filter_date:
-            for h in range(24):
-                rh = f"{h:02d}:00"
-                time_points.append(_cc_time_point_key(filter_date, rh))
-                labels.append(rh)
+            time_points, labels = _stats_single_day_cc_axis(filter_date, window_mode)
         else:
             for row in dates_result:
                 rd = _cc_norm_date(row["record_date"])
@@ -13428,11 +13622,13 @@ def api_center_collect_trend():
 
         # 抽目的名单
         if filter_date:
+            anchor_d = datetime.strptime(filter_date, '%Y-%m-%d').date()
+            rh_clause, rh_binds = _record_date_hour_window_sql_binds(window_mode, anchor_d)
             sql_names = (
-                "SELECT DISTINCT destin_name FROM gofo_center_collect_stats "
-                "WHERE destin_name IS NOT NULL AND record_date = ?" + dt_filter_sql
+                f"SELECT DISTINCT destin_name FROM gofo_center_collect_stats "
+                f"WHERE destin_name IS NOT NULL AND ({rh_clause})" + dt_filter_sql
             )
-            cursor.execute(convert_query_placeholders(sql_names), tuple([filter_date] + dt_params))
+            cursor.execute(convert_query_placeholders(sql_names), tuple(list(rh_binds) + dt_params))
         else:
             sql_names = (
                 "SELECT DISTINCT destin_name FROM gofo_center_collect_stats "
@@ -13445,15 +13641,17 @@ def api_center_collect_trend():
         series = []
         for nm in names:
             if filter_date:
+                anchor_d = datetime.strptime(filter_date, '%Y-%m-%d').date()
+                rh_clause, rh_binds = _record_date_hour_window_sql_binds(window_mode, anchor_d)
                 sql_data = (
-                    "SELECT record_date, record_hour, waybill_cnt, package_cnt "
-                    "FROM gofo_center_collect_stats "
-                    "WHERE destin_name = ? AND record_date = ?" + dt_filter_sql +
-                    " ORDER BY record_hour ASC"
+                    f"SELECT record_date, record_hour, waybill_cnt, package_cnt "
+                    f"FROM gofo_center_collect_stats "
+                    f"WHERE destin_name = ? AND ({rh_clause})" + dt_filter_sql +
+                    " ORDER BY record_date ASC, record_hour ASC"
                 )
                 cursor.execute(
                     convert_query_placeholders(sql_data),
-                    tuple([nm, filter_date] + dt_params),
+                    tuple([nm] + list(rh_binds) + dt_params),
                 )
             else:
                 sql_data = (

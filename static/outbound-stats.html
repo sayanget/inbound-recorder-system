@@ -537,6 +537,25 @@
                         </div>
                     </div>
                 </div>
+                <div id="outboundWeeklyChartsWeekRangeBar"
+                    style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 12px 0; font-size:13px;">
+                    <span data-lang="outbound_weekly_week_range_label"
+                        style="color:var(--text-muted, #555); max-width:560px; line-height:1.35;"></span>
+                    <label style="display:inline-flex; align-items:center; gap:6px;">
+                        <span data-lang="wow_week_range_start">周区间起</span>
+                        <input type="date" id="outboundWeeklyChartsWeekStart"
+                            style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px; background:var(--input-bg, #fff); color:var(--text-color, #111);" />
+                    </label>
+                    <label style="display:inline-flex; align-items:center; gap:6px;">
+                        <span data-lang="wow_week_range_end">周区间止</span>
+                        <input type="date" id="outboundWeeklyChartsWeekEnd"
+                            style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px; background:var(--input-bg, #fff); color:var(--text-color, #111);" />
+                    </label>
+                    <button type="button" id="outboundWeeklyChartsApplyWeekRangeBtn" class="btn btn-primary"
+                        style="padding:5px 14px; font-size:12px; cursor:pointer; border:none; border-radius:4px;">
+                        <span data-lang="wow_week_range_apply">应用</span>
+                    </button>
+                </div>
                 <div class="chart-container" style="position: relative; height: 500px;">
                     <canvas id="weeklyChart"></canvas>
                 </div>
@@ -553,6 +572,25 @@
                             data-lang="weekly_tb_export_interactive_html"
                             style="padding: 5px 10px; border-radius: 4px; cursor: pointer;">导出可交互 HTML</button>
                     </div>
+                </div>
+                <div id="outboundWeeklyTbChartsWeekRangeBar"
+                    style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 12px 0; font-size:13px;">
+                    <span data-lang="outbound_weekly_tb_week_range_label"
+                        style="color:var(--text-muted, #555); max-width:560px; line-height:1.35;"></span>
+                    <label style="display:inline-flex; align-items:center; gap:6px;">
+                        <span data-lang="wow_week_range_start">周区间起</span>
+                        <input type="date" id="outboundWeeklyTbChartsWeekStart"
+                            style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px; background:var(--input-bg, #fff); color:var(--text-color, #111);" />
+                    </label>
+                    <label style="display:inline-flex; align-items:center; gap:6px;">
+                        <span data-lang="wow_week_range_end">周区间止</span>
+                        <input type="date" id="outboundWeeklyTbChartsWeekEnd"
+                            style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px; background:var(--input-bg, #fff); color:var(--text-color, #111);" />
+                    </label>
+                    <button type="button" id="outboundWeeklyTbChartsApplyWeekRangeBtn" class="btn btn-primary"
+                        style="padding:5px 14px; font-size:12px; cursor:pointer; border:none; border-radius:4px;">
+                        <span data-lang="wow_week_range_apply">应用</span>
+                    </button>
                 </div>
                 <div class="chart-container" style="position: relative; height: 480px;">
                     <canvas id="weeklyTrunkBranchChart"></canvas>
@@ -743,6 +781,14 @@
                 export_success: "导出成功",
                 load_error: "加载失败",
                 weekly_trend: "每周趋势",
+                outbound_weekly_week_range_label: "自然周（周一至周日，与图中周界一致）；任选周内日期。起止均填并「应用」后按周截取；仅填止日则自动补足最近 12 周。均留空则取查询日期向前各自然周数据（仍最长约 12 周）。",
+                outbound_weekly_tb_week_range_label: "以下为「干线/支线（环比）」独立周区间（与上方每周趋势可不同）。规则相同；未填写时该图与上方一致（或整体留空时的默认窗）。取数范围为两图区间的并集。",
+                wow_week_range_start: "周区间起",
+                wow_week_range_end: "周区间止",
+                wow_week_range_apply: "应用",
+                wow_week_range_need_both: "请选择周区间起、止日期（各占一周，任填该周一天）。",
+                wow_week_range_order: "起始周不能晚于结束周。",
+                wow_week_range_max_weeks: "最多选择 104 个自然周。",
                 export_csv: "导出 CSV",
                 copy_tsv: "复制 TSV",
                 copy_success: "已复制到剪贴板",
@@ -827,6 +873,14 @@
                 export_success: "Export successful",
                 load_error: "Load failed",
                 weekly_trend: "Weekly Trend",
+                outbound_weekly_week_range_label: "Calendar weeks (Mon–Sun, same boundaries as the chart). Set start & end and Apply to filter; only end fills a 12-week window backward; both empty uses ~12 weeks ending on the query date.",
+                outbound_weekly_tb_week_range_label: "Week range for Trunk/Branch (WoW) only (can differ from Weekly Trend above). Same rules; when blank, this chart follows the main range or the default window. Fetched data is the union of both ranges.",
+                wow_week_range_start: "From (week)",
+                wow_week_range_end: "To (week)",
+                wow_week_range_apply: "Apply",
+                wow_week_range_need_both: "Select both start and end dates (any day in each week).",
+                wow_week_range_order: "Start week cannot be after end week.",
+                wow_week_range_max_weeks: "At most 104 calendar weeks.",
                 export_csv: "Export CSV",
                 copy_tsv: "Copy TSV",
                 copy_success: "Copied to clipboard",
@@ -911,6 +965,14 @@
                 export_success: "Exportación exitosa",
                 load_error: "Error al cargar",
                 weekly_trend: "Tendencia Semanal",
+                outbound_weekly_week_range_label: "Semanas naturales (lun–dom, mismo corte que el gráfico). Inicio y fin + Aplicar para filtrar; solo fin rellena 12 semanas hacia atrás; ambos vacíos usa ~12 semanas hasta la fecha de consulta.",
+                outbound_weekly_tb_week_range_label: "Rango de semanas solo para troncal/rama (var. %); puede diferir de la tendencia semanal superior. Mismas reglas; vacío sigue el rango principal o la ventana por defecto. Los datos cargados son la unión de ambos rangos.",
+                wow_week_range_start: "Desde (semana)",
+                wow_week_range_end: "Hasta (semana)",
+                wow_week_range_apply: "Aplicar",
+                wow_week_range_need_both: "Seleccione inicio y fin (cualquier día de cada semana).",
+                wow_week_range_order: "La semana inicial no puede ser posterior a la final.",
+                wow_week_range_max_weeks: "Máximo 104 semanas naturales.",
                 export_csv: "Exportar CSV",
                 copy_tsv: "Copiar TSV",
                 copy_success: "Copiado al portapapeles",
@@ -1002,13 +1064,10 @@
             initLanguage();
             initEventListeners();
             setTodayDate();
-            // Load records
-            loadDailyRecords();
             loadPendingRecords(); // Load pending
             initPendingRoutes(); // Init pending route options
             checkLoginStatus();
-            loadFreights(); // Load freight rates
-            loadWeeklyData(); // Load weekly trend
+            loadFreights(); // Load freight rates (weekly chart loaded in setTodayDate)
             initTmsShuttleTable();
 
             console.log("Outbound Stats Initialized");
@@ -1242,7 +1301,8 @@
             if (navCurrentLang) navCurrentLang.textContent = (lang || 'zh').toUpperCase();
 
             if (typeof currentWeeklyData !== 'undefined' && currentWeeklyData && currentWeeklyData.length > 0) {
-                updateWeeklyTrunkBranchSplitChart(currentWeeklyData);
+                updateWeeklyChart(currentWeeklyData, lastOutboundWeeklyWeekFilter);
+                updateWeeklyTrunkBranchSplitChart(currentWeeklyData, lastOutboundWeeklyTbWeekFilter);
             }
         }
 
@@ -1385,6 +1445,15 @@
             const savePendingBtn = document.getElementById('savePendingBtn');
             if (savePendingBtn) {
                 savePendingBtn.addEventListener('click', savePendingRecord);
+            }
+
+            const outboundWeeklyApplyBtn = document.getElementById('outboundWeeklyChartsApplyWeekRangeBtn');
+            if (outboundWeeklyApplyBtn) {
+                outboundWeeklyApplyBtn.addEventListener('click', applyOutboundWeeklyChartsWeekRange);
+            }
+            const outboundWeeklyTbApplyBtn = document.getElementById('outboundWeeklyTbChartsApplyWeekRangeBtn');
+            if (outboundWeeklyTbApplyBtn) {
+                outboundWeeklyTbApplyBtn.addEventListener('click', applyOutboundWeeklyTbChartsWeekRange);
             }
 
             // Date change (Reload both tables)
@@ -1552,7 +1621,10 @@
         function setTodayDate() {
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('recordDate').value = today;
+            initOutboundWeeklyChartsWeekRangeInputs();
+            initOutboundWeeklyTbChartsWeekRangeInputs();
             loadDailyRecords();
+            loadWeeklyData();
         }
 
         // Load freight rates from API (Consolidated)
@@ -2534,6 +2606,10 @@
         let weeklyTrunkBranchChart = null;
         let weeklyChartMode = 'cost'; // 'count' or 'cost'
         let currentWeeklyData = []; // Store weekly data separately
+        /** 与 currentWeeklyData 配套的周截取（与 loadWeeklyData 一致），供切换 发车/成本 时重绘 */
+        let lastOutboundWeeklyWeekFilter = null;
+        /** 干线/支线（环比）图独立周截取 */
+        let lastOutboundWeeklyTbWeekFilter = null;
         // Snapshot of the last rendered weekly matrix; consumed by CSV/TSV export
         // Shape: { weeks: [YYYY-MM-DD,...], routes: [code,...], counts: {week: {route: n}}, costs: {week: {route: $}} }
         let weeklyExportSnapshot = null;
@@ -2579,7 +2655,7 @@
             }
             // Re-render chart if data exists
             if (currentWeeklyData && currentWeeklyData.length > 0) {
-                updateWeeklyChart(currentWeeklyData);
+                updateWeeklyChart(currentWeeklyData, lastOutboundWeeklyWeekFilter);
             }
         }
 
@@ -3201,16 +3277,248 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
             return mondayIsoList.map(weeklyChartAxisLabel);
         }
 
-        // Load data for the Weekly Trend chart (Last 12 weeks)
+        const OUTBOUND_WEEKLY_DEFAULT_WEEK_COUNT = 12;
+
+        function addUtcDaysISO(ymd, deltaDays) {
+            const p = (ymd || '').split('-').map((x) => parseInt(x, 10));
+            if (p.length !== 3 || p.some((n) => Number.isNaN(n))) return '';
+            const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+            d.setUTCDate(d.getUTCDate() + deltaDays);
+            return d.toISOString().split('T')[0];
+        }
+
+        /** 将一对周内日期转为 API 起止日与周过滤键；无效则 null */
+        function outboundBoundsFromWeekRange(wr, endAnchorStr) {
+            if (!wr || !wr.week_start || !wr.week_end) return null;
+            const monS = weeklyGetMonday(wr.week_start);
+            const monE = weeklyGetMonday(wr.week_end);
+            if (!monS || monS === 'Unknown' || !monE || monE === 'Unknown' || monS > monE) return null;
+            const sundayE = addUtcDaysISO(monE, 6);
+            if (!sundayE) return null;
+            const endCap = endAnchorStr < sundayE ? endAnchorStr : sundayE;
+            return { start: monS, end: endCap, filter: { min: monS, max: monE } };
+        }
+
+        function outboundWeeklyChartsWeekRangeForFetch() {
+            const sEl = document.getElementById('outboundWeeklyChartsWeekStart');
+            const eEl = document.getElementById('outboundWeeklyChartsWeekEnd');
+            let ws = (sEl && sEl.value && sEl.value.trim()) || '';
+            let we = (eEl && eEl.value && eEl.value.trim()) || '';
+            if (!ws && !we) {
+                return { week_start: '', week_end: '' };
+            }
+            const rdEl = document.getElementById('recordDate');
+            const rd = (rdEl && rdEl.value && rdEl.value.trim()) || '';
+            if (!we && rd) we = rd;
+            if (!we) {
+                we = formatLocalDateISO(new Date());
+            }
+            if (!ws && we) {
+                const mon = weeklyGetMonday(we);
+                if (!mon || mon === 'Unknown') return { week_start: '', week_end: we };
+                const p = mon.split('-').map((x) => parseInt(x, 10));
+                if (p.length !== 3 || p.some((n) => Number.isNaN(n))) return { week_start: '', week_end: we };
+                const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+                d.setUTCDate(d.getUTCDate() - 7 * (OUTBOUND_WEEKLY_DEFAULT_WEEK_COUNT - 1));
+                ws = d.toISOString().split('T')[0];
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function outboundWeeklyChartsParseWeekRangeStrict() {
+            const t = translations[currentLang] || {};
+            const sEl = document.getElementById('outboundWeeklyChartsWeekStart');
+            const eEl = document.getElementById('outboundWeeklyChartsWeekEnd');
+            const ws = (sEl && sEl.value || '').trim();
+            const we = (eEl && eEl.value || '').trim();
+            if (!ws || !we) {
+                alert(t.wow_week_range_need_both || '请选择周区间起、止日期。');
+                return null;
+            }
+            const p0 = ws.split('-').map((x) => parseInt(x, 10));
+            const p1 = we.split('-').map((x) => parseInt(x, 10));
+            if (p0.length !== 3 || p1.length !== 3 || p0.some((n) => Number.isNaN(n)) || p1.some((n) => Number.isNaN(n))) {
+                alert(t.wow_week_range_need_both || '周区间日期无效。');
+                return null;
+            }
+            const m0 = weeklyGetMonday(ws);
+            const m1 = weeklyGetMonday(we);
+            if (!m0 || m0 === 'Unknown' || !m1 || m1 === 'Unknown') {
+                alert(t.wow_week_range_need_both || '周区间日期无效。');
+                return null;
+            }
+            if (m0 > m1) {
+                alert(t.wow_week_range_order || '起始周不能晚于结束周。');
+                return null;
+            }
+            const mp0 = m0.split('-').map((x) => parseInt(x, 10));
+            const mp1 = m1.split('-').map((x) => parseInt(x, 10));
+            const mon0 = new Date(Date.UTC(mp0[0], mp0[1] - 1, mp0[2]));
+            const mon1 = new Date(Date.UTC(mp1[0], mp1[1] - 1, mp1[2]));
+            const weekCount = Math.floor((mon1.getTime() - mon0.getTime()) / (7 * 86400000)) + 1;
+            if (weekCount > 104) {
+                alert(t.wow_week_range_max_weeks || '最多 104 周。');
+                return null;
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function applyOutboundWeeklyChartsWeekRange() {
+            if (!outboundWeeklyChartsParseWeekRangeStrict()) return;
+            loadWeeklyData();
+        }
+
+        function initOutboundWeeklyChartsWeekRangeInputs() {
+            const s = document.getElementById('outboundWeeklyChartsWeekStart');
+            const e = document.getElementById('outboundWeeklyChartsWeekEnd');
+            const rdEl = document.getElementById('recordDate');
+            const endBase = (rdEl && rdEl.value && rdEl.value.trim()) || formatLocalDateISO(new Date());
+            if (e && endBase) e.value = endBase;
+            const we = (e && e.value && e.value.trim()) || endBase;
+            if (s && we) {
+                const mon = weeklyGetMonday(we);
+                if (mon && mon !== 'Unknown') {
+                    const p = mon.split('-').map((x) => parseInt(x, 10));
+                    if (p.length === 3 && !p.some((n) => Number.isNaN(n))) {
+                        const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+                        d.setUTCDate(d.getUTCDate() - 7 * (OUTBOUND_WEEKLY_DEFAULT_WEEK_COUNT - 1));
+                        s.value = d.toISOString().split('T')[0];
+                    }
+                }
+            }
+        }
+
+        function outboundWeeklyTbChartsWeekRangeForFetch() {
+            const sEl = document.getElementById('outboundWeeklyTbChartsWeekStart');
+            const eEl = document.getElementById('outboundWeeklyTbChartsWeekEnd');
+            let ws = (sEl && sEl.value && sEl.value.trim()) || '';
+            let we = (eEl && eEl.value && eEl.value.trim()) || '';
+            if (!ws && !we) {
+                return { week_start: '', week_end: '' };
+            }
+            const rdEl = document.getElementById('recordDate');
+            const rd = (rdEl && rdEl.value && rdEl.value.trim()) || '';
+            if (!we && rd) we = rd;
+            if (!we) {
+                we = formatLocalDateISO(new Date());
+            }
+            if (!ws && we) {
+                const mon = weeklyGetMonday(we);
+                if (!mon || mon === 'Unknown') return { week_start: '', week_end: we };
+                const p = mon.split('-').map((x) => parseInt(x, 10));
+                if (p.length !== 3 || p.some((n) => Number.isNaN(n))) return { week_start: '', week_end: we };
+                const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+                d.setUTCDate(d.getUTCDate() - 7 * (OUTBOUND_WEEKLY_DEFAULT_WEEK_COUNT - 1));
+                ws = d.toISOString().split('T')[0];
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function outboundWeeklyTbChartsParseWeekRangeStrict() {
+            const t = translations[currentLang] || {};
+            const sEl = document.getElementById('outboundWeeklyTbChartsWeekStart');
+            const eEl = document.getElementById('outboundWeeklyTbChartsWeekEnd');
+            const ws = (sEl && sEl.value || '').trim();
+            const we = (eEl && eEl.value || '').trim();
+            if (!ws || !we) {
+                alert(t.wow_week_range_need_both || '请选择周区间起、止日期。');
+                return null;
+            }
+            const p0 = ws.split('-').map((x) => parseInt(x, 10));
+            const p1 = we.split('-').map((x) => parseInt(x, 10));
+            if (p0.length !== 3 || p1.length !== 3 || p0.some((n) => Number.isNaN(n)) || p1.some((n) => Number.isNaN(n))) {
+                alert(t.wow_week_range_need_both || '周区间日期无效。');
+                return null;
+            }
+            const m0 = weeklyGetMonday(ws);
+            const m1 = weeklyGetMonday(we);
+            if (!m0 || m0 === 'Unknown' || !m1 || m1 === 'Unknown') {
+                alert(t.wow_week_range_need_both || '周区间日期无效。');
+                return null;
+            }
+            if (m0 > m1) {
+                alert(t.wow_week_range_order || '起始周不能晚于结束周。');
+                return null;
+            }
+            const mp0 = m0.split('-').map((x) => parseInt(x, 10));
+            const mp1 = m1.split('-').map((x) => parseInt(x, 10));
+            const mon0 = new Date(Date.UTC(mp0[0], mp0[1] - 1, mp0[2]));
+            const mon1 = new Date(Date.UTC(mp1[0], mp1[1] - 1, mp1[2]));
+            const weekCount = Math.floor((mon1.getTime() - mon0.getTime()) / (7 * 86400000)) + 1;
+            if (weekCount > 104) {
+                alert(t.wow_week_range_max_weeks || '最多 104 周。');
+                return null;
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function applyOutboundWeeklyTbChartsWeekRange() {
+            if (!outboundWeeklyTbChartsParseWeekRangeStrict()) return;
+            loadWeeklyData();
+        }
+
+        function initOutboundWeeklyTbChartsWeekRangeInputs() {
+            const s = document.getElementById('outboundWeeklyTbChartsWeekStart');
+            const e = document.getElementById('outboundWeeklyTbChartsWeekEnd');
+            const rdEl = document.getElementById('recordDate');
+            const endBase = (rdEl && rdEl.value && rdEl.value.trim()) || formatLocalDateISO(new Date());
+            if (e && endBase) e.value = endBase;
+            const we = (e && e.value && e.value.trim()) || endBase;
+            if (s && we) {
+                const mon = weeklyGetMonday(we);
+                if (mon && mon !== 'Unknown') {
+                    const p = mon.split('-').map((x) => parseInt(x, 10));
+                    if (p.length === 3 && !p.some((n) => Number.isNaN(n))) {
+                        const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+                        d.setUTCDate(d.getUTCDate() - 7 * (OUTBOUND_WEEKLY_DEFAULT_WEEK_COUNT - 1));
+                        s.value = d.toISOString().split('T')[0];
+                    }
+                }
+            }
+        }
+
+        // Load data for the Weekly Trend chart
         async function loadWeeklyData() {
             try {
-                // Calculate date range: Today back to 12 weeks ago
-                const end = new Date();
-                const start = new Date();
-                start.setDate(end.getDate() - 84); // 12 * 7 = 84 days
+                const rdEl = document.getElementById('recordDate');
+                const endAnchorStr = (rdEl && rdEl.value && rdEl.value.trim()) || formatLocalDateISO(new Date());
+                const wr = outboundWeeklyChartsWeekRangeForFetch();
+                const wrTb = outboundWeeklyTbChartsWeekRangeForFetch();
+                const bW = outboundBoundsFromWeekRange(wr, endAnchorStr);
+                const bTb = outboundBoundsFromWeekRange(wrTb, endAnchorStr);
 
-                const endDateStr = formatLocalDateISO(end);
-                const startDateStr = formatLocalDateISO(start);
+                let startDateStr;
+                let endDateStr;
+                let weekFilter = bW ? bW.filter : null;
+                let tbWeekFilter = bTb ? bTb.filter : null;
+
+                if (!bW && !bTb) {
+                    const parts = endAnchorStr.split('-').map((x) => parseInt(x, 10));
+                    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
+                        console.error('Weekly trend: bad end anchor', endAnchorStr);
+                        return;
+                    }
+                    const end = new Date(parts[0], parts[1] - 1, parts[2]);
+                    const start = new Date(end.getTime());
+                    start.setDate(end.getDate() - OUTBOUND_WEEKLY_DEFAULT_WEEK_COUNT * 7);
+                    startDateStr = formatLocalDateISO(start);
+                    endDateStr = endAnchorStr;
+                    weekFilter = null;
+                    tbWeekFilter = null;
+                } else {
+                    const starts = [];
+                    const ends = [];
+                    if (bW) {
+                        starts.push(bW.start);
+                        ends.push(bW.end);
+                    }
+                    if (bTb) {
+                        starts.push(bTb.start);
+                        ends.push(bTb.end);
+                    }
+                    startDateStr = starts.reduce((a, b) => (a < b ? a : b));
+                    endDateStr = ends.reduce((a, b) => (a > b ? a : b));
+                }
 
                 const url = `/api/outbound/records?start_date=${startDateStr}&end_date=${endDateStr}`;
                 console.log(`Fetching weekly data: ${url}`);
@@ -3223,9 +3531,11 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
                         return;
                     }
                     console.log(`Loaded ${payload.length} weekly records`);
+                    lastOutboundWeeklyWeekFilter = weekFilter;
+                    lastOutboundWeeklyTbWeekFilter = tbWeekFilter;
                     currentWeeklyData = payload;
-                    updateWeeklyChart(payload);
-                    updateWeeklyTrunkBranchSplitChart(payload);
+                    updateWeeklyChart(payload, weekFilter);
+                    updateWeeklyTrunkBranchSplitChart(payload, tbWeekFilter);
                 } else {
                     console.error('Failed to load weekly data');
                 }
@@ -3234,7 +3544,7 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
             }
         }
 
-        function updateWeeklyChart(data) {
+        function updateWeeklyChart(data, weekFilter) {
             const canvas = document.getElementById('weeklyChart');
             if (!canvas) return;
             if (!Array.isArray(data)) {
@@ -3242,6 +3552,7 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
                 return;
             }
             const ctx = canvas.getContext('2d');
+            const isMobile = window.innerWidth < 768;
 
             // Group by Week -> Route（周界与 weeklyGetMonday 一致）
             const weeks = {};
@@ -3260,7 +3571,10 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
             });
 
             // Sort weeks（剔除 ISO 第 11 周）
-            const sortedWeeks = Object.keys(weeks).sort().filter(w => !outboundStatsSkipIsoWeek11(w));
+            let sortedWeeks = Object.keys(weeks).sort().filter(w => !outboundStatsSkipIsoWeek11(w));
+            if (weekFilter && weekFilter.min && weekFilter.max) {
+                sortedWeeks = sortedWeeks.filter(w => w >= weekFilter.min && w <= weekFilter.max);
+            }
             const routeList = Array.from(allRoutes).sort();
 
             // Cache snapshot for CSV/TSV export (both metrics, regardless of current mode)
@@ -3283,6 +3597,18 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
                 return `hsl(${hash % 360}, 70%, 50%)`;
             }
 
+            function weeklyRouteStackFormatter(value) {
+                const v = Number(value) || 0;
+                if (weeklyChartMode === 'cost') {
+                    return new Intl.NumberFormat(currentLang === 'en' ? 'en-US' : currentLang === 'es' ? 'es-ES' : 'zh-CN', {
+                        style: 'currency',
+                        currency: 'USD',
+                        maximumFractionDigits: v >= 1000 ? 0 : 1
+                    }).format(v);
+                }
+                return String(Math.round(v));
+            }
+
             const datasets = routeList.map(route => {
                 return {
                     label: route,
@@ -3291,6 +3617,28 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
                     }),
                     backgroundColor: getColor(route),
                     stack: 'Stack 0',
+                    datalabels: {
+                        display: function (context) {
+                            const v = Number(context.dataset.data[context.dataIndex]) || 0;
+                            if (v <= 0) return false;
+                            try {
+                                const meta = context.chart.getDatasetMeta(context.datasetIndex);
+                                const el = meta.data[context.dataIndex];
+                                if (!el || typeof el.height !== 'number') return true;
+                                return el.height >= (isMobile ? 12 : 14);
+                            } catch (e) {
+                                return true;
+                            }
+                        },
+                        anchor: 'center',
+                        align: 'center',
+                        formatter: weeklyRouteStackFormatter,
+                        color: '#ffffff',
+                        textStrokeColor: 'rgba(0,0,0,0.5)',
+                        textStrokeWidth: isMobile ? 2 : 2,
+                        font: { weight: '600', size: isMobile ? 8 : 9 },
+                        clamp: true
+                    }
                 };
             });
 
@@ -3380,9 +3728,6 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
                                     return label;
                                 }
                             }
-                        },
-                        datalabels: {
-                            display: false // Disable default datalabels for bars to avoid clutter
                         }
                     },
                     scales: {
@@ -3394,7 +3739,7 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
         }
 
         /** 干线/支线堆积柱 + 右轴单条环比折线：车次 = Σvehicle_count；支线划分同 isWeeklyTbBranchRecord；图例两柱均显时为「总和环比」，仅干线/仅支线时为对应单项环比（与柱可见性联动）；环比为图中相邻列、左邻周＞0。 */
-        function updateWeeklyTrunkBranchSplitChart(data) {
+        function updateWeeklyTrunkBranchSplitChart(data, weekFilter) {
             const canvas = document.getElementById('weeklyTrunkBranchChart');
             if (!canvas) return;
             if (!Array.isArray(data)) {
@@ -3421,7 +3766,10 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
                 if (isWeeklyTbBranchRecord(record)) byWeek[weekStart].branch += w;
                 else byWeek[weekStart].trunk += w;
             });
-            const sortedWeeks = Object.keys(byWeek).sort().filter(w => !outboundStatsSkipIsoWeek11(w));
+            let sortedWeeks = Object.keys(byWeek).sort().filter(w => !outboundStatsSkipIsoWeek11(w));
+            if (weekFilter && weekFilter.min && weekFilter.max) {
+                sortedWeeks = sortedWeeks.filter(w => w >= weekFilter.min && w <= weekFilter.max);
+            }
             const trunkData = sortedWeeks.map(w => byWeek[w].trunk);
             const branchData = sortedWeeks.map(w => byWeek[w].branch);
             const weekTotalsTb = sortedWeeks.map((_, i) => (trunkData[i] || 0) + (branchData[i] || 0));
