@@ -13,10 +13,10 @@
 
 ## 功能
 
-- 双击 `.exe` 启动本地 mini 服务（随机端口 `18080+`），自动打开默认浏览器
+- 双击 `.exe` 启动本地 mini 服务（默认端口 `9090+` 范围内找空闲），自动打开默认浏览器
 - 页面功能与网页版 `/route-distribution` 完全一致
   - 按日期区间拉取出库记录
-  - 调度组模板预览（40 列，班次+费用成对）
+  - 调度组模板预览（50 列，班次+费用成对）
   - 按日期多选 → 复制到剪贴板（TSV，不含日期列），直接粘贴进 Excel
   - 导出 CSV（完整版，含日期列）
 - **两种数据源一键切换**：API 或 Google Sheet，共用同一套前端页面
@@ -157,7 +157,7 @@ create_shortcut.bat "D:\foo\a.exe"     REM 指定 exe 路径（非默认位置�
 
 | 方式 | 操作 | 什么时候用 |
 |---|---|---|
-| ★ 设置页 UI | 浏览器打开 http://127.0.0.1:1808x/setup | **IP 变了，最省事**，点"开始扫描"自动找 |
+| ★ 设置页 UI | 浏览器打开 http://127.0.0.1:909x/setup | **IP 变了，最省事**，点"开始扫描"自动找 |
 | 命令行参数 | `流向分布工具.exe --backend http://host:port` | 给个别用户一次性指定 |
 | 环境变量 | `set ROUTE_DIST_BACKEND=http://host:port` | 在登录脚本/IT 批量下发里设 |
 | 配置文件 | 编辑 exe 同目录的 `config.txt` | 静态环境，想显式写死 |
@@ -182,7 +182,7 @@ create_shortcut.bat "D:\foo\a.exe"     REM 指定 exe 路径（非默认位置�
 流向分布工具.exe                                 REM 默认启动
 流向分布工具.exe --backend http://10.0.0.5      REM 指定 API 后端
 流向分布工具.exe --backend https://docs.google.com/spreadsheets/d/<ID>/edit   REM Sheet 模式
-流向分布工具.exe --port 18088                   REM 指定端口
+流向分布工具.exe --port 9091                   REM 指定端口
 流向分布工具.exe --no-browser                   REM 不自动开浏览器
 流向分布工具.exe --skip-probe                   REM 跳过启动时的后端探测
 ```
@@ -316,9 +316,9 @@ cd 流向分布工具.exe 所在目录
 
 ### 🔴 端口被占用
 
-工具会自动在 `18080-18199` 范围内找空闲端口；若想指定：
+工具会自动在 `9090-9209` 范围内找空闲端口；若想指定：
 ```bat
-流向分布工具.exe --port 18088
+流向分布工具.exe --port 9091
 ```
 
 ---

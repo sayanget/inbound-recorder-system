@@ -389,6 +389,10 @@
             border-radius: 3px;
             margin: 0 2px;
         }
+        th.dynamic-route-col {
+            background: #eff6ff;
+            font-weight: 600;
+        }
 
         /* Route bar visualization */
         .bar-cell {
@@ -507,7 +511,7 @@
         <div id="templateMatchBox" class="warn-box" style="display:none;"></div>
 
         <div class="section-title" id="dispatchPreviewTitle" style="display:none;">
-            <span>调度组模板预览 <span class="badge" id="previewBadge">40 列</span></span>
+            <span>调度组模板预览 <span class="badge" id="previewBadge">50 列</span></span>
             <span class="hint">
                 <button id="copyDataBtn" class="btn-success" style="padding:5px 12px;font-size:13px;margin-right:6px;" disabled title="复制已选数据行到剪贴板（TSV，不含日期列）">复制已选数据行（不含日期）</button>
                 <button id="copyFullBtn" class="btn-secondary" style="padding:5px 12px;font-size:13px;" disabled title="复制已选数据行，带表头，不含日期列">复制已选（含表头，不含日期）</button>
@@ -537,7 +541,8 @@
         </div>
         <div class="note" id="dispatchPreviewNote" style="display:none;">
             上方表格即导出文件的实际列顺序；空白格表示该日该流向未录入（参考文件里也区分空白与 <code>0</code>）。<br>
-            每行前的复选框控制"复制到剪贴板"的范围，默认全选。<b>复制到剪贴板的内容不含首列「日期」</b>，粘贴时在 Excel 里定位到「<b>IAH班次</b>」所在单元格再 <code>Ctrl+V</code>，数据自动从 IAH班次 列开始对齐到 是否提交 列（39 列）。<br>
+            固定模板列 <code>ATL-ATLG</code>、<code>CVG</code>、<code>ORD-CVG</code>、<code>SEA</code>、<code>SFO-SEA</code> 分别在 <b>ATL / ORD / SFO</b> 成对列之后（与下方透视表同一顺序）；列多时请<strong>横向滚动</strong>表头查找。<br>
+            每行前的复选框控制"复制到剪贴板"的范围，默认全选。<b>复制到剪贴板的内容不含首列「日期」</b>，粘贴时在 Excel 里定位到「<b>IAH班次</b>」所在单元格再 <code>Ctrl+V</code>，数据自动从 IAH班次 列开始对齐到 是否提交 列（不含日期的列数与上方模板一致）。<br>
             下载 CSV 文件仍包含日期列，用于归档/备份。
         </div>
 
@@ -588,15 +593,20 @@
             'MCO-MIA班次',    'MCO-MIA费用',
             'MIA-SJU班次',    'MIA-SJU费用',
             'ATL班次',        'ATL费用',
+            'ATL-ATLG班次',   'ATL-ATLG费用',
             'DFW班次',        'DFW费用',
             'DFW-ATL班次',    'DFW-ATL费用',
             'DFW-IAH班次',    'DFW-IAH费用',
             'ORD班次',        'ORD费用',
+            'CVG班次',        'CVG费用',
+            'ORD-CVG班次',    'ORD-CVG费用',
             'EWR-JFK班次',    'EWR-JFK费用',
             'JFK班次',        'JFK费用',
             'CLT班次',        'CLT费用',
             'LAV班次',        'LAV费用',
             'SFO班次',        'SFO费用',
+            'SEA班次',        'SEA费用',
+            'SFO-SEA班次',    'SFO-SEA费用',
             'DEN班次',        'DEN费用',
             'ATL-CLT班次',    'ATL-CLT费用',
             'MOD-SFO 班次',   'MOD-SFO 费用',
@@ -627,6 +637,11 @@
         const DISPATCH_TEMPLATE_ROUTES = Array.from(
             new Set(DISPATCH_COLUMN_SPEC.filter(c => c.route).map(c => c.route))
         );
+        const TEMPLATE_ROUTE_KEY_SET = new Set(DISPATCH_TEMPLATE_ROUTES);
+        const DISPATCH_TEMPLATE_ROUTES_BY_LENGTH = [...DISPATCH_TEMPLATE_ROUTES].sort((a, b) => b.length - a.length);
+
+        /** Same columns as 调度组模板预览 but omit 费用 (one visible column per route + 日期/是否提交). */
+        const DISPATCH_PIVOT_VISIBLE_COLS = DISPATCH_COLUMN_SPEC.filter(c => c.field !== '费用');
 
         // ---------- Utilities ----------
         function formatLocalDateISO(d) {
@@ -698,9 +713,44 @@
             'LAX': 'LAV'
         };
 
+        /** Sheet/API sometimes omits hyphen between legs (ORDCVG, ATLATLG, SFOSEA, …). */
+        function tryConcatHyphenFromTemplate(r) {
+            if (!r || r.includes('-')) return r;
+            for (let ti = 0; ti < DISPATCH_TEMPLATE_ROUTES.length; ti++) {
+                const t = DISPATCH_TEMPLATE_ROUTES[ti];
+                const i = t.indexOf('-');
+                if (i <= 0) continue;
+                const a = t.slice(0, i);
+                const b = t.slice(i + 1);
+                if (!a || !b || b.includes('-')) continue;
+                if (r === a + b) return t;
+            }
+            return r;
+        }
+
+        /**
+         * Map normalized label onto an exact DISPATCH template key.
+         * Longest multi-leg prefix wins (SFO-SEA-… → SFO-SEA). Single-segment keys
+         * only match exactly so SEA-PORT does not collapse into SEA.
+         */
+        function resolveToTemplateRouteKey(norm) {
+            if (!norm) return '';
+            if (TEMPLATE_ROUTE_KEY_SET.has(norm)) return norm;
+            for (let ti = 0; ti < DISPATCH_TEMPLATE_ROUTES_BY_LENGTH.length; ti++) {
+                const t = DISPATCH_TEMPLATE_ROUTES_BY_LENGTH[ti];
+                if (!t.includes('-')) continue;
+                if (norm.startsWith(t) && (norm.length === t.length || norm[t.length] === '-')) {
+                    return t;
+                }
+            }
+            return norm;
+        }
+
         function normalizeRouteForTemplate(route) {
             if (!route) return '';
-            let r = String(route).toUpperCase();
+            let r = String(route).replace(/[\u200B-\u200D\uFEFF]/g, '').toUpperCase();
+            r = r.replace(/[\u2013\u2014\u2212]/g, '-');
+            r = r.replace(/\s*-\s*/g, '-');
             // CNO-XXX rule takes precedence — return pure destination.
             const cnoDest = extractDestAfterCNO(r);
             if (cnoDest) {
@@ -716,9 +766,85 @@
             r = r.replace(/\s*[\(（][^)）]*[\)）].*$/, '');
             r = r.replace(/\s+DROP(\s+TRAILER)?\s*$/i, '');
             r = r.replace(/\s+/g, ' ').trim();
+            // Glue "ORDCVG" / "ATLATLG" / "SFOSEA" → hyphenated keys that exist in the template.
+            r = tryConcatHyphenFromTemplate(r.replace(/\s+/g, ''));
             const m = r.match(/^([A-Z0-9()]+)-\1$/);
             if (m) r = m[1];
             return TEMPLATE_ROUTE_ALIASES[r] || r;
+        }
+
+        function dataRouteToDispatchTemplateKey(route) {
+            return resolveToTemplateRouteKey(normalizeRouteForTemplate(route));
+        }
+
+        /** Routes present in data but not in the fixed DISPATCH template (sorted). */
+        function collectExtraDispatchRoutes(p) {
+            const seen = new Set();
+            (p.rawRecords || []).forEach(r => {
+                const rc = dataRouteToDispatchTemplateKey(String(r.route_code || '').trim());
+                if (rc && !TEMPLATE_ROUTE_KEY_SET.has(rc)) seen.add(rc);
+            });
+            return Array.from(seen).sort((a, b) => a.localeCompare(b));
+        }
+
+        /** Insert dynamic 班次/费用 pairs immediately before 是否提交. */
+        function getEffectiveDispatchColumnSpec(extraRoutes) {
+            const extraCols = [];
+            extraRoutes.forEach(rc => {
+                extraCols.push({ header: rc + '班次', route: rc, field: '班次', isDynamic: true });
+                extraCols.push({ header: rc + '费用', route: rc, field: '费用', isDynamic: true });
+            });
+            const out = [];
+            for (let i = 0; i < DISPATCH_COLUMN_SPEC.length; i++) {
+                const c = DISPATCH_COLUMN_SPEC[i];
+                if (c.field === '是否提交') {
+                    out.push(...extraCols);
+                }
+                out.push(c);
+            }
+            return out;
+        }
+
+        /** Pivot: same as static preview but omit 费用; append one 班次 column per extra route before 是否提交. */
+        function getEffectivePivotVisibleCols(extraRoutes) {
+            const extraCols = extraRoutes.map(rc => ({
+                header: rc + '班次',
+                route: rc,
+                field: '班次',
+                isDynamic: true
+            }));
+            const out = [];
+            for (let i = 0; i < DISPATCH_PIVOT_VISIBLE_COLS.length; i++) {
+                const c = DISPATCH_PIVOT_VISIBLE_COLS[i];
+                if (c.field === '是否提交') {
+                    out.push(...extraCols);
+                }
+                out.push(c);
+            }
+            return out;
+        }
+
+        /**
+         * Per-date aggregates keyed by template route (dataRouteToDispatchTemplateKey),
+         * for 透视表 + 透视 CSV — same keys as DISPATCH_COLUMN_SPEC[].route.
+         */
+        function buildDispatchTemplatePivotMatrix(p) {
+            const tmplMatrix = {};
+            (p.dates || []).forEach(d => { tmplMatrix[d] = {}; });
+            (p.rawRecords || []).forEach(r => {
+                const rd = (r.record_date || '').substring(0, 10);
+                if (!tmplMatrix[rd]) return;
+                const rc = dataRouteToDispatchTemplateKey(String(r.route_code || ''));
+                if (!rc) return;
+                if (!tmplMatrix[rd][rc]) {
+                    tmplMatrix[rd][rc] = { vehicles: 0, cost: 0, count: 0, hasData: false };
+                }
+                tmplMatrix[rd][rc].vehicles += Number(r.vehicle_count) || 0;
+                tmplMatrix[rd][rc].cost += Number(r.cost) || 0;
+                tmplMatrix[rd][rc].count += 1;
+                tmplMatrix[rd][rc].hasData = true;
+            });
+            return tmplMatrix;
         }
 
         function enumerateDates(startISO, endISO) {
@@ -930,43 +1056,27 @@
             const p = lastPivot;
             const table = document.getElementById('pivotTable');
 
-            if (p.routes.length === 0 || p.recordCount === 0) {
+            if (!p || !p.dates || p.dates.length === 0) {
                 table.innerHTML = '<thead><tr><th>无数据</th></tr></thead>' +
-                    '<tbody><tr><td class="empty-state">该区间内无出库记录</td></tr></tbody>';
+                    '<tbody><tr><td class="empty-state">请选择日期范围并加载</td></tr></tbody>';
                 return;
             }
 
-            // Aggregate by TEMPLATE-normalized route (same logic as dispatch preview)
-            // so column headers match 调度组模板预览 exactly.
-            const tmplMatrix = {};
-            p.dates.forEach(d => { tmplMatrix[d] = {}; });
-            (p.rawRecords || []).forEach(r => {
-                const rd = (r.record_date || '').substring(0, 10);
-                if (!tmplMatrix[rd]) return;
-                const rc = normalizeRouteForTemplate(String(r.route_code || ''));
-                if (!rc) return;
-                if (!tmplMatrix[rd][rc]) {
-                    tmplMatrix[rd][rc] = { vehicles: 0, cost: 0, count: 0, hasData: false };
-                }
-                tmplMatrix[rd][rc].vehicles += Number(r.vehicle_count) || 0;
-                tmplMatrix[rd][rc].cost += Number(r.cost) || 0;
-                tmplMatrix[rd][rc].count += 1;
-                tmplMatrix[rd][rc].hasData = true;
-            });
-
+            const tmplMatrix = buildDispatchTemplatePivotMatrix(p);
             const useVehicle = p.metric === 'vehicle_count';
             const dispatchValueOf = (entry) => {
                 if (!entry || !entry.hasData) return null;
                 return useVehicle ? entry.vehicles : entry.count;
             };
 
-            // Header — match DISPATCH_TEMPLATE_HEADER but skip 费用 columns; trailing 行合计
-            const visibleCols = DISPATCH_COLUMN_SPEC.filter(c => c.field !== '费用');
+            const extraRoutes = collectExtraDispatchRoutes(p);
+            const visibleCols = getEffectivePivotVisibleCols(extraRoutes);
 
             let html = '<thead><tr>';
             visibleCols.forEach(col => {
-                const cls = (col.field === '日期' || col.field === '是否提交') ? 'date-col' : '';
-                html += `<th class="${cls}" title="${escapeHtml(col.header)}">${escapeHtml(col.header)}</th>`;
+                let cls = (col.field === '日期' || col.field === '是否提交') ? 'date-col' : '';
+                if (col.isDynamic) cls += (cls ? ' ' : '') + 'dynamic-route-col';
+                html += `<th class="${cls.trim()}" title="${escapeHtml(col.header)}">${escapeHtml(col.header)}</th>`;
             });
             html += '<th>行合计</th></tr></thead><tbody>';
 
@@ -1069,9 +1179,7 @@
         }
 
         function buildDispatchCSVRows(p) {
-            // Fill data into the FIXED template header (copied from 调度组数据_原始数据.csv).
-            // Matching: our route codes (fully normalized, upper-cased) vs template routes (upper-cased).
-            // Data routes NOT in the template are skipped and reported back to the UI.
+            // Fixed template columns + dynamic 班次/费用 pairs (before 是否提交) for routes not in DISPATCH_TEMPLATE_HEADER.
 
             // Build per-date per-route vehicle/cost maps keyed by UPPER route.
             // p.vehicleMatrix / p.costMatrix already keyed by the normalized route the user chose.
@@ -1092,7 +1200,7 @@
                 const rd = (r.record_date || '').substring(0, 10);
                 if (!fullMatrix[rd]) return;
                 const rawLabel = String(r.route_code || '').trim();
-                const rc = normalizeRouteForTemplate(rawLabel);
+                const rc = dataRouteToDispatchTemplateKey(rawLabel);
                 if (!rc) return;
                 if (!fullMatrix[rd][rc]) {
                     fullMatrix[rd][rc] = { vehicles: 0, cost: 0, hasData: false };
@@ -1105,19 +1213,19 @@
                 rawByTemplate[rc][rawLabel] = (rawByTemplate[rc][rawLabel] || 0) + 1;
             });
 
-            // Collect unmatched routes (present in data, absent in template) for UI warning
             const templateSet = new Set(DISPATCH_TEMPLATE_ROUTES);
             const dataRoutes = new Set();
             Object.values(fullMatrix).forEach(perDate => {
                 Object.keys(perDate).forEach(rc => dataRoutes.add(rc));
             });
-            const unmatched = Array.from(dataRoutes).filter(rc => !templateSet.has(rc)).sort();
+            const extraDispatchRoutes = Array.from(dataRoutes).filter(rc => !templateSet.has(rc)).sort();
             const matched = Array.from(dataRoutes).filter(rc => templateSet.has(rc)).sort();
+            const effSpec = getEffectiveDispatchColumnSpec(extraDispatchRoutes);
 
-            // Build rows
-            const rows = [DISPATCH_TEMPLATE_HEADER.slice()];
+            // Build rows — fixed template columns + dynamic 班次/费用 pairs before 是否提交
+            const rows = [effSpec.map(c => c.header)];
             p.dates.forEach(d => {
-                const row = DISPATCH_COLUMN_SPEC.map(col => {
+                const row = effSpec.map(col => {
                     if (col.field === '日期') return formatDateSlash(d);
                     if (col.field === '是否提交') return '';
                     const entry = fullMatrix[d][col.route];
@@ -1131,15 +1239,19 @@
             buildDispatchCSVRows.lastDiagnostics = {
                 templateRoutes: DISPATCH_TEMPLATE_ROUTES.slice(),
                 matched,
-                unmatched,
+                extraDispatchRoutes,
+                unmatched: [], // 非模板流向已追加动态列，不再视为「忽略」
                 totalDataRoutes: dataRoutes.size,
-                rawByTemplate
+                rawByTemplate,
+                effectiveDispatchColumnSpec: effSpec
             };
             return rows;
         }
 
         function renderDispatchPreview(rows) {
-            // rows[0] is the exact template header (40 cols); rows[1..] are date rows.
+            // rows[0] = header row (fixed template + optional dynamic cols before 是否提交)
+            const effSpec = (buildDispatchCSVRows.lastDiagnostics && buildDispatchCSVRows.lastDiagnostics.effectiveDispatchColumnSpec)
+                || DISPATCH_COLUMN_SPEC;
             const title = document.getElementById('dispatchPreviewTitle');
             const toolbar = document.getElementById('selectToolbar');
             const wrap = document.getElementById('dispatchPreviewWrap');
@@ -1172,9 +1284,10 @@
             // Build <thead> — first column: master checkbox; rest from template
             let html = '<thead><tr>';
             html += '<th class="sel-cell"><input type="checkbox" id="masterCheck" checked title="全选/全不选"></th>';
-            DISPATCH_COLUMN_SPEC.forEach(col => {
-                const cls = (col.field === '日期' || col.field === '是否提交') ? 'date-col' : '';
-                html += `<th class="${cls}" title="${escapeHtml(col.header)}">${escapeHtml(col.header)}</th>`;
+            effSpec.forEach(col => {
+                let cls = (col.field === '日期' || col.field === '是否提交') ? 'date-col' : '';
+                if (col.isDynamic) cls += (cls ? ' ' : '') + 'dynamic-route-col';
+                html += `<th class="${cls.trim()}" title="${escapeHtml(col.header)}">${escapeHtml(col.header)}</th>`;
             });
             html += '</tr></thead>';
 
@@ -1187,7 +1300,7 @@
                 html += `<tr data-date="${escapeHtml(iso)}" class="row-selected">`;
                 html += `<td class="sel-cell"><input type="checkbox" class="row-check" data-date="${escapeHtml(iso)}" checked></td>`;
                 r.forEach((cell, idx) => {
-                    const col = DISPATCH_COLUMN_SPEC[idx];
+                    const col = effSpec[idx];
                     const isDate = col && col.field === '日期';
                     const cls = isDate ? 'date-cell' : (cell === '' ? 'zero' : '');
                     html += `<td class="${cls}">${escapeHtml(String(cell))}</td>`;
@@ -1360,7 +1473,11 @@
         function renderTemplateMatchInfo(diag) {
             const box = document.getElementById('templateMatchBox');
             if (!box || !diag) return;
-            const { matched, unmatched, templateRoutes, totalDataRoutes, rawByTemplate } = diag;
+            const {
+                matched, unmatched, templateRoutes, totalDataRoutes, rawByTemplate,
+                extraDispatchRoutes
+            } = diag;
+            const extras = extraDispatchRoutes || [];
             const unusedTemplate = templateRoutes.filter(r => !matched.includes(r));
 
             // Note: previously we hid the box when everything was zero, but
@@ -1400,7 +1517,13 @@
                 html += matched.map(r => `<code>${escapeHtml(r)}</code>${showRaw(r)}`).join('<br>');
                 html += '</div>';
             }
-            if (unmatched.length > 0) {
+            if (extras.length > 0) {
+                html += '<div style="margin-top:6px;color:#1d4ed8;">';
+                html += '<b>➕ 固定模板外的流向（已在「是否提交」前自动追加 <code>XXX班次</code>/<code>XXX费用</code> 列并填入数据；透视表为 <code>XXX班次</code> 列）：</b><br>';
+                html += extras.map(r => `<code>${escapeHtml(r)}</code>${showRaw(r)}`).join('<br>');
+                html += '</div>';
+            }
+            if (unmatched && unmatched.length > 0) {
                 html += '<div style="margin-top:6px;color:#b45309;">';
                 html += `<b>⚠ 未在模板中（导出时会被<b>忽略</b>）：</b><br>`;
                 html += unmatched.map(r => `<code>${escapeHtml(r)}</code>${showRaw(r)}`).join('<br>');
@@ -1419,28 +1542,63 @@
 
         function buildPivotCSVRows(p) {
             const metricLabel = p.metric === 'vehicle_count' ? '发车数量合计' : '发车次数';
+            const tmplMatrix = buildDispatchTemplatePivotMatrix(p);
+            const useVehicle = p.metric === 'vehicle_count';
+            const dispatchValueOf = (entry) => {
+                if (!entry || !entry.hasData) return null;
+                return useVehicle ? entry.vehicles : entry.count;
+            };
+            const extraRoutes = collectExtraDispatchRoutes(p);
+            const visibleCols = getEffectivePivotVisibleCols(extraRoutes);
+            const routeColCount = visibleCols.filter(c => c.route).length;
+
+            let csvGrandTotal = 0;
+            const colTotals = {};
+            visibleCols.forEach(col => { colTotals[col.header] = 0; });
+
+            const extraNote = extraRoutes.length
+                ? `  含固定模板外动态列: ${extraRoutes.length} 个流向`
+                : '';
             const meta = [
-                [`# 流向分布（${metricLabel}）`],
+                [`# 流向分布（${metricLabel}）· 与页面透视同列（不含费用列；固定模板外流向自动追加）`],
                 [`# 区间: ${p.startDate} ~ ${p.endDate}  跨度: ${p.dates.length} 天`],
-                [`# 记录数: ${p.recordCount}  流向数: ${p.routes.length}  合计: ${p.grandTotal}`],
-                [`# 归一化前缀: ${p.prefix === 'full' ? '完整 route_code' : '前 ' + p.prefix + ' 字符'}`],
+                [`# 记录数: ${p.recordCount}  数据列(含日期/是否提交等): ${routeColCount}${extraNote}`],
+                [`# 归一化前缀（流向合计表）: ${p.prefix === 'full' ? '完整 route_code' : '前 ' + p.prefix + ' 字符'}`],
                 [`# 导出时间: ${new Date().toLocaleString()}`],
                 []
             ];
 
-            const header = ['日期', '星期', ...p.routes, '行合计'];
+            const header = visibleCols.map(c => c.header).concat(['行合计']);
             const rows = [header];
 
             p.dates.forEach(d => {
-                const row = [d, getWeekday(d)];
-                p.routes.forEach(rc => row.push(p.matrix[d][rc] || 0));
-                row.push(p.rowTotals[d]);
+                let rowSum = 0;
+                const row = visibleCols.map(col => {
+                    if (col.field === '日期') {
+                        return `${d} (${getWeekday(d)})`;
+                    }
+                    if (col.field === '是否提交') {
+                        return '';
+                    }
+                    const entry = tmplMatrix[d][col.route];
+                    const v = dispatchValueOf(entry);
+                    if (v === null) return '';
+                    const n = Number(v) || 0;
+                    rowSum += n;
+                    colTotals[col.header] += n;
+                    return String(n);
+                });
+                row.push(String(rowSum));
+                csvGrandTotal += rowSum;
                 rows.push(row);
             });
 
-            const footer = ['列合计', ''];
-            p.routes.forEach(rc => footer.push(p.colTotals[rc]));
-            footer.push(p.grandTotal);
+            const footer = visibleCols.map(col => {
+                if (col.field === '日期') return '列合计';
+                if (col.field === '是否提交') return '';
+                return String(colTotals[col.header] || 0);
+            });
+            footer.push(String(csvGrandTotal));
             rows.push(footer);
 
             return meta.concat(rows);

@@ -436,6 +436,8 @@
                         data-lang="stats_window_calendar_short">自然日（0–24h）</button>
                     <button type="button" id="statsWindowBusinessBtn" class="segment-btn"
                         data-lang="stats_window_business_short">5:00–次日5:00</button>
+                    <button type="button" id="statsWindowSeventeenBtn" class="segment-btn"
+                        data-lang="stats_window_seventeen_short">17:00–次日17:00</button>
                 </div>
             </div>
         </div>
@@ -825,8 +827,8 @@
             </div>
         </div>
 
-        <!-- Week Comparison Chart -->
-        <div class="stats-section">
+        <!-- Week Comparison Chart: hidden — /api/week_comparison 数据不完整；ENABLE_STATS_WEEK_COMPARISON_BAR_CHART 为 true 时再显示 -->
+        <div class="stats-section" id="statsWeekComparisonBarSection" style="display:none;">
             <div
                 style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
                 <h3 style="margin:0;" data-lang="week_comparison_chart">周环比对比</h3>
@@ -998,6 +1000,7 @@
                 stats_window_label: "统计口径",
                 stats_window_calendar_short: "自然日（0–24h）",
                 stats_window_business_short: "5:00–次日5:00",
+                stats_window_seventeen_short: "17:00–次日17:00",
                 statistics_summary: "统计摘要",
                 schedule_info_prefix: "分拣机排班:",
                 schedule_info_detail: "17:00-23:00 (机器) + 23:00-05:00 (夜班) = 共12小时",
@@ -1054,7 +1057,7 @@
                 inbound_sorting_comparison_chart_title: "集包净入与分拣件数时段对比",
                 sorting_capacity_chart_title: "集包产能分时图",
                 cno_narrowbelt_hourly_chart: "CNO 直线窄带分拣产能（按线）",
-                cno_narrowbelt_hourly_sub: "数据来源：Gofo 操作日志（scan 217）；横轴与上方集包产能图一致，为所选「运营日」洛杉矶 06:00–次日 06:00。",
+                cno_narrowbelt_hourly_sub: "数据来源：Gofo 操作日志（scan 217）；横轴与上方集包产能分时图一致，按顶部所选统计口径（本地自然日 / 05–次日05 / 17–次日17）对齐。",
                 cno_narrowbelt_hourly_title: "CNO 窄带分拣机 各产线分时件数",
                 cno_narrowbelt_line_a: "产线 A（AA）",
                 cno_narrowbelt_line_b: "产线 B（AB）",
@@ -1106,9 +1109,9 @@
                 daily_trend_copy_success: "已复制到剪贴板",
                 daily_trend_copy_failed: "复制失败",
                 daily_packing_split_chart: "每日集包（人工 / 设备）",
-                daily_packing_split_hint: "按 LA 运营日 06:00–次日 06:00 统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
+                daily_packing_split_hint: "按顶部所选统计口径（本地）统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
                 daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
-                daily_packing_range_label: "显示区间（LA 运营日锚点，含首尾；下图「干线/支线」同步）",
+                daily_packing_range_label: "显示区间（与顶部统计口径一致的锚点日，含首尾；下图「干线/支线」同步）",
                 daily_packing_range_start: "起",
                 daily_packing_range_end: "止",
                 daily_packing_range_apply: "应用",
@@ -1118,16 +1121,16 @@
                 packing_manual: "人工集包",
                 packing_device: "设备集包",
                 daily_center_collect_split_chart: "每日集包（干线 / 支线）",
-                daily_center_collect_split_hint: "与上图相同：LA 运营日 06:00–次日 06:00。柱高合计=分拣表人工+设备件数（与上图总柱高一致）；干线/支线按集包看板当日干线:支线占比拆分；无看板占比时当日全部计作干线。",
+                daily_center_collect_split_hint: "与上图相同：日界与顶部统计口径一致。柱高合计=分拣表人工+设备件数（与上图总柱高一致）；干线/支线按集包看板当日干线:支线占比拆分；无看板占比时当日全部计作干线。",
                 daily_center_collect_split_tooltip_footer: "（占比 = 分项 / 当日干线与支线合计；合计=人工+设备）",
                 collect_trunk_label: "干线",
                 collect_branch_label: "支线",
                 center_collect_week_comparison_chart: "干线/支线集包周环比",
-                center_collect_week_comparison_hint: "自然周（周一至周日）；每周一柱为干线与支线堆叠（段内为占周比）；周合计与分拣人工+设备一致；折线为周总量环比。",
+                center_collect_week_comparison_hint: "自然周（周一至周日）；日界与顶部统计口径一致；每周一柱为干线与支线堆叠（段内为占周比）；周合计与分拣人工+设备一致；折线为周总量环比。",
                 collect_waybills_wan_axis: "集包运单 (万)",
                 packing_sum_label: "日合计",
                 week_comparison_chart: "周环比对比",
-                wow_week_range_label: "自然周（周一至周日）；任选周内日期。下图「周环比对比」与上图共用区间。",
+                wow_week_range_label: "自然周（周一至周日）；任选周内日期；用于本图周区间。",
                 wow_week_range_start: "周区间起",
                 wow_week_range_end: "周区间止",
                 wow_week_range_apply: "应用",
@@ -1191,6 +1194,7 @@
                 stats_window_label: "Stats window",
                 stats_window_calendar_short: "Calendar day (midnight–midnight)",
                 stats_window_business_short: "5:00–next day 5:00",
+                stats_window_seventeen_short: "17:00–next day 17:00",
                 statistics_summary: "Statistics Summary",
                 schedule_info_prefix: "Sorter Schedule:",
                 schedule_info_detail: "17:00-23:00 (Machine) + 23:00-05:00 (Night) = 12h Total",
@@ -1247,7 +1251,7 @@
                 inbound_sorting_comparison_chart_title: "Net pack-in vs sorted pieces by hour",
                 sorting_capacity_chart_title: "Sorting Capacity Hourly Chart",
                 cno_narrowbelt_hourly_chart: "CNO narrow-belt sorter (by line)",
-                cno_narrowbelt_hourly_sub: "Gofo operation log (scan 217). X-axis matches capacity chart: LA business day 06:00–06:00 for the selected date.",
+                cno_narrowbelt_hourly_sub: "Gofo operation log (scan 217). X-axis matches the capacity chart, aligned to the stats window (local calendar / 05–next 05 / 17–next 17).",
                 cno_narrowbelt_hourly_title: "Pieces per hour by production line",
                 cno_narrowbelt_line_a: "Line A (AA)",
                 cno_narrowbelt_line_b: "Line B (AB)",
@@ -1299,9 +1303,9 @@
                 daily_trend_copy_success: "Copied to clipboard",
                 daily_trend_copy_failed: "Copy failed",
                 daily_packing_split_chart: "Daily packing (manual / device)",
-                daily_packing_split_hint: "LA business day 06:00–06:00, last 14 days; bar height = daily total (manual+device); segment labels show share.",
+                daily_packing_split_hint: "Uses the selected stats window (local), last 14 days; bar height = daily total (manual+device); segment labels show share.",
                 daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
-                daily_packing_range_label: "Range (LA business-day anchors, inclusive; trunk/branch chart below uses the same)",
+                daily_packing_range_label: "Range (anchor dates per stats window, inclusive; trunk/branch chart below matches)",
                 daily_packing_range_start: "From",
                 daily_packing_range_end: "To",
                 daily_packing_range_apply: "Apply",
@@ -1311,16 +1315,16 @@
                 packing_manual: "Manual packing",
                 packing_device: "Device packing",
                 daily_center_collect_split_chart: "Daily packing (trunk / branch)",
-                daily_center_collect_split_hint: "Same LA business day 06:00–06:00. Bar total = sorting manual+device (same as chart above). Trunk/branch = board trunk:branch share; if no board split, all counted as trunk.",
+                daily_center_collect_split_hint: "Same day boundary as stats window. Bar total = sorting manual+device (same as chart above). Trunk/branch = board trunk:branch share; if no board split, all counted as trunk.",
                 daily_center_collect_split_tooltip_footer: "(Share = segment / trunk+branch; total = manual+device)",
                 collect_trunk_label: "Trunk",
                 collect_branch_label: "Branch",
                 center_collect_week_comparison_chart: "Trunk/Branch collect — week over week",
-                center_collect_week_comparison_hint: "Calendar weeks (Mon–Sun); each bar stacks trunk vs branch (share of week total); total matches sorting manual+device. Line = week-over-week.",
+                center_collect_week_comparison_hint: "Calendar weeks (Mon–Sun); day boundary matches stats window; each bar stacks trunk vs branch (share of week total); total matches sorting manual+device. Line = week-over-week.",
                 collect_waybills_wan_axis: "Collect waybills (10k)",
                 packing_sum_label: "Daily total",
                 week_comparison_chart: "Week-over-Week Comparison",
-                wow_week_range_label: "Calendar weeks (Mon–Sun); pick any day in each week. The chart below shares this range.",
+                wow_week_range_label: "Calendar weeks (Mon–Sun); pick any day in each week. Range applies to this chart.",
                 wow_week_range_start: "From (week)",
                 wow_week_range_end: "To (week)",
                 wow_week_range_apply: "Apply",
@@ -1387,6 +1391,7 @@
                 stats_window_label: "Ventana de estadísticas",
                 stats_window_calendar_short: "Día natural (0–24 h)",
                 stats_window_business_short: "5:00–día siguiente 5:00",
+                stats_window_seventeen_short: "17:00–día siguiente 17:00",
                 statistics_summary: "Resumen Estadístico",
                 total_vehicles: "Vehículos Totales",
                 predicted_vehicles_next_hour: "Llegadas Previstas (Próxima Hora)",
@@ -1435,7 +1440,7 @@
                 cno01_collect_waybills: "CNO01 empaquetado (guías)",
                 sorting_capacity_chart_title: "Gráfico Horario de Capacidad de Clasificación",
                 cno_narrowbelt_hourly_chart: "Clasificador estrecho CNO (por línea)",
-                cno_narrowbelt_hourly_sub: "Registro Gofo (scan 217). Eje X = mismo día operativo LA 06:00–06:00 que el gráfico de capacidad.",
+                cno_narrowbelt_hourly_sub: "Registro Gofo (scan 217). Eje X alineado al gráfico de capacidad y a la ventana de estadísticas (día natural local / 05–siguiente 05 / 17–siguiente 17).",
                 cno_narrowbelt_hourly_title: "Piezas por hora por línea",
                 cno_narrowbelt_line_a: "Línea A (AA)",
                 cno_narrowbelt_line_b: "Línea B (AB)",
@@ -1487,9 +1492,9 @@
                 daily_trend_copy_success: "Copiado al portapapeles",
                 daily_trend_copy_failed: "Error al copiar",
                 daily_packing_split_chart: "Empaque diario (manual / dispositivo)",
-                daily_packing_split_hint: "Día operativo LA 06:00–06:00, últimos 14 días; altura = total diario (manual+dispositivo); etiquetas = proporción.",
+                daily_packing_split_hint: "Ventana de estadísticas seleccionada (hora local), últimos 14 días; altura = total diario (manual+dispositivo); etiquetas = proporción.",
                 daily_packing_split_tooltip_footer: "(Proporción respecto al total manual+dispositivo del día)",
-                daily_packing_range_label: "Rango (ancla día operativo LA, inclusive; el gráfico troncal/ramal debajo usa el mismo)",
+                daily_packing_range_label: "Rango (fechas ancla según ventana de estadísticas, inclusive; el gráfico troncal/ramal debajo coincide)",
                 daily_packing_range_start: "Desde",
                 daily_packing_range_end: "Hasta",
                 daily_packing_range_apply: "Aplicar",
@@ -1499,16 +1504,16 @@
                 packing_manual: "Empaque manual",
                 packing_device: "Empaque por dispositivo",
                 daily_center_collect_split_chart: "Empaque diario (troncal / ramal)",
-                daily_center_collect_split_hint: "Mismo día LA 06:00–06:00. Altura total = manual+dispositivo en sorting (igual que arriba). Troncal/ramal = proporción del tablero; sin proporción, todo troncal.",
+                daily_center_collect_split_hint: "Mismo límite de día que la ventana de estadísticas. Altura total = manual+dispositivo en sorting (igual que arriba). Troncal/ramal = proporción del tablero; sin proporción, todo troncal.",
                 daily_center_collect_split_tooltip_footer: "(Proporción sobre troncal+ramal; total=manual+dispositivo)",
                 collect_trunk_label: "Troncal",
                 collect_branch_label: "Ramal",
                 center_collect_week_comparison_chart: "Empaque troncal/ramal — semana a semana",
-                center_collect_week_comparison_hint: "Semanas naturales; cada barra apila troncal vs ramal (% de la semana); el total coincide con sorting manual+dispositivo. Línea = semana a semana.",
+                center_collect_week_comparison_hint: "Semanas naturales; límite de día = ventana de estadísticas; cada barra apila troncal vs ramal (% de la semana); el total coincide con sorting manual+dispositivo. Línea = semana a semana.",
                 collect_waybills_wan_axis: "Guías empaque (×10k)",
                 packing_sum_label: "Total diario",
                 week_comparison_chart: "Comparación Semanal",
-                wow_week_range_label: "Semanas naturales (lun–dom); elija cualquier día de cada semana. El gráfico de abajo usa el mismo rango.",
+                wow_week_range_label: "Semanas naturales (lun–dom); elija cualquier día de cada semana. El rango aplica a este gráfico.",
                 wow_week_range_start: "Desde (semana)",
                 wow_week_range_end: "Hasta (semana)",
                 wow_week_range_apply: "Aplicar",
@@ -1633,8 +1638,18 @@
         // Current selected date
         let currentDate = null;
 
-        /** calendar = 本地自然日 00:00–次日 00:00；business = 本地 05:00–次日 05:00（与 /api/stats 一致） */
-        let statsWindowMode = localStorage.getItem('stats_window') === 'business' ? 'business' : 'calendar';
+        /** calendar = 本地自然日 00:00–次日 00:00；business = 本地 05:00–次日 05:00；seventeen = 本地 17:00–次日 17:00（与 /api/stats 一致） */
+        let statsWindowMode = (function () {
+            const s = localStorage.getItem('stats_window');
+            if (s === 'business' || s === 'seventeen') return s;
+            return 'calendar';
+        })();
+
+        function statsWindowStartHour() {
+            if (statsWindowMode === 'business') return 5;
+            if (statsWindowMode === 'seventeen') return 17;
+            return 0;
+        }
 
         function formatLocalYmd(d) {
             const y = d.getFullYear();
@@ -1646,6 +1661,10 @@
         function getDefaultStatsAnchorYmd() {
             const now = new Date();
             if (statsWindowMode === 'business' && now.getHours() < 5) {
+                const prev = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                return formatLocalYmd(prev);
+            }
+            if (statsWindowMode === 'seventeen' && now.getHours() < 17) {
                 const prev = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
                 return formatLocalYmd(prev);
             }
@@ -1674,18 +1693,34 @@
         function syncStatsWindowToggleUi() {
             const cb = document.getElementById('statsWindowCalendarBtn');
             const bb = document.getElementById('statsWindowBusinessBtn');
-            if (!cb || !bb) return;
+            const sb = document.getElementById('statsWindowSeventeenBtn');
+            if (!cb) return;
             const cal = statsWindowMode === 'calendar';
+            const biz = statsWindowMode === 'business';
+            const s17 = statsWindowMode === 'seventeen';
             cb.classList.toggle('active', cal);
-            bb.classList.toggle('active', !cal);
+            if (bb) bb.classList.toggle('active', biz);
+            if (sb) sb.classList.toggle('active', s17);
             cb.setAttribute('aria-pressed', cal ? 'true' : 'false');
-            bb.setAttribute('aria-pressed', cal ? 'false' : 'true');
+            if (bb) bb.setAttribute('aria-pressed', biz ? 'true' : 'false');
+            if (sb) sb.setAttribute('aria-pressed', s17 ? 'true' : 'false');
         }
 
         function setStatsWindowMode(mode) {
-            statsWindowMode = (mode === 'business') ? 'business' : 'calendar';
+            if (mode === 'business') statsWindowMode = 'business';
+            else if (mode === 'seventeen') statsWindowMode = 'seventeen';
+            else statsWindowMode = 'calendar';
             localStorage.setItem('stats_window', statsWindowMode);
             syncStatsWindowToggleUi();
+            const anchor = getDefaultStatsAnchorYmd();
+            currentDate = anchor;
+            const mainEl = document.getElementById('selectedDate');
+            if (mainEl) mainEl.value = anchor;
+            const floatEl = document.getElementById('floatingStatsDate');
+            if (floatEl) floatEl.value = anchor;
+            if (typeof updateFloatingStatsNavState === 'function') {
+                updateFloatingStatsNavState();
+            }
         }
 
         let loadedStatsData = null;
@@ -1739,6 +1774,8 @@
         }
 
         const WOW_CHARTS_DEFAULT_WEEK_COUNT = 8;
+        /** 「周环比对比」柱状图（/api/week_comparison）：数据源不完整时关闭展示与请求 */
+        const ENABLE_STATS_WEEK_COMPARISON_BAR_CHART = false;
 
         function wowChartsWeekRangeForFetch() {
             const sEl = document.getElementById('wowChartsWeekStart');
@@ -2005,6 +2042,11 @@
             initWowChartsWeekRangeInputs(formattedDate);
             initWeeklyWaybillChartsWeekRangeInputs(formattedDate);
 
+            (function syncWeekComparisonBarSectionVisibility() {
+                const sec = document.getElementById('statsWeekComparisonBarSection');
+                if (sec) sec.style.display = ENABLE_STATS_WEEK_COMPARISON_BAR_CHART ? '' : 'none';
+            })();
+
             // Load default data
             loadData();
             refreshTrendAndCompareCharts();
@@ -2034,6 +2076,7 @@
 
             const swCal = document.getElementById('statsWindowCalendarBtn');
             const swBiz = document.getElementById('statsWindowBusinessBtn');
+            const sw17 = document.getElementById('statsWindowSeventeenBtn');
             if (swCal) {
                 swCal.addEventListener('click', function () {
                     if (statsWindowMode === 'calendar') return;
@@ -2046,6 +2089,14 @@
                 swBiz.addEventListener('click', function () {
                     if (statsWindowMode === 'business') return;
                     setStatsWindowMode('business');
+                    loadData();
+                    refreshTrendAndCompareCharts();
+                });
+            }
+            if (sw17) {
+                sw17.addEventListener('click', function () {
+                    if (statsWindowMode === 'seventeen') return;
+                    setStatsWindowMode('seventeen');
                     loadData();
                     refreshTrendAndCompareCharts();
                 });
@@ -2909,22 +2960,29 @@
                     });
                 }
 
-                // Convert to array and sort (Custom sort for 06:00 - 06:00 cycle)
-                const result = Object.values(timeSlotMap).sort((a, b) => {
-                    const unknownLabel = (translations[currentLang].unknown || '未知');
-                    const aSlot = a.timeSlot === unknownLabel ? -1 : parseInt(a.timeSlot);
-                    const bSlot = b.timeSlot === unknownLabel ? -1 : parseInt(b.timeSlot);
-
-                    if (aSlot === -1 && bSlot === -1) return 0;
-                    if (aSlot === -1) return 1;
-                    if (bSlot === -1) return -1;
-
-                    // Shift hour so 06:00 is the start (0)
-                    const aVal = (aSlot - 6 + 24) % 24;
-                    const bVal = (bSlot - 6 + 24) % 24;
-
-                    return aVal - bVal;
+                // Fixed 24-slot axis aligned with stats window (same as 集包产能分时图)
+                const h0 = statsWindowStartHour();
+                const slotOrder = [];
+                for (let i = 0; i < 24; i++) {
+                    const h = (h0 + i) % 24;
+                    slotOrder.push(String(h).padStart(2, '0') + ':00');
+                }
+                const unknownLabel = (translations[currentLang].unknown || '未知');
+                const emptyRow = (slot) => ({
+                    timeSlot: slot,
+                    inboundPieces: 0,
+                    sortingPieces: 0,
+                    inboundAvgPieces: 0,
+                    sortingAvgPieces: 0,
                 });
+                const result = slotOrder.map((slot) => {
+                    const row = timeSlotMap[slot];
+                    return row ? { ...row } : emptyRow(slot);
+                });
+                for (const k of Object.keys(timeSlotMap)) {
+                    if (slotOrder.indexOf(k) >= 0) continue;
+                    result.push({ ...timeSlotMap[k] });
+                }
 
                 console.log('Processed hourly data:', result);
                 return result;
@@ -2972,9 +3030,8 @@
                     });
                 }
 
-                // Build a fixed 24-slot axis to avoid endpoint drift (e.g. rightmost 05:00).
-                // business: 05:00 -> 04:00 ; calendar: 00:00 -> 23:00
-                const startHour = statsWindowMode === 'business' ? 5 : 0;
+                // Build a fixed 24-slot axis: business from 05:00; seventeen from 17:00; calendar from 00:00
+                const startHour = statsWindowStartHour();
                 const orderedSlots = [];
                 for (let i = 0; i < 24; i++) {
                     const h = (startHour + i) % 24;
@@ -5120,6 +5177,7 @@
 
         // Load week comparison chart data
         function loadWeekComparisonData() {
+            if (!ENABLE_STATS_WEEK_COMPARISON_BAR_CHART) return;
             const r = wowChartsWeekRangeForFetch();
             const qp = {};
             if (currentDate) qp.end_date = currentDate;
@@ -5164,6 +5222,7 @@
 
         // Render week comparison chart
         function renderWeekComparisonChart(data) {
+            if (!ENABLE_STATS_WEEK_COMPARISON_BAR_CHART) return;
             const ctx = document.getElementById('weekComparisonChart').getContext('2d');
 
             // Destroy existing chart if it exists

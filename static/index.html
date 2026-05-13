@@ -694,12 +694,12 @@
                     <div class="stat-number" id="predictedVehicles">0</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-label" data-lang="stat_plate_excluded_total">不计入统计装载(当日合计)</div>
-                    <div class="stat-number" id="totalPlateExcludedLoad">0</div>
+                    <div class="stat-label" data-lang="stat_cbs_today">CBS（当日）</div>
+                    <div class="stat-number" id="cbsTodaySummary">0</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-label" data-lang="stat_excluded_pieces_total">不计入统计件数(当日合计)</div>
-                    <div class="stat-number" id="totalExcludedPiecesStat">0</div>
+                    <div class="stat-label" data-lang="stat_cbt_today">CBT（当日）</div>
+                    <div class="stat-number" id="cbtTodaySummary">0</div>
                 </div>
             </div>
 
@@ -722,13 +722,22 @@
             <h2><i class="fas fa-plus-circle"></i> <span data-lang="add_record">新增记录</span></h2>
             <form id="recordForm">
                 <div class="form-group">
+                    <label for="business_type" data-lang="business_type">业务类型</label>
+                    <select id="business_type" name="business_type">
+                        <option value="GOFO" selected data-lang="business_type_gofo">GOFO</option>
+                        <option value="CBS">CBS</option>
+                        <option value="CBT">CBT</option>
+                    </select>
+                </div>
+                <div id="recordFormGofoFields">
+                <div class="form-group">
                     <label for="dock_no" data-lang="dock_number">码头号:</label>
-                    <input type="number" id="dock_no" name="dock_no" required>
+                    <input type="number" id="dock_no" name="dock_no" min="0" step="1">
                 </div>
 
                 <div class="form-group">
                     <label for="vehicle_type" data-lang="vehicle_type">车辆类型:</label>
-                    <select id="vehicle_type" name="vehicle_type" required>
+                    <select id="vehicle_type" name="vehicle_type">
                         <option value="" data-lang="please_select">请选择</option>
                         <option value="16英尺">16英尺</option>
                         <option value="26英尺">26英尺</option>
@@ -750,18 +759,20 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="load_amount" data-lang="load_amount">装载量:</label>
-                    <input type="number" id="load_amount" name="load_amount">
+                    <label for="time_slot" data-lang="time_slot">时间段:</label>
+                    <input type="text" id="time_slot" name="time_slot">
+                </div>
+                </div>
+
+                <div class="form-group" id="loadAmountFormGroup">
+                    <label for="load_amount" id="load_amount_label" data-lang="load_amount">装载量:</label>
+                    <input type="number" id="load_amount" name="load_amount" min="0" step="1">
+                    <small id="cbs_cbt_pallet_hint" style="display: none; color: #666; font-size: 0.85rem;" data-lang="cbs_cbt_pallet_hint">每托盘按 300 件核算货量</small>
                 </div>
 
                 <div class="form-group" style="display: none;">
                     <label for="pieces" data-lang="pieces">件数:</label>
                     <input type="number" id="pieces" name="pieces">
-                </div>
-
-                <div class="form-group">
-                    <label for="time_slot" data-lang="time_slot">时间段:</label>
-                    <input type="text" id="time_slot" name="time_slot">
                 </div>
 
                 <div class="form-group">
@@ -848,6 +859,8 @@
                             <option value="Van">Van</option>
                             <option value="53英尺">53英尺</option>
                             <option value="其他" data-lang="other">其他</option>
+                            <option value="CBS">CBS</option>
+                            <option value="CBT">CBT</option>
                         </select>
                     </div>
                     <div class="edit-form-group">
@@ -992,6 +1005,18 @@
                 plate_excluded_load_short: "不计入统计的装载量",
                 stat_plate_excluded_total: "不计入统计装载(当日合计)",
                 stat_excluded_pieces_total: "不计入统计件数(当日合计)",
+                business_type: "业务类型",
+                business_type_gofo: "GOFO",
+                business_type_cbs: "CBS",
+                business_type_cbt: "CBT",
+                cbs_cbt_pallets: "托盘数",
+                cbs_cbt_pallet_hint: "每托盘按 300 件核算货量",
+                gofo_need_dock: "GOFO 请填写码头号",
+                gofo_need_vehicle_type: "GOFO 请选择车辆类型",
+                cbs_cbt_need_pallets: "CBS/CBT 请填写大于 0 的托盘数",
+                stat_cbs_today: "CBS（当日）",
+                stat_cbt_today: "CBT（当日）",
+                stat_cbs_cbt_summary: "{pallets} 托 / {pieces} 件",
                 col_plate_excluded: "不计入统计装载",
                 modal_confirm: "确认",
                 logout: "登出",
@@ -1054,6 +1079,18 @@
                 plate_excluded_load_short: "Excluded load (not counted)",
                 stat_plate_excluded_total: "Excluded load total (today)",
                 stat_excluded_pieces_total: "Excluded pieces total (today)",
+                business_type: "Business type",
+                business_type_gofo: "GOFO",
+                business_type_cbs: "CBS",
+                business_type_cbt: "CBT",
+                cbs_cbt_pallets: "Pallet count",
+                cbs_cbt_pallet_hint: "Cargo = pallets × 300 pieces per pallet",
+                gofo_need_dock: "GOFO: enter dock number",
+                gofo_need_vehicle_type: "GOFO: select vehicle type",
+                cbs_cbt_need_pallets: "CBS/CBT: enter a pallet count greater than 0",
+                stat_cbs_today: "CBS (today)",
+                stat_cbt_today: "CBT (today)",
+                stat_cbs_cbt_summary: "{pallets} plt / {pieces} pcs",
                 col_plate_excluded: "Excluded load",
                 modal_confirm: "OK",
                 logout: "Logout",
@@ -1115,6 +1152,18 @@
                 plate_excluded_load_short: "Carga excluida (no contada)",
                 stat_plate_excluded_total: "Carga excluida (total hoy)",
                 stat_excluded_pieces_total: "Piezas excluidas (total hoy)",
+                business_type: "Tipo de negocio",
+                business_type_gofo: "GOFO",
+                business_type_cbs: "CBS",
+                business_type_cbt: "CBT",
+                cbs_cbt_pallets: "Número de pallets",
+                cbs_cbt_pallet_hint: "Carga = pallets × 300 piezas por pallet",
+                gofo_need_dock: "GOFO: indique el muelle",
+                gofo_need_vehicle_type: "GOFO: seleccione el tipo de vehículo",
+                cbs_cbt_need_pallets: "CBS/CBT: indique un número de pallets mayor que 0",
+                stat_cbs_today: "CBS (hoy)",
+                stat_cbt_today: "CBT (hoy)",
+                stat_cbs_cbt_summary: "{pallets} pal / {pieces} pzas",
                 col_plate_excluded: "Carga excl.",
                 modal_confirm: "Aceptar",
                 logout: "Cerrar sesión",
@@ -1125,6 +1174,38 @@
 
         // Current language
         let currentLang = 'zh';
+
+        function syncRecordFormBusinessTypeMode() {
+            const sel = document.getElementById('business_type');
+            const bt = (sel && sel.value) || 'GOFO';
+            const gofo = document.getElementById('recordFormGofoFields');
+            const hint = document.getElementById('cbs_cbt_pallet_hint');
+            const lbl = document.getElementById('load_amount_label');
+            const loadEl = document.getElementById('load_amount');
+            const t = translations[currentLang] || translations.zh;
+            const isCb = bt === 'CBS' || bt === 'CBT';
+            if (gofo) gofo.style.display = isCb ? 'none' : '';
+            if (hint) {
+                hint.style.display = isCb ? 'block' : 'none';
+                if (hint.getAttribute('data-lang') && t[hint.getAttribute('data-lang')]) {
+                    hint.textContent = t[hint.getAttribute('data-lang')];
+                }
+            }
+            if (lbl) {
+                if (isCb) {
+                    lbl.removeAttribute('data-lang');
+                    lbl.textContent = t.cbs_cbt_pallets || '托盘数';
+                } else {
+                    lbl.setAttribute('data-lang', 'load_amount');
+                    lbl.textContent = t.load_amount || '装载量';
+                }
+            }
+            if (loadEl) {
+                loadEl.required = !!isCb;
+                loadEl.min = isCb ? '1' : '0';
+                if (!isCb) loadEl.removeAttribute('max');
+            }
+        }
 
         let _plateLoadModalResolver = null;
 
@@ -1200,6 +1281,10 @@
 
             // Store language preference in localStorage
             localStorage.setItem('preferredLanguage', lang);
+
+            if (typeof syncRecordFormBusinessTypeMode === 'function') {
+                syncRecordFormBusinessTypeMode();
+            }
         }
 
         // Toggle language dropdown
@@ -1302,6 +1387,10 @@
             // Load stats and records
             loadStats();
             loadRecords();
+
+            const btw = document.getElementById('business_type');
+            if (btw) btw.addEventListener('change', syncRecordFormBusinessTypeMode);
+            syncRecordFormBusinessTypeMode();
 
             // Bind modal events
             document.querySelector('#editModal .close-btn').addEventListener('click', closeEditModal);
@@ -1462,6 +1551,11 @@
                         loadAmount = 9;
                         pieces = loadAmount * 172;  // 篮筐：9 * 172 = 1548
                         break;
+                    case 'CBS':
+                    case 'CBT':
+                        loadAmount = parseInt(loadAmountInput.value, 10) || 1;
+                        pieces = loadAmount * 300;
+                        break;
                     default:
                         // 其他类型不自动填充
                         break;
@@ -1490,6 +1584,8 @@
                 } else if (['Car', 'Van'].includes(vehicleType)) {
                     // 篮筐车型：装载量 × 172
                     piecesInput.value = loadAmount * 172;
+                } else if (['CBS', 'CBT'].includes(vehicleType)) {
+                    piecesInput.value = loadAmount * 300;
                 }
             });
         });
@@ -1501,10 +1597,16 @@
                 .then(data => {
                     document.getElementById('totalVehicles').textContent = data.total_vehicles || 0;
                     document.getElementById('predictedVehicles').textContent = data.predicted_next_hour_vehicles || 0;
-                    const pel = document.getElementById('totalPlateExcludedLoad');
-                    const eps = document.getElementById('totalExcludedPiecesStat');
-                    if (pel) pel.textContent = data.total_plate_excluded_load != null ? String(data.total_plate_excluded_load) : '0';
-                    if (eps) eps.textContent = data.total_excluded_pieces != null ? String(data.total_excluded_pieces) : '0';
+
+                    const fmtCb = (pallets, pieces) => {
+                        const tr = translations[currentLang] || translations.zh;
+                        return (tr.stat_cbs_cbt_summary || '{pallets} 托 / {pieces} 件')
+                            .replace('{pallets}', String(pallets)).replace('{pieces}', String(pieces));
+                    };
+                    const cbsEl = document.getElementById('cbsTodaySummary');
+                    const cbtEl = document.getElementById('cbtTodaySummary');
+                    if (cbsEl) cbsEl.textContent = fmtCb(data.cbs_today_pallets ?? 0, data.cbs_today_pieces ?? 0);
+                    if (cbtEl) cbtEl.textContent = fmtCb(data.cbt_today_pallets ?? 0, data.cbt_today_pieces ?? 0);
 
                     if (data.next_time_slot) {
                         const nextSlotLabel = document.querySelector('[data-lang="predicted_vehicles_next_hour"]');
@@ -1906,7 +2008,7 @@
                 }
                 // Handle numeric fields
                 if (['dock_no', 'load_amount'].includes(key) && value !== '') {
-                    data[key] = parseInt(value);
+                    data[key] = parseInt(value, 10);
                 } else {
                     data[key] = value;
                 }
@@ -1917,42 +2019,69 @@
                 data.vehicle_no = vehicleNoInput.value;
             }
 
-            // Check for duplicate records before submitting
-            try {
-                const checkResponse = await fetch('/api/check_duplicate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        dock_no: data.dock_no,
-                        vehicle_type: data.vehicle_type
-                    })
-                });
+            const bt = String(data.business_type || 'GOFO').trim().toUpperCase();
+            data.business_type = bt;
+            const t0 = translations[currentLang] || translations.zh;
 
-                const checkResult = await checkResponse.json();
-
-                if (checkResult.is_duplicate) {
-                    const template = translations[currentLang].duplicate_warning_template;
-                    const message = template
-                        .replace('{minutes}', checkResult.time_diff_minutes)
-                        .replace('{vehicle_type}', checkResult.last_record.vehicle_type)
-                        .replace('{vehicle_no}', checkResult.last_record.vehicle_no);
-
-                    if (!confirm(message)) {
-                        return; // 用户取消提交
-                    }
-                }
-            } catch (error) {
-                console.error('检查重复记录失败:', error);
-                // 检查失败不阻止提交
-            }
-
-            const vn = String(data.vehicle_no || '').trim();
-            if (vn) {
-                const pel = await openPlateExcludedLoadModal();
-                if (pel === null) {
+            if (bt === 'GOFO') {
+                if (data.dock_no === undefined || data.dock_no === null || data.dock_no === '') {
+                    showMessage(t0.gofo_need_dock || 'GOFO 请填写码头号', 'error');
                     return;
                 }
-                data.plate_excluded_load = pel;
+                if (!data.vehicle_type) {
+                    showMessage(t0.gofo_need_vehicle_type || 'GOFO 请选择车辆类型', 'error');
+                    return;
+                }
+            } else if (bt === 'CBS' || bt === 'CBT') {
+                const pallets = parseInt(data.load_amount, 10);
+                if (!pallets || pallets < 1 || Number.isNaN(pallets)) {
+                    showMessage(t0.cbs_cbt_need_pallets || 'CBS/CBT 请填写大于 0 的托盘数', 'error');
+                    return;
+                }
+                data.load_amount = pallets;
+            }
+
+            // Check for duplicate records before submitting (GOFO only)
+            if (bt === 'GOFO') {
+                try {
+                    const checkResponse = await fetch('/api/check_duplicate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            dock_no: data.dock_no,
+                            vehicle_type: data.vehicle_type
+                        })
+                    });
+
+                    const checkResult = await checkResponse.json();
+
+                    if (checkResult.is_duplicate) {
+                        const template = translations[currentLang].duplicate_warning_template;
+                        const message = template
+                            .replace('{minutes}', checkResult.time_diff_minutes)
+                            .replace('{vehicle_type}', checkResult.last_record.vehicle_type)
+                            .replace('{vehicle_no}', checkResult.last_record.vehicle_no);
+
+                        if (!confirm(message)) {
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('检查重复记录失败:', error);
+                }
+            }
+
+            if (bt === 'GOFO') {
+                const vn = String(data.vehicle_no || '').trim();
+                if (vn) {
+                    const pel = await openPlateExcludedLoadModal();
+                    if (pel === null) {
+                        return;
+                    }
+                    data.plate_excluded_load = pel;
+                } else {
+                    data.plate_excluded_load = 0;
+                }
             } else {
                 data.plate_excluded_load = 0;
             }
@@ -1972,6 +2101,7 @@
                         if (result.success) {
                             showMessage(translations[currentLang].record_submit_success || '记录提交成功！', 'success');
                             document.getElementById('recordForm').reset();
+                            syncRecordFormBusinessTypeMode();
                             // Reload stats and records
                             loadStats();
                             loadRecords();
@@ -1997,6 +2127,7 @@
                             await offlineManager.saveOffline('inbound', data);
                             showMessage('网络错误,数据已保存到本地,将在网络恢复时自动同步', 'warning');
                             document.getElementById('recordForm').reset();
+                            syncRecordFormBusinessTypeMode();
                             await updatePendingCount();
                         } catch (offlineError) {
                             console.error('离线保存失败:', offlineError);
@@ -2009,6 +2140,7 @@
                     await offlineManager.saveOffline('inbound', data);
                     showMessage('当前离线,数据已保存到本地,将在网络恢复时自动同步', 'info');
                     document.getElementById('recordForm').reset();
+                    syncRecordFormBusinessTypeMode();
                     await updatePendingCount();
                 } catch (error) {
                     console.error('离线保存失败:', error);
@@ -2072,6 +2204,8 @@
                         } else if (['Car', 'Van'].includes(vehicleType)) {
                             // 篮筐车型：装载量 × 172
                             pieces = loadAmount * 172;
+                        } else if (['CBS', 'CBT'].includes(vehicleType)) {
+                            pieces = loadAmount * 300;
                         }
                     }
 

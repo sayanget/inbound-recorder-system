@@ -332,12 +332,19 @@ def _db_row_get(row, key, default=None):
 
 # 入库录入件数 → 实到件数（统计、对比、与分拣对齐等统一口径；装载量 load_amount 不乘系数）
 INBOUND_PIECES_ACTUAL_FACTOR = float(os.environ.get("INBOUND_PIECES_ACTUAL_FACTOR", "0.76"))
+# CBS/CBT：仅按托盘数 × 本系数核算货量（默认 300 件/托，与 GOFO 托盘 344 系数分离）
+INBOUND_CBS_CBT_PIECES_PER_PALLET = int(os.environ.get("INBOUND_CBS_CBT_PIECES_PER_PALLET", "300"))
 
 
 def _sql_inbound_net_pieces_actual(prefix=""):
-    """SQL 片段：(录入件数 - 不计入件数) * 实到系数。prefix 如 'ir.' 或 ''。"""
+    """SQL 片段：GOFO 车型为 (录入件数 - 不计入件数) * 实到系数；CBS/CBT 为录入−排除（不乘系数）。"""
     p = prefix
-    return f"(({p}pieces - COALESCE({p}excluded_pieces, 0)) * {INBOUND_PIECES_ACTUAL_FACTOR})"
+    br = f"({p}pieces - COALESCE({p}excluded_pieces, 0))"
+    scaled = f"({br} * {INBOUND_PIECES_ACTUAL_FACTOR})"
+    return (
+        f"(CASE WHEN {p}vehicle_type IN ('CBS', 'CBT') THEN CAST({br} AS REAL) "
+        f"ELSE {scaled} END)"
+    )
 
 
 def _sql_inbound_sum_case_53g_zero():
@@ -364,9 +371,19 @@ def _py_inbound_actual_pieces(pieces, excluded_pieces=0):
 
 
 def _py_inbound_arrival_pieces(vehicle_type, vehicle_no, pieces, excluded_pieces=0):
-    """单条展示/汇总用实到件数：53 英尺 + 车牌 G 为 0，否则 (录入−排除)×系数。"""
+    """单条展示/汇总用实到件数：53 英尺 + 车牌 G 为 0；CBS/CBT 为录入−排除（不乘系数）；其余 (录入−排除)×系数。"""
     if str(vehicle_type or "").strip() == "53英尺" and str(vehicle_no or "").strip() == "G":
         return 0.0
+    if str(vehicle_type or "").strip() in ("CBS", "CBT"):
+        try:
+            p = int(pieces or 0)
+        except (TypeError, ValueError):
+            p = 0
+        try:
+            e = int(excluded_pieces or 0)
+        except (TypeError, ValueError):
+            e = 0
+        return float(max(0, p - e))
     return _py_inbound_actual_pieces(pieces, excluded_pieces)
 
 
@@ -697,7 +714,8 @@ def init_db():
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 duration INTEGER,
                 plate_excluded_load REAL DEFAULT 0,
-                excluded_pieces INTEGER DEFAULT 0
+                excluded_pieces INTEGER DEFAULT 0,
+                business_type TEXT DEFAULT 'GOFO'
             );""")
             cursor.execute(sql)
         
@@ -896,6 +914,18 @@ def init_db():
                 )
             except Exception as _e:
                 print(f"[init_db] inbound_records plate_excluded_load migration: {_e}")
+
+        try:
+            cursor.execute("SELECT business_type FROM inbound_records LIMIT 1")
+        except Exception:
+            try:
+                cursor.execute(
+                    convert_query_placeholders(
+                        "ALTER TABLE inbound_records ADD COLUMN business_type TEXT DEFAULT 'GOFO'"
+                    )
+                )
+            except Exception as _e2:
+                print(f"[init_db] inbound_records business_type migration: {_e2}")
 
         # 确保 outbound_records 表存在 (Migration for existing DBs that might be missing it)
         sql = convert_sql("""CREATE TABLE IF NOT EXISTS outbound_records (
@@ -1887,7 +1917,7 @@ def api_schedule_vs_packaging():
 
 @app.route('/api/statistics/daily_packing_split', methods=['GET'])
 def api_statistics_daily_packing_split():
-    """按 stats_window 聚合每日人工/设备集包件数；calendar=本地自然日，business=本地05:00–次日05:00。"""
+    """按 stats_window 聚合每日人工/设备集包件数；calendar=自然日；business=05–次日05；seventeen=17–次日17（本地）。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
@@ -2091,6 +2121,8 @@ def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calenda
 
     if window_mode == 'business':
         labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
+    elif window_mode == 'seventeen':
+        labels = [f"{((17 + i) % 24):02d}:00" for i in range(24)]
     else:
         labels = [f"{i:02d}:00" for i in range(24)]
     slot_to_idx = {s: i for i, s in enumerate(labels)}
@@ -2151,6 +2183,13 @@ def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calenda
                     pass
                 else:
                     continue
+            elif window_mode == 'seventeen':
+                if rd == anchor_str and slot >= '17:00':
+                    pass
+                elif rd == next_str and slot < '17:00':
+                    pass
+                else:
+                    continue
             else:
                 if rd == anchor_str:
                     pass
@@ -2192,7 +2231,10 @@ def api_statistics_cno_narrowbelt_hourly():
     try:
         return jsonify(_build_cno_narrowbelt_hourly_series(anchor, wm))
     except Exception as e:
-        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)] if wm == 'business' else [f"{i:02d}:00" for i in range(24)]
+        labels = (
+            [f"{((17 + i) % 24):02d}:00" for i in range(24)] if wm == 'seventeen'
+            else ([f"{((5 + i) % 24):02d}:00" for i in range(24)] if wm == 'business'
+                  else [f"{i:02d}:00" for i in range(24)]))
         return jsonify({
             'error': str(e),
             'date': anchor.strftime('%Y-%m-%d'),
@@ -3159,15 +3201,23 @@ def get_tms_shuttle_pivot():
 
     sw_arg = request.args.get('stats_window')
     if sw_arg is not None and str(sw_arg).strip() != '':
-        use_business = _parse_stats_window_param(sw_arg) == 'business'
+        wm = _parse_stats_window_param(sw_arg)
     else:
-        use_business = _tms_shuttle_pivot_use_business_axis()
-    h0 = 5 if use_business else 0
+        wm = 'business' if _tms_shuttle_pivot_use_business_axis() else 'calendar'
+
+    if wm == 'business':
+        h0 = 5
+    elif wm == 'seventeen':
+        h0 = 17
+    else:
+        h0 = 0
+
     hours = _tms_shuttle_pivot_business_hour_labels(h0)
     d_parse = datetime.strptime(date_str, '%Y-%m-%d').date()
-    win_lo, win_hi_excl = _stats_period_bounds(d_parse, 'business' if use_business else 'calendar')
+    win_lo, win_hi_excl = _stats_period_bounds(d_parse, wm)
     win_hi = win_hi_excl - timedelta(seconds=1)
-    if use_business:
+    use_shift_axis = wm in ('business', 'seventeen')
+    if use_shift_axis:
         date_params = (date_str,)
         where_sql = "record_date = ?"
     else:
@@ -3194,7 +3244,7 @@ def get_tms_shuttle_pivot():
                 'date': date_str, 'hours': hours,
                 'destinations': [], 'grand_total': 0,
                 'note': '表 gofo_tms_shuttle_split 不存在，请先运行同步',
-                'pivot_mode': 'business' if use_business else 'natural',
+                'pivot_mode': 'natural' if wm == 'calendar' else wm,
                 'day_start_hour': h0,
                 'departure_window': {
                     'start': win_lo.strftime('%Y-%m-%d %H:%M:%S'),
@@ -3247,7 +3297,7 @@ def get_tms_shuttle_pivot():
             if dt_use < win_lo or dt_use > win_hi:
                 skipped_outside += 1
                 continue
-            if use_business:
+            if use_shift_axis:
                 hh_idx = _tms_shuttle_pivot_business_hour_index(dt_use.hour, h0)
             else:
                 hh_idx = dt_use.hour
@@ -3257,12 +3307,12 @@ def get_tms_shuttle_pivot():
             if clock_h is None:
                 dest_orphans[dest] = dest_orphans.get(dest, 0) + 1
                 continue
-            if not use_business:
+            if not use_shift_axis:
                 dnorm = _tms_shuttle_pivot_normalize_date_iso(dep_d) or _tms_shuttle_pivot_normalize_date_iso(arr_d)
                 if dnorm != date_str:
                     dest_orphans[dest] = dest_orphans.get(dest, 0) + 1
                     continue
-            hh_idx = _tms_shuttle_pivot_business_hour_index(clock_h, h0) if use_business else clock_h
+            hh_idx = _tms_shuttle_pivot_business_hour_index(clock_h, h0) if use_shift_axis else clock_h
 
         bucket = matrix.setdefault(dest, [0] * 24)
         bucket[hh_idx] += 1
@@ -3280,7 +3330,7 @@ def get_tms_shuttle_pivot():
         'hours': hours,
         'destinations': out_rows,
         'grand_total': grand,
-        'pivot_mode': 'business' if use_business else 'natural',
+        'pivot_mode': 'natural' if wm == 'calendar' else wm,
         'day_start_hour': h0,
         'departure_window': {
             'start': win_lo.strftime('%Y-%m-%d %H:%M:%S'),
@@ -3559,8 +3609,8 @@ def check_duplicate():
     dock_no = data.get("dock_no")
     vehicle_type = data.get("vehicle_type")
     
-    # Car 和 Van 不检查重复
-    if vehicle_type in ['Car', 'Van']:
+    # Car / Van / CBS / CBT 不按道口做短时重复提示
+    if vehicle_type in ('Car', 'Van', 'CBS', 'CBT'):
         return jsonify({"is_duplicate": False})
     
     if not dock_no:
@@ -3570,7 +3620,7 @@ def check_duplicate():
     cursor = conn.cursor(); cursor.execute("""
         SELECT id, vehicle_type, vehicle_no, created_at 
         FROM inbound_records 
-        WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van')
+        WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van', 'CBS', 'CBT')
         ORDER BY created_at DESC 
         LIMIT 1
     """, (dock_no,))
@@ -3625,6 +3675,8 @@ def _excluded_pieces_for_plate_load(vehicle_type, plate_excluded_load):
         return int(round(v * 344))
     if vehicle_type in ('Car', 'Van'):
         return int(round(v * 172))
+    if vehicle_type in ('CBS', 'CBT'):
+        return int(round(v * INBOUND_CBS_CBT_PIECES_PER_PALLET))
     return 0
 
 
@@ -3648,7 +3700,38 @@ def _apply_plate_exclusion_to_record(data):
     data['excluded_pieces'] = int(ep)
 
 
+def _normalize_inbound_business_type(data):
+    """业务类型：GOFO（默认）/ CBS / CBT。"""
+    if not isinstance(data, dict):
+        return 'GOFO'
+    raw = data.get('business_type') or data.get('businessType') or 'GOFO'
+    bt = str(raw).strip().upper()
+    if bt not in ('GOFO', 'CBS', 'CBT'):
+        bt = 'GOFO'
+    data['business_type'] = bt
+    return bt
+
+
 def _apply_vehicle_type_defaults(data):
+    bt = _normalize_inbound_business_type(data)
+    if bt in ('CBS', 'CBT'):
+        data['vehicle_type'] = bt
+        data['unit'] = '托盘'
+        load_raw = data.get('load_amount', 0)
+        try:
+            la = int(load_raw)
+        except (TypeError, ValueError):
+            la = 0
+        data['load_amount'] = la
+        data['pieces'] = la * INBOUND_CBS_CBT_PIECES_PER_PALLET if la > 0 else 0
+        data.setdefault('dock_no', 0)
+        try:
+            data['dock_no'] = int(data.get('dock_no') or 0)
+        except (TypeError, ValueError):
+            data['dock_no'] = 0
+        data['vehicle_no'] = str(data.get('vehicle_no') or '').strip()
+        return
+
     vt = data.get("vehicle_type", "")
     if vt == "16英尺":
         data["unit"] = "托盘"
@@ -3695,11 +3778,11 @@ def _insert_inbound_record_core(data, current_time, *, broadcast=True):
         time_slot = str(current_time.hour)
     dock_no = data.get("dock_no")
     vehicle_type = data.get("vehicle_type")
-    if dock_no and vehicle_type not in ['Car', 'Van']:
+    if dock_no and vehicle_type not in ('Car', 'Van', 'CBS', 'CBT'):
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, created_at, vehicle_type FROM inbound_records 
-            WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van')
+            WHERE dock_no = ? AND vehicle_type NOT IN ('Car', 'Van', 'CBS', 'CBT')
             ORDER BY created_at DESC 
             LIMIT 1
         """, (dock_no,))
@@ -3735,8 +3818,8 @@ def _insert_inbound_record_core(data, current_time, *, broadcast=True):
     except (TypeError, ValueError):
         epc_ins = 0
     insert_sql = """INSERT INTO inbound_records
-        (dock_no, vehicle_type, vehicle_no, unit, load_amount, pieces, time_slot, shift_type, remark, created_at, duration, plate_excluded_load, excluded_pieces)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)"""
+        (dock_no, vehicle_type, vehicle_no, unit, load_amount, pieces, time_slot, shift_type, remark, created_at, duration, plate_excluded_load, excluded_pieces, business_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)"""
     insert_params = (
         data.get("dock_no"),
         data.get("vehicle_type"),
@@ -3750,6 +3833,7 @@ def _insert_inbound_record_core(data, current_time, *, broadcast=True):
         current_time_str,
         pel_ins,
         epc_ins,
+        data.get("business_type") or "GOFO",
     )
     cursor = conn.cursor()
     if USE_POSTGRES:
@@ -3769,7 +3853,7 @@ def _insert_inbound_record_core(data, current_time, *, broadcast=True):
     return new_id
 
 
-INBOUND_IMPORT_VEHICLE_TYPES = frozenset({'16英尺', '26英尺', 'Car', 'Van', '53英尺', '其他'})
+INBOUND_IMPORT_VEHICLE_TYPES = frozenset({'16英尺', '26英尺', 'Car', 'Van', '53英尺', '其他', 'CBS', 'CBT'})
 
 
 def _normalize_import_vehicle_type(raw):
@@ -4230,10 +4314,18 @@ def _inbound_positional_parse(text, import_date_str):
 
 @app.route('/api/record', methods=['POST'])
 def record():
-    data = request.json
-    if isinstance(data, dict) and data.get('vehicle_type') is not None:
+    data = request.json if isinstance(request.json, dict) else {}
+    _normalize_inbound_business_type(data)
+    if data.get('business_type') == 'GOFO' and data.get('vehicle_type') is not None:
         data['vehicle_type'] = _normalize_import_vehicle_type(data['vehicle_type'])
     _apply_vehicle_type_defaults(data)
+    if data.get('business_type') in ('CBS', 'CBT'):
+        try:
+            la = int(data.get('load_amount') or 0)
+        except (TypeError, ValueError):
+            la = 0
+        if la <= 0:
+            return jsonify({"success": False, "error": "CBS/CBT 须填写大于 0 的整数托盘数"}), 400
     _apply_plate_exclusion_to_record(data)
     new_id = _insert_inbound_record_core(data, datetime.now(), broadcast=True)
     pel_ins = data.get("plate_excluded_load", 0)
@@ -4335,6 +4427,7 @@ def inbound_import():
     try:
         for created_at, _ridx, data in parsed:
             data = dict(data)
+            _normalize_inbound_business_type(data)
             _apply_vehicle_type_defaults(data)
             _apply_plate_exclusion_to_record(data)
             _insert_inbound_record_core(data, created_at, broadcast=False)
@@ -4374,6 +4467,15 @@ def update_record(record_id):
             data["pieces"] = 6 * 344
         else:
             data["pieces"] = int(load_amount) * 344
+    elif vt in ("CBS", "CBT"):
+        data.setdefault("unit", "托盘")
+        load_amount = data.get("load_amount", 0)
+        try:
+            la = int(load_amount)
+        except (TypeError, ValueError):
+            la = 0
+        if la > 0:
+            data["pieces"] = la * INBOUND_CBS_CBT_PIECES_PER_PALLET
     elif vt == "53英尺":
         data.setdefault("unit", "托盘")
         load_amount = data.get("load_amount", 0)
@@ -4388,6 +4490,13 @@ def update_record(record_id):
         elif data.get("pieces") and data["pieces"] > 0:
             data["load_amount"] = data["pieces"] // 344
 
+    if vt in ("CBS", "CBT"):
+        data["business_type"] = vt
+    else:
+        data["business_type"] = str(data.get("business_type") or "GOFO").strip().upper()
+        if data["business_type"] not in ("GOFO", "CBS", "CBT"):
+            data["business_type"] = "GOFO"
+
     _apply_plate_exclusion_to_record(data)
 
     conn = None
@@ -4401,12 +4510,13 @@ def update_record(record_id):
         print(f"[DEBUG] 原始记录: {old_record}")
         
         cursor = conn.cursor(); cursor.execute(convert_query_placeholders("""UPDATE inbound_records SET
-            dock_no=?, vehicle_type=?, vehicle_no=?, unit=?, load_amount=?, pieces=?, time_slot=?, shift_type=?, remark=?, duration=?, plate_excluded_load=?, excluded_pieces=?
+            dock_no=?, vehicle_type=?, vehicle_no=?, unit=?, load_amount=?, pieces=?, time_slot=?, shift_type=?, remark=?, duration=?, plate_excluded_load=?, excluded_pieces=?, business_type=?
             WHERE id=?"""),
             (data.get("dock_no"), data.get("vehicle_type"), data.get("vehicle_no"),
              data.get("unit"), data.get("load_amount"), data.get("pieces"),
              data.get("time_slot"), shift_type, data.get("remark"), data.get("duration"),
-             data.get("plate_excluded_load", 0), data.get("excluded_pieces", 0), record_id))
+             data.get("plate_excluded_load", 0), data.get("excluded_pieces", 0),
+             data.get("business_type") or "GOFO", record_id))
         
         print(f"[DEBUG] 更新操作影响的行数: {cursor.rowcount}")
         
@@ -4575,7 +4685,8 @@ def list_data():
         SELECT ir.id, ir.dock_no, ir.vehicle_type, ir.vehicle_no, ir.unit, ir.load_amount,
                ir.pieces, ir.time_slot, ir.shift_type, ir.remark, ir.created_at, ir.created_by,
                u.username as created_by_username, ir.duration,
-               ir.plate_excluded_load, ir.excluded_pieces
+               ir.plate_excluded_load, ir.excluded_pieces,
+               COALESCE(ir.business_type, 'GOFO') as business_type
         FROM inbound_records ir
         LEFT JOIN users u ON ir.created_by = u.id
         WHERE 
@@ -4600,6 +4711,7 @@ def list_data():
         "duration":r[13],  # 时长(分钟)
         "plate_excluded_load": r[14] if len(r) > 14 else 0,
         "excluded_pieces": r[15] if len(r) > 15 else 0,
+        "business_type": (r[16] if len(r) > 16 else None) or "GOFO",
         "pieces_actual": round(
             _py_inbound_arrival_pieces(
                 r[2], r[3], r[6], r[15] if len(r) > 15 else 0
@@ -6907,12 +7019,15 @@ def _v2_plan_to_schedule_config(plan, request_date):
 
 
 def _parse_stats_window_param(raw):
-    """calendar = 本地自然日 00:00–次日 00:00；business = 本地当日 05:00–次日 05:00（与 inbound_records.created_at 同一 naive 本地时钟）。"""
+    """calendar = 本地自然日 00:00–次日 00:00；business = 当日 05:00–次日 05:00；
+    seventeen = 当日 17:00–次日 17:00（均与 inbound_records.created_at 同一 naive 本地时钟）。"""
     if not raw:
         return 'calendar'
-    r = str(raw).strip().lower()
+    r = str(raw).strip().lower().replace('-', '_')
     if r in ('business', 'biz', 'b', '5', '05', 'shift', 'operational'):
         return 'business'
+    if r in ('seventeen', '17', '17_17', '17h', 'ops17', 'day17'):
+        return 'seventeen'
     return 'calendar'
 
 
@@ -6920,6 +7035,8 @@ def _default_stats_request_date(window_mode):
     now = datetime.now()
     d = now.date()
     if window_mode == 'business' and now.hour < 5:
+        return d - timedelta(days=1)
+    if window_mode == 'seventeen' and now.hour < 17:
         return d - timedelta(days=1)
     return d
 
@@ -6929,6 +7046,9 @@ def _stats_period_bounds(request_date, window_mode):
     if window_mode == 'business':
         start = datetime.combine(request_date, datetime.min.time().replace(hour=5))
         end = datetime.combine(next_d, datetime.min.time().replace(hour=5))
+    elif window_mode == 'seventeen':
+        start = datetime.combine(request_date, datetime.min.time().replace(hour=17))
+        end = datetime.combine(next_d, datetime.min.time().replace(hour=17))
     else:
         start = datetime.combine(request_date, datetime.min.time())
         end = datetime.combine(next_d, datetime.min.time())
@@ -6944,6 +7064,11 @@ def _sorting_slot_window_sql_binds(window_mode: str, d: date):
             "(sorting_time = ? AND time_slot >= '05:00') OR (sorting_time = ? AND time_slot < '05:00')"
         )
         return sql, (ds, nxt)
+    if window_mode == 'seventeen':
+        sql = (
+            "(sorting_time = ? AND time_slot >= '17:00') OR (sorting_time = ? AND time_slot < '17:00')"
+        )
+        return sql, (ds, nxt)
     return "sorting_time = ?", (ds,)
 
 
@@ -6956,6 +7081,11 @@ def _record_date_hour_window_sql_binds(window_mode: str, d: date):
             "(record_date = ? AND record_hour >= '05:00') OR (record_date = ? AND record_hour < '05:00')"
         )
         return sql, (ds, nxt)
+    if window_mode == 'seventeen':
+        sql = (
+            "(record_date = ? AND record_hour >= '17:00') OR (record_date = ? AND record_hour < '17:00')"
+        )
+        return sql, (ds, nxt)
     return "record_date = ?", (ds,)
 
 
@@ -6966,6 +7096,11 @@ def _record_date_slot_window_sql_binds(window_mode: str, d: date):
     if window_mode == 'business':
         sql = (
             "(record_date = ? AND time_slot >= '05:00') OR (record_date = ? AND time_slot < '05:00')"
+        )
+        return sql, (ds, nxt)
+    if window_mode == 'seventeen':
+        sql = (
+            "(record_date = ? AND time_slot >= '17:00') OR (record_date = ? AND time_slot < '17:00')"
         )
         return sql, (ds, nxt)
     return "record_date = ?", (ds,)
@@ -7545,6 +7680,30 @@ def get_statistics():
         print(f"Error calculating predicted vehicles: {e}")
         pass
 
+    cbs_today_pallets = cbs_today_pieces = cbt_today_pallets = cbt_today_pieces = 0
+    try:
+        cbc = conn.cursor()
+        cbc.execute(convert_query_placeholders("""
+            SELECT
+                COALESCE(SUM(CASE WHEN vehicle_type = 'CBS' THEN load_amount ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN vehicle_type = 'CBS' THEN (pieces - COALESCE(excluded_pieces, 0)) ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN vehicle_type = 'CBT' THEN load_amount ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN vehicle_type = 'CBT' THEN (pieces - COALESCE(excluded_pieces, 0)) ELSE 0 END), 0)
+            FROM inbound_records
+            WHERE created_at >= ? AND created_at < ?
+        """), (
+            period_start.strftime('%Y-%m-%d %H:%M:%S'),
+            period_end.strftime('%Y-%m-%d %H:%M:%S'),
+        ))
+        rw = cbc.fetchone()
+        if rw is not None:
+            cbs_today_pallets = int(float(rw[0] or 0))
+            cbs_today_pieces = int(float(rw[1] or 0))
+            cbt_today_pallets = int(float(rw[2] or 0))
+            cbt_today_pieces = int(float(rw[3] or 0))
+    except Exception as e_cbc:
+        print(f"[stats] CBS/CBT aggregate: {e_cbc}")
+
     conn.close()
     
     return jsonify({
@@ -7588,6 +7747,10 @@ def get_statistics():
         "next_time_slot": next_time_slot,
         "total_plate_excluded_load": round(total_plate_excluded_load, 4),
         "total_excluded_pieces": total_excluded_pieces_stat,
+        "cbs_today_pallets": cbs_today_pallets,
+        "cbs_today_pieces": cbs_today_pieces,
+        "cbt_today_pallets": cbt_today_pallets,
+        "cbt_today_pieces": cbt_today_pieces,
         "stats_window": window_mode,
         "stats_window_start": period_start.strftime('%Y-%m-%d %H:%M:%S'),
         "stats_window_end_exclusive": period_end.strftime('%Y-%m-%d %H:%M:%S'),
@@ -11929,8 +12092,10 @@ def _normalize_truck_destination_key(raw):
     norm = raw_s.strip().upper()
     if not norm:
         return ""
+    norm = norm.replace("\u2013", "-").replace("\u2014", "-").replace("\u2212", "-")
+    # 旧表写 ATL.G 表示 ATL 枢纽；仅替换片段，不要把「ATL.G-ATLG」整条误收成「ATL」。
     if "ATL.G" in norm:
-        return "ATL"
+        norm = norm.replace("ATL.G", "ATL")
     if norm.endswith(".H"):
         norm = norm[:-2]
     # 拉斯维加斯支线：表内可能写 LAV、LAV（往返）、LAV DROP、带不可见字符/导出差异等；凡以 LAV 开头一律归为 LAV，
@@ -11938,6 +12103,10 @@ def _normalize_truck_destination_key(raw):
     # LAX 不以 LAV 开头，不会误合并。
     if norm.startswith("LAV"):
         return "LAV"
+    # 与前端 route-distribution 一致：ORD-ORD / ATL-ATL 等自环收成单点。
+    m = re.match(r"^([A-Z0-9()]+)-\1$", norm)
+    if m:
+        norm = m.group(1)
     return norm.strip()
 
 
@@ -13270,18 +13439,24 @@ def _cc_time_point_key(rd, rh):
 
 
 def _stats_single_day_cc_axis(anchor_yyyy_mm_dd: str, window_mode: str):
-    """签入/集包单日图 24 时点：calendar=当日 00–23；business=05–次日 04（服务器本地锚点日）。"""
+    """签入/集包单日图 24 时点：calendar=当日 00–23；business=05–次日 04；seventeen=17–次日 16（服务器本地锚点日）。"""
     d = datetime.strptime(anchor_yyyy_mm_dd.strip(), '%Y-%m-%d').date()
     ds = d.strftime('%Y-%m-%d')
     next_ds = (d + timedelta(days=1)).strftime('%Y-%m-%d')
     time_points = []
     labels = []
     if window_mode == 'business':
+        h0 = 5
+    elif window_mode == 'seventeen':
+        h0 = 17
+    else:
+        h0 = None
+    if h0 is not None:
         for i in range(24):
-            h = (5 + i) % 24
+            h = (h0 + i) % 24
             rh = f"{h:02d}:00"
             labels.append(rh)
-            rd_use = ds if h >= 5 else next_ds
+            rd_use = ds if h >= h0 else next_ds
             time_points.append(_cc_time_point_key(rd_use, rh))
     else:
         for h in range(24):

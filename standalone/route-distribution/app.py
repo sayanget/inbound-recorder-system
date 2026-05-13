@@ -93,6 +93,20 @@ def resource_path(rel: str) -> str:
     return os.path.join(base, rel)
 
 
+def route_distribution_html_path() -> str:
+    """Frozen: bundled file. Dev: prefer repo static/ so 调度组模板与仓库一致."""
+    if getattr(sys, "frozen", False):
+        return resource_path(HTML_FILENAME)
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo_static = os.path.normpath(os.path.join(here, "..", "..", "static", HTML_FILENAME))
+    local = os.path.join(here, HTML_FILENAME)
+    if os.path.isfile(repo_static):
+        return repo_static
+    if os.path.isfile(local):
+        return local
+    return local
+
+
 def exe_dir() -> str:
     if getattr(sys, "frozen", False):
         return os.path.dirname(os.path.abspath(sys.executable))
@@ -768,15 +782,15 @@ def lan_scan(
 # ---------------------------------------------------------------------------
 # Free port finder
 # ---------------------------------------------------------------------------
-def find_free_port(preferred: int = 18080) -> int:
-    for port in (preferred, *range(18080, 18200)):
+def find_free_port(preferred: int = 9090) -> int:
+    for port in (preferred, *range(9090, 9210)):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.bind(("127.0.0.1", port))
                 return port
             except OSError:
                 continue
-    raise RuntimeError("No free port found in 18080-18199")
+    raise RuntimeError("No free port found in 9090-9209")
 
 
 # ---------------------------------------------------------------------------
@@ -1050,10 +1064,10 @@ def build_app() -> Flask:
     app = Flask(__name__)
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
-    html_path = resource_path(HTML_FILENAME)
+    html_path = route_distribution_html_path()
     if not os.path.exists(html_path):
         raise FileNotFoundError(
-            f"找不到 {HTML_FILENAME}，请确认文件与 app.py 同目录（或已打包进 exe）"
+            f"找不到 {HTML_FILENAME}：试过仓库 static/ 与同目录，请检查路径或重新从 static 复制"
         )
 
     def _load_html() -> str:
@@ -1269,7 +1283,7 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(description=APP_TITLE)
     parser.add_argument("--backend", help="Backend URL, e.g. http://192.168.0.250:8080")
-    parser.add_argument("--port", type=int, default=18080, help="Preferred local port")
+    parser.add_argument("--port", type=int, default=9090, help="Preferred local port")
     parser.add_argument("--no-browser", action="store_true", help="Don't auto-open browser")
     parser.add_argument("--skip-probe", action="store_true", help="Skip startup backend probe")
     args = parser.parse_args(argv)

@@ -65,7 +65,7 @@
   4. 双击 流向分布工具.exe 或桌面快捷方式启动
 
   首次启动会：
-    - 随机挑一个可用端口 (18080+)
+    - 随机挑一个可用端口 (9090+)
     - 自动打开默认浏览器 → http://127.0.0.1:<端口>/
     - 在 exe 同目录生成 config.txt 记录数据源
 
@@ -83,7 +83,7 @@
 
   常用参数：
 
-  python app.py --port 18088
+  python app.py --port 9091
   python app.py --backend http://10.0.0.5:8080
   python app.py --backend https://docs.google.com/spreadsheets/d/<ID>/edit
   python app.py --no-browser
@@ -144,7 +144,7 @@
 
   1. 命令行参数      流向分布工具.exe --backend http://host:port
   2. 环境变量        set ROUTE_DIST_BACKEND=http://host:port
-  3. 设置页 UI 保存  http://127.0.0.1:1808x/setup
+  3. 设置页 UI 保存  http://127.0.0.1:909x/setup
   4. config.txt      编辑 exe 同目录文件
 
   IP 经常变的话推荐用主机名 (http://server01:8080)
