@@ -2003,8 +2003,8 @@ def _gofo_collect_biz_day_trunk_branch(cursor, d: datetime.date, window_mode: st
     return int(_db_row_get(r, 0, 0) or 0), int(_db_row_get(r, 1, 0) or 0)
 
 
-def _sorting_biz_day_manual_device_total(cursor, d: datetime.date, window_mode: str = 'calendar') -> int:
-    """与 daily_packing_split 相同：锚点日 D 的 sorting_records 人工+设备件数合计。"""
+def _sorting_biz_day_manual_device_split(cursor, d: datetime.date, window_mode: str = 'calendar') -> tuple:
+    """锚点日 D 的 sorting_records 人工、设备件数；与 daily_packing_split 同源。"""
     clause, binds = _sorting_slot_window_sql_binds(window_mode, d)
     cursor.execute(
         convert_query_placeholders(
@@ -2019,6 +2019,12 @@ def _sorting_biz_day_manual_device_total(cursor, d: datetime.date, window_mode: 
     r = cursor.fetchone()
     m = int(_db_row_get(r, 0, 0) or 0)
     dv = int(_db_row_get(r, 1, 0) or 0)
+    return m, dv
+
+
+def _sorting_biz_day_manual_device_total(cursor, d: datetime.date, window_mode: str = 'calendar') -> int:
+    """与 daily_packing_split 相同：锚点日 D 的 sorting_records 人工+设备件数合计。"""
+    m, dv = _sorting_biz_day_manual_device_split(cursor, d, window_mode)
     return m + dv
 
 
@@ -2447,6 +2453,158 @@ def api_statistics_center_collect_week_comparison():
             except Exception:
                 pass
         return jsonify({'error': f'获取干线支线周环比出错: {str(e)}'}), 500
+
+
+@app.route('/api/statistics/packing_manual_device_week_comparison', methods=['GET'])
+def api_statistics_packing_manual_device_week_comparison():
+    """自然周（周一至周日）人工/设备堆叠；每日与 daily_packing_split 一致；周环比为相对上一完整自然周总件数。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        window_mode = _parse_stats_window_param(request.args.get('stats_window'))
+        min_str = None
+        try:
+            cursor.execute(
+                convert_query_placeholders("SELECT MIN(sorting_time) FROM sorting_records")
+            )
+            mr = cursor.fetchone()
+            min_str = _db_row_get(mr, 0, None) if mr else None
+        except Exception:
+            min_str = None
+
+        if not min_str:
+            conn.close()
+            return jsonify([])
+
+        try:
+            min_date = datetime.strptime(str(min_str)[:10], '%Y-%m-%d').date()
+        except ValueError:
+            conn.close()
+            return jsonify([])
+
+        max_date = datetime.now(LA_TZ).date()
+        end_raw = request.args.get('end_date') or request.args.get('date')
+        if end_raw:
+            try:
+                ed = datetime.strptime(str(end_raw)[:10], '%Y-%m-%d').date()
+                max_date = min(max_date, ed)
+            except ValueError:
+                pass
+
+        def get_natural_week_range(date):
+            weekday = date.weekday()
+            week_start = date - timedelta(days=weekday)
+            week_end = week_start + timedelta(days=6)
+            return week_start, week_end
+
+        data_first_monday, _ = get_natural_week_range(min_date)
+        last_monday_to_include, _ = get_natural_week_range(max_date)
+        loop_start = data_first_monday
+        loop_end_monday = last_monday_to_include
+        week_start_raw = request.args.get('week_start')
+        week_end_raw = request.args.get('week_end')
+        if week_start_raw:
+            try:
+                ws = datetime.strptime(str(week_start_raw)[:10], '%Y-%m-%d').date()
+                wm, _ = get_natural_week_range(ws)
+                loop_start = max(loop_start, wm)
+            except ValueError:
+                pass
+        if week_end_raw:
+            try:
+                we = datetime.strptime(str(week_end_raw)[:10], '%Y-%m-%d').date()
+                wm, _ = get_natural_week_range(we)
+                loop_end_monday = min(loop_end_monday, wm)
+            except ValueError:
+                pass
+        if loop_start > loop_end_monday:
+            conn.close()
+            return jsonify([])
+        week_span = (loop_end_monday - loop_start).days // 7 + 1
+        if week_span > 104:
+            conn.close()
+            return jsonify({'error': '周数区间过长（最多 104 周）'}), 400
+
+        current_start = loop_start
+        current_end = current_start + timedelta(days=6)
+        weeks_data = []
+
+        while current_start <= loop_end_monday:
+            daily_data = []
+            week_total_manual = 0
+            week_total_device = 0
+
+            for day_offset in range(7):
+                current_day = current_start + timedelta(days=day_offset)
+
+                if current_day > max_date:
+                    daily_data.append({
+                        'date': current_day.strftime('%Y-%m-%d'),
+                        'weekday': current_day.weekday(),
+                        'manual': 0,
+                        'device': 0,
+                        'total': 0,
+                    })
+                    continue
+
+                mn, dv = _sorting_biz_day_manual_device_split(cursor, current_day, window_mode)
+                tot = mn + dv
+                week_total_manual += mn
+                week_total_device += dv
+                daily_data.append({
+                    'date': current_day.strftime('%Y-%m-%d'),
+                    'weekday': current_day.weekday(),
+                    'manual': mn,
+                    'device': dv,
+                    'total': tot,
+                })
+
+            week_total = week_total_manual + week_total_device
+            total_change_percent = 0.0
+            if weeks_data:
+                last_tot = int(weeks_data[-1].get('week_total') or 0)
+                if last_tot > 0:
+                    total_change_percent = ((week_total - last_tot) / last_tot) * 100
+                else:
+                    total_change_percent = 100.0 if week_total > 0 else 0.0
+
+            weeks_data.append({
+                'week_label': f"{current_start.strftime('%m/%d')}-{current_end.strftime('%m/%d')}",
+                'start_date': current_start.strftime('%Y-%m-%d'),
+                'end_date': current_end.strftime('%Y-%m-%d'),
+                'daily_data': daily_data,
+                'week_total_manual': week_total_manual,
+                'week_total_device': week_total_device,
+                'week_total': week_total,
+                'total_change_percent': round(total_change_percent, 2),
+            })
+
+            current_start = current_start + timedelta(days=7)
+            current_end = current_end + timedelta(days=7)
+
+        conn.close()
+
+        if weeks_data and len(weeks_data) > 0:
+            first_week_start = datetime.strptime(weeks_data[0]['start_date'], '%Y-%m-%d').date()
+            if first_week_start < min_date:
+                weeks_data = weeks_data[1:]
+
+        if weeks_data and len(weeks_data) > 0:
+            weeks_data[0]['total_change_percent'] = 0
+
+        return jsonify(weeks_data)
+
+    except Exception as e:
+        if 'conn' in locals():
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return jsonify({'error': f'获取人工设备集包周环比出错: {str(e)}'}), 500
 
 
 @app.route('/consumables')

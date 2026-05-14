@@ -3,6 +3,14 @@ import time
 import sys
 import os
 import threading
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass
+
 import logging
 from logging.handlers import RotatingFileHandler
 import json
@@ -14,9 +22,6 @@ from urllib.parse import urlparse, parse_qs
 # Configuration
 # ==========================================
 APP_SCRIPT = "single_app.py"
-APP_PORT = 8080
-MONITOR_HOST = "0.0.0.0"
-MONITOR_PORT = 8081
 LOG_MAX_BYTES = 10 * 1024 * 1024  # 10MB
 LOG_BACKUP_COUNT = 5
 
@@ -35,6 +40,76 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("Monitor")
+
+
+def _port_from_env(*keys: str, default: int) -> int:
+    """First non-empty env among keys wins; invalid values log a warning and fall back to default."""
+    for k in keys:
+        raw = os.environ.get(k, "").strip()
+        if not raw:
+            continue
+        try:
+            return int(raw)
+        except ValueError:
+            logger.warning("Invalid %s=%r; using default port %s", k, raw, default)
+    return default
+
+
+def _tcp_can_bind(host: str, port: int) -> bool:
+    """True if we can bind an IPv4 TCP listener (detects Windows reserved ranges and busy ports)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+            return True
+        finally:
+            s.close()
+    except OSError:
+        return False
+
+
+def _first_bindable_tcp_port(host: str, preferred: int, fallbacks: tuple[int, ...], avoid: frozenset[int]) -> int:
+    for p in (preferred,) + fallbacks:
+        if p in avoid:
+            continue
+        if _tcp_can_bind(host, p):
+            return p
+    return preferred
+
+
+def _resolve_win32_listen_ports(host: str, app_port: int, monitor_port: int) -> tuple[int, int]:
+    """Hyper-V/WSL often reserve 8057-8156; 8080/8081 then fail with WinError 10013. Pick working ports."""
+    if sys.platform != "win32":
+        return app_port, monitor_port
+    mon_fb = (18081, 19081, 28181, 38981, 49876)
+    app_fb = (8780, 8781, 8880, 8980, 9080, 9180, 9280)
+    new_mon = _first_bindable_tcp_port(host, monitor_port, mon_fb, frozenset())
+    if new_mon != monitor_port:
+        logger.warning(
+            "Monitor: cannot bind %s:%s (reserved range or in use); using %s",
+            host,
+            monitor_port,
+            new_mon,
+        )
+    new_app = _first_bindable_tcp_port(host, app_port, app_fb, frozenset({new_mon}))
+    if new_app != app_port:
+        logger.warning(
+            "Managed app: cannot bind %s:%s (reserved range or in use); using PORT=%s",
+            host,
+            app_port,
+            new_app,
+        )
+    return new_app, new_mon
+
+
+# PORT / APP_PORT: managed app (single_app reads PORT). MONITOR_*: this HTTP monitor only.
+APP_PORT = _port_from_env("APP_PORT", "PORT", default=8080)
+MONITOR_PORT = _port_from_env("MONITOR_PORT", default=8081)
+MONITOR_HOST = (os.environ.get("MONITOR_HOST") or "0.0.0.0").strip() or "0.0.0.0"
+APP_PORT, MONITOR_PORT = _resolve_win32_listen_ports(MONITOR_HOST, APP_PORT, MONITOR_PORT)
+os.environ["PORT"] = str(APP_PORT)
+os.environ["MONITOR_PORT"] = str(MONITOR_PORT)
 
 
 def rotate_plain_log_if_needed(path: str, max_bytes: int = LOG_MAX_BYTES, backup_count: int = LOG_BACKUP_COUNT) -> None:
@@ -120,6 +195,7 @@ class AppManager:
             logger.info(f"Starting application: {APP_SCRIPT}")
             try:
                 env = os.environ.copy()
+                env["PORT"] = str(APP_PORT)
                 # Crucial for fixing "character maps to <undefined>" errors in Windows console
                 env['PYTHONIOENCODING'] = 'utf-8'
                 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -292,6 +368,24 @@ def supervisor_loop():
 
 if __name__ == '__main__':
     threading.Thread(target=supervisor_loop, daemon=True).start()
-    server = HTTPServer((MONITOR_HOST, MONITOR_PORT), MonitorHandler)
+    logger.info(
+        "Monitor listening on %s:%s; managed app port=%s (set MONITOR_PORT / PORT / APP_PORT to override)",
+        MONITOR_HOST,
+        MONITOR_PORT,
+        APP_PORT,
+    )
+    try:
+        server = HTTPServer((MONITOR_HOST, MONITOR_PORT), MonitorHandler)
+    except PermissionError as e:
+        if sys.platform == "win32" and getattr(e, "winerror", None) == 10013:
+            logger.error(
+                "Bind failed: %s:%s — WinError 10013 often means the port is in a Windows "
+                "reserved TCP range (Hyper-V / WSL / Docker). Run: "
+                "netsh interface ipv4 show excludedportrange protocol=tcp\n"
+                "Then set ports outside those ranges, e.g. set PORT=8780 & set MONITOR_PORT=18081",
+                MONITOR_HOST,
+                MONITOR_PORT,
+            )
+        raise
     try: server.serve_forever()
     except KeyboardInterrupt: manager.stop_app(); server.server_close()

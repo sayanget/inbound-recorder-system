@@ -741,6 +741,40 @@
             <div class="chart-container" style="height: 380px;">
                 <canvas id="dailyPackingSplitChart"></canvas>
             </div>
+            <details id="packingManualDeviceWowDetails"
+                style="margin-top:14px;border:1px solid var(--border-color,#ddd);border-radius:6px;padding:8px 12px 12px;background:var(--card-bg,#fafafa);">
+                <summary style="cursor:pointer;font-weight:600;padding:4px 0;list-style-position:outside;"
+                    data-lang="packing_manual_device_week_comparison_summary">（人工 / 设备）集包周环比</summary>
+                <p style="margin:8px 0 10px;font-size:12px;color:var(--text-muted,#666);line-height:1.4;"
+                    data-lang="packing_manual_device_wow_details_hint">自然周（周一至周日）；与上方每日集包及顶部统计口径一致。</p>
+                <div id="packingMdWowWeekRangeBar"
+                    style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 10px 0;font-size:13px;">
+                    <span data-lang="wow_week_range_label"
+                        style="color:var(--text-muted,#555);max-width:480px;line-height:1.35;"></span>
+                    <label style="display:inline-flex;align-items:center;gap:6px;">
+                        <span data-lang="wow_week_range_start">周区间起</span>
+                        <input type="date" id="packingMdWowWeekStart"
+                            style="padding:4px 8px;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:13px;" />
+                    </label>
+                    <label style="display:inline-flex;align-items:center;gap:6px;">
+                        <span data-lang="wow_week_range_end">周区间止</span>
+                        <input type="date" id="packingMdWowWeekEnd"
+                            style="padding:4px 8px;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:13px;" />
+                    </label>
+                    <button type="button" id="packingMdWowApplyWeekRangeBtn" class="nav-btn"
+                        style="padding:5px 14px;font-size:12px;cursor:pointer;background:var(--primary-color);color:#fff;border:none;border-radius:4px;">
+                        <span data-lang="wow_week_range_apply">应用</span>
+                    </button>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;margin-bottom:6px;">
+                    <button type="button" id="packingManualDeviceWeekComparisonChartExportBtn" class="nav-btn"
+                        style="padding:5px 12px;font-size:12px;cursor:pointer;background:#198754;color:#fff;border:none;border-radius:4px;"
+                        data-lang="export_excel">导出表格</button>
+                </div>
+                <div class="chart-container" style="height:400px;">
+                    <canvas id="packingManualDeviceWeekComparisonChart"></canvas>
+                </div>
+            </details>
         </div>
 
         <!-- Daily packing: trunk vs branch; total aligned to sorting manual+device, split ratio from board -->
@@ -1108,6 +1142,8 @@
                 daily_trend_total_row: "合计",
                 daily_trend_copy_success: "已复制到剪贴板",
                 daily_trend_copy_failed: "复制失败",
+                packing_manual_device_week_comparison_summary: "（人工 / 设备）集包周环比",
+                packing_manual_device_wow_details_hint: "自然周（周一至周日）；与上方每日集包及顶部统计口径一致。",
                 daily_packing_split_chart: "每日集包（人工 / 设备）",
                 daily_packing_split_hint: "按顶部所选统计口径（本地）统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
                 daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
@@ -1302,6 +1338,8 @@
                 daily_trend_total_row: "Total",
                 daily_trend_copy_success: "Copied to clipboard",
                 daily_trend_copy_failed: "Copy failed",
+                packing_manual_device_week_comparison_summary: "Weekly WoW (manual / device packing)",
+                packing_manual_device_wow_details_hint: "Calendar weeks (Mon–Sun); same stats window as the daily manual/device chart above.",
                 daily_packing_split_chart: "Daily packing (manual / device)",
                 daily_packing_split_hint: "Uses the selected stats window (local), last 14 days; bar height = daily total (manual+device); segment labels show share.",
                 daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
@@ -1491,6 +1529,8 @@
                 daily_trend_total_row: "Total",
                 daily_trend_copy_success: "Copiado al portapapeles",
                 daily_trend_copy_failed: "Error al copiar",
+                packing_manual_device_week_comparison_summary: "WoW semanal (empaque manual / dispositivo)",
+                packing_manual_device_wow_details_hint: "Semanas naturales (lun–dom); misma ventana de estadísticas que el gráfico diario manual/dispositivo superior.",
                 daily_packing_split_chart: "Empaque diario (manual / dispositivo)",
                 daily_packing_split_hint: "Ventana de estadísticas seleccionada (hora local), últimos 14 días; altura = total diario (manual+dispositivo); etiquetas = proporción.",
                 daily_packing_split_tooltip_footer: "(Proporción respecto al total manual+dispositivo del día)",
@@ -1609,6 +1649,9 @@
                 if (ds2[0]) ds2[0].label = t2.collect_trunk_label || '干线';
                 if (ds2[1]) ds2[1].label = t2.collect_branch_label || '支线';
                 window.dailyCenterCollectSplitChart.update();
+            }
+            if (typeof loadPackingManualDeviceWeekComparisonData === 'function') {
+                loadPackingManualDeviceWeekComparisonData();
             }
             if (typeof updateFloatingStatsNavState === 'function') {
                 updateFloatingStatsNavState();
@@ -1829,10 +1872,86 @@
             return { week_start: ws, week_end: we };
         }
 
+        function packingMdWowChartsWeekRangeForFetch() {
+            const sEl = document.getElementById('packingMdWowWeekStart');
+            const eEl = document.getElementById('packingMdWowWeekEnd');
+            let ws = (sEl && sEl.value && sEl.value.trim()) || '';
+            let we = (eEl && eEl.value && eEl.value.trim()) || '';
+            if (!we && currentDate) we = currentDate;
+            if (!ws && we) {
+                const p = we.split('-').map(x => parseInt(x, 10));
+                if (p.length !== 3 || p.some(n => Number.isNaN(n))) return { week_start: '', week_end: we };
+                const endD = new Date(p[0], p[1] - 1, p[2]);
+                const mon = new Date(endD.getTime());
+                mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+                mon.setDate(mon.getDate() - 7 * (WOW_CHARTS_DEFAULT_WEEK_COUNT - 1));
+                ws = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+            }
+            return { week_start: ws, week_end: we };
+        }
+
+        function packingMdWowChartsParseWeekRangeStrict() {
+            const t = translations[currentLang] || {};
+            const sEl = document.getElementById('packingMdWowWeekStart');
+            const eEl = document.getElementById('packingMdWowWeekEnd');
+            const ws = (sEl && sEl.value || '').trim();
+            const we = (eEl && eEl.value || '').trim();
+            if (!ws || !we) {
+                alert(t.wow_week_range_need_both || '请选择周区间起、止日期。');
+                return null;
+            }
+            const p0 = ws.split('-').map(x => parseInt(x, 10));
+            const p1 = we.split('-').map(x => parseInt(x, 10));
+            if (p0.length !== 3 || p1.length !== 3 || p0.some(n => Number.isNaN(n)) || p1.some(n => Number.isNaN(n))) {
+                alert(t.wow_week_range_need_both || '请选择周区间起、止日期。');
+                return null;
+            }
+            const d0 = new Date(p0[0], p0[1] - 1, p0[2]);
+            const d1 = new Date(p1[0], p1[1] - 1, p1[2]);
+            const m0 = new Date(d0.getTime());
+            m0.setDate(m0.getDate() - ((m0.getDay() + 6) % 7));
+            const m1 = new Date(d1.getTime());
+            m1.setDate(m1.getDate() - ((m1.getDay() + 6) % 7));
+            if (m0 > m1) {
+                alert(t.wow_week_range_order || '起始周不能晚于结束周。');
+                return null;
+            }
+            const weekCount = Math.floor((m1.getTime() - m0.getTime()) / (7 * 86400000)) + 1;
+            if (weekCount > 104) {
+                alert(t.wow_week_range_max_weeks || '最多 104 周。');
+                return null;
+            }
+            return { week_start: ws, week_end: we };
+        }
+
         function applyWowChartsWeekRange() {
             if (!wowChartsParseWeekRangeStrict()) return;
+            (function syncPackingMdWowFromMainWow() {
+                const ws = document.getElementById('wowChartsWeekStart');
+                const we = document.getElementById('wowChartsWeekEnd');
+                const ps = document.getElementById('packingMdWowWeekStart');
+                const pe = document.getElementById('packingMdWowWeekEnd');
+                if (ps && ws) ps.value = ws.value;
+                if (pe && we) pe.value = we.value;
+            })();
             loadWeekComparisonData();
             if (typeof loadCenterCollectWeekComparisonData === 'function') loadCenterCollectWeekComparisonData();
+            if (typeof loadPackingManualDeviceWeekComparisonData === 'function') loadPackingManualDeviceWeekComparisonData();
+        }
+
+        function applyPackingMdWowChartsWeekRange() {
+            if (!packingMdWowChartsParseWeekRangeStrict()) return;
+            (function syncMainWowFromPackingMd() {
+                const ws = document.getElementById('wowChartsWeekStart');
+                const we = document.getElementById('wowChartsWeekEnd');
+                const ps = document.getElementById('packingMdWowWeekStart');
+                const pe = document.getElementById('packingMdWowWeekEnd');
+                if (ws && ps) ws.value = ps.value;
+                if (we && pe) we.value = pe.value;
+            })();
+            loadWeekComparisonData();
+            if (typeof loadCenterCollectWeekComparisonData === 'function') loadCenterCollectWeekComparisonData();
+            if (typeof loadPackingManualDeviceWeekComparisonData === 'function') loadPackingManualDeviceWeekComparisonData();
         }
 
         function weeklyWaybillChartsWeekRangeForFetch() {
@@ -1916,6 +2035,24 @@
         function initWowChartsWeekRangeInputs(statsDateYmd) {
             const s = document.getElementById('wowChartsWeekStart');
             const e = document.getElementById('wowChartsWeekEnd');
+            const endBase = statsDateYmd || currentDate || '';
+            if (e && endBase) e.value = endBase;
+            const we = (e && e.value) || endBase;
+            if (s && we) {
+                const p = we.split('-').map(x => parseInt(x, 10));
+                if (p.length === 3 && !p.some(n => Number.isNaN(n))) {
+                    const endD = new Date(p[0], p[1] - 1, p[2]);
+                    const mon = new Date(endD.getTime());
+                    mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+                    mon.setDate(mon.getDate() - 7 * (WOW_CHARTS_DEFAULT_WEEK_COUNT - 1));
+                    s.value = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
+                }
+            }
+        }
+
+        function initPackingMdWowWeekRangeInputs(statsDateYmd) {
+            const s = document.getElementById('packingMdWowWeekStart');
+            const e = document.getElementById('packingMdWowWeekEnd');
             const endBase = statsDateYmd || currentDate || '';
             if (e && endBase) e.value = endBase;
             const we = (e && e.value) || endBase;
@@ -2040,6 +2177,7 @@
                 if (e) e.value = DAILY_PACKING_CHARTS_DEFAULT_RANGE.end;
             })();
             initWowChartsWeekRangeInputs(formattedDate);
+            initPackingMdWowWeekRangeInputs(formattedDate);
             initWeeklyWaybillChartsWeekRangeInputs(formattedDate);
 
             (function syncWeekComparisonBarSectionVisibility() {
@@ -2146,9 +2284,12 @@
             if (dailyPackRangeBtn) dailyPackRangeBtn.addEventListener('click', applyDailyPackingChartsRange);
             const wowWeekRangeBtn = document.getElementById('wowChartsApplyWeekRangeBtn');
             if (wowWeekRangeBtn) wowWeekRangeBtn.addEventListener('click', applyWowChartsWeekRange);
+            const packingMdWowWeekBtn = document.getElementById('packingMdWowApplyWeekRangeBtn');
+            if (packingMdWowWeekBtn) packingMdWowWeekBtn.addEventListener('click', applyPackingMdWowChartsWeekRange);
             const weeklyWbWeekRangeBtn = document.getElementById('weeklyWaybillChartsApplyWeekRangeBtn');
             if (weeklyWbWeekRangeBtn) weeklyWbWeekRangeBtn.addEventListener('click', applyWeeklyWaybillChartsWeekRange);
             bindStatsChartExportBtn('centerCollectWeekComparisonChartExportBtn', function () { return window.centerCollectWeekComparisonChart; }, 'center_collect_week_wow');
+            bindStatsChartExportBtn('packingManualDeviceWeekComparisonChartExportBtn', function () { return window.packingManualDeviceWeekComparisonChart; }, 'packing_manual_device_week_wow');
             bindStatsChartExportBtn('palletHourlyChartExportBtn', function () { return window.palletHourlyChart; }, 'pallet_hourly');
             bindStatsChartExportBtn('dailyTrendChartExportBtn', function () { return window.dailyTrendChart; }, 'daily_trend_chart');
             bindStatsChartExportBtn('weekComparisonChartExportBtn', function () { return window.weekComparisonChart; }, 'week_comparison');
@@ -6026,6 +6167,457 @@
             window.centerCollectWeekComparisonChart.update();
         }
 
+        function loadPackingManualDeviceWeekComparisonData() {
+            const r = packingMdWowChartsWeekRangeForFetch();
+            const qp = {};
+            if (currentDate) qp.end_date = currentDate;
+            if (r.week_start) qp.week_start = r.week_start;
+            if (r.week_end) qp.week_end = r.week_end;
+            const u = withStatsWindowParams('/api/statistics/packing_manual_device_week_comparison', qp);
+            fetch(u)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(j => Promise.reject(new Error(j.error || ('HTTP ' + response.status))));
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && !Array.isArray(data) && data.error) {
+                        console.error('packing_manual_device_week_comparison:', data.error);
+                        if (typeof showMessage === 'function') showMessage(String(data.error), 'error');
+                        renderPackingManualDeviceWeekComparisonChart(null);
+                        return;
+                    }
+                    renderPackingManualDeviceWeekComparisonChart(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching packing manual/device week comparison:', error);
+                    try {
+                        const canvas = document.getElementById('packingManualDeviceWeekComparisonChart');
+                        if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.font = '16px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillStyle = '#dc3545';
+                            ctx.fillText(translations[currentLang].error_loading_data || '加载数据出错', canvas.width / 2, canvas.height / 2);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                });
+        }
+
+        function renderPackingManualDeviceWeekComparisonChart(data) {
+            const canvasEl = document.getElementById('packingManualDeviceWeekComparisonChart');
+            if (!canvasEl) return;
+            const ctx = canvasEl.getContext('2d');
+            if (window.packingManualDeviceWeekComparisonChart && typeof window.packingManualDeviceWeekComparisonChart.destroy === 'function') {
+                window.packingManualDeviceWeekComparisonChart.destroy();
+            }
+            if (!data || data.length === 0) {
+                ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText(translations[currentLang].no_data || '暂无数据', canvasEl.width / 2, canvasEl.height / 2);
+                return;
+            }
+
+            const labels = data.map(week => {
+                const md = statsMdShort(week.start_date);
+                const wn = statsISOWeekNumber(week.start_date);
+                const weekLine = (wn === '' || wn == null)
+                    ? week.week_label
+                    : (currentLang === 'zh' ? `第${wn}周` : currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                return [md, weekLine];
+            });
+
+            const isMobile = window.innerWidth < 768;
+            const t = translations[currentLang];
+            const ml = t.packing_manual || '人工集包';
+            const dl = t.packing_device || '设备集包';
+
+            function weekPctManual(week) {
+                const tot = week.week_total || 0;
+                if (tot <= 0) return 0;
+                return (week.week_total_manual || 0) / tot * 100;
+            }
+            function weekPctDevice(week) {
+                const tot = week.week_total || 0;
+                if (tot <= 0) return 0;
+                return (week.week_total_device || 0) / tot * 100;
+            }
+
+            const lastWeekIdx = data.length - 1;
+            const manualWan = data.map(w => (w.week_total_manual || 0) / 10000);
+            const deviceWan = data.map(w => (w.week_total_device || 0) / 10000);
+            const changePercentData = data.map(week => week.total_change_percent);
+
+            function computeWeekFieldChangePercent(weeks, field) {
+                return weeks.map((w, i) => {
+                    if (i === 0) return 0;
+                    const prev = Number(weeks[i - 1][field]) || 0;
+                    const cur = Number(w[field]) || 0;
+                    if (prev > 0) return Math.round(((cur - prev) / prev) * 10000) / 100;
+                    return cur > 0 ? 100 : 0;
+                });
+            }
+            const manualChangeData = computeWeekFieldChangePercent(data, 'week_total_manual');
+            const deviceChangeData = computeWeekFieldChangePercent(data, 'week_total_device');
+
+            function pointColorsForSeries(series) {
+                return series.map(value => {
+                    if (value > 0) return '#FF6384';
+                    if (value < 0) return '#4BC0C0';
+                    return '#999999';
+                });
+            }
+            function pointColorsManual(series) {
+                return series.map(value => {
+                    if (value > 0) return '#2980b9';
+                    if (value < 0) return '#1f618d';
+                    return '#999999';
+                });
+            }
+            function pointColorsDevice(series) {
+                return series.map(value => {
+                    if (value > 0) return '#e67e22';
+                    if (value < 0) return '#ca6f1e';
+                    return '#999999';
+                });
+            }
+            const pointColors = pointColorsForSeries(changePercentData);
+
+            const wanSuffix = currentLang === 'en' ? '10k' : (currentLang === 'es' ? '×10k' : '万');
+            const datasets = [
+                {
+                    label: ml,
+                    data: manualWan,
+                    backgroundColor: 'rgba(54, 162, 235, 0.85)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y',
+                    datalabels: {
+                        display: function (ctx) {
+                            return weekPctManual(data[ctx.dataIndex]) >= 8;
+                        },
+                        color: '#fff',
+                        anchor: 'center',
+                        align: 'center',
+                        formatter: function (_value, ctx) {
+                            return weekPctManual(data[ctx.dataIndex]).toFixed(1).replace(/\.0$/, '') + '%';
+                        },
+                        font: { size: isMobile ? 10 : 12, weight: '600' }
+                    }
+                },
+                {
+                    label: dl,
+                    data: deviceWan,
+                    backgroundColor: 'rgba(255, 159, 64, 0.85)',
+                    borderColor: 'rgba(255, 159, 64, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y',
+                    datalabels: {
+                        labels: {
+                            segmentPct: {
+                                display: function (ctx) {
+                                    return weekPctDevice(data[ctx.dataIndex]) >= 8;
+                                },
+                                color: '#fff',
+                                anchor: 'center',
+                                align: 'center',
+                                formatter: function (_value, ctx) {
+                                    return weekPctDevice(data[ctx.dataIndex]).toFixed(1).replace(/\.0$/, '') + '%';
+                                },
+                                font: { size: isMobile ? 10 : 12, weight: '600' }
+                            },
+                            totalAbove: {
+                                display: function (ctx) {
+                                    return (data[ctx.dataIndex].week_total || 0) > 0;
+                                },
+                                color: '#333',
+                                anchor: 'end',
+                                align: 'top',
+                                offset: 4,
+                                formatter: function (_value, ctx) {
+                                    const w = data[ctx.dataIndex];
+                                    return (w.week_total / 10000).toFixed(1) + wanSuffix;
+                                },
+                                font: { weight: 'bold', size: isMobile ? 11 : 13 }
+                            }
+                        }
+                    }
+                },
+                {
+                    label: t.change_percent || '环比变化',
+                    type: 'line',
+                    data: changePercentData,
+                    borderColor: '#FF6384',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: false,
+                    yAxisID: 'y1',
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: pointColors,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    datalabels: {
+                        display: function (ctx) {
+                            const i = ctx.dataIndex;
+                            if (i === lastWeekIdx) return false;
+                            const p = Number(ctx.dataset.data[i]);
+                            if (p === undefined || p === null || Number.isNaN(p)) return false;
+                            if (i === 0 && Number(p) === 0) return false;
+                            return true;
+                        },
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 10,
+                        formatter: function (_value, ctx) {
+                            const p = Number(ctx.dataset.data[ctx.dataIndex]);
+                            const sign = p >= 0 ? '+' : '';
+                            return sign + p.toFixed(1) + '%';
+                        },
+                        font: { size: isMobile ? 10 : 12, weight: '600' },
+                        color: function (ctx) {
+                            const p = Number(ctx.dataset.data[ctx.dataIndex]);
+                            if (p > 0) return ctx.dataset.borderColor || '#FF6384';
+                            if (p < 0) return '#4BC0C0';
+                            return '#555';
+                        },
+                        backgroundColor: 'rgba(255,255,255,0.92)',
+                        borderRadius: 4,
+                        padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                        borderWidth: 1,
+                        borderColor: function (ctx) {
+                            const p = Number(ctx.dataset.data[ctx.dataIndex]);
+                            if (p < 0) return 'rgba(75,192,192,0.6)';
+                            if (p > 0) return 'rgba(255,99,132,0.5)';
+                            return '#ccc';
+                        }
+                    }
+                }
+            ];
+
+            function syncPackingMdWeekLineFromBars(chart) {
+                if (!chart || !chart.data || !chart.data.datasets[2]) return;
+                const v0 = chart.isDatasetVisible(0);
+                const v1 = chart.isDatasetVisible(1);
+                const lineDs = chart.data.datasets[2];
+                if (!v0 && !v1) {
+                    chart.hide(2);
+                    return;
+                }
+                chart.show(2);
+                let series;
+                let label;
+                let border;
+                let pts;
+                if (v0 && v1) {
+                    series = changePercentData;
+                    label = t.change_percent || '环比变化';
+                    border = '#FF6384';
+                    pts = pointColorsForSeries(series);
+                } else if (v0) {
+                    series = manualChangeData;
+                    label = `${ml} · ${t.change_percent || '环比'}`;
+                    border = 'rgba(54, 162, 235, 1)';
+                    pts = pointColorsManual(series);
+                } else {
+                    series = deviceChangeData;
+                    label = `${dl} · ${t.change_percent || '环比'}`;
+                    border = 'rgba(255, 159, 64, 1)';
+                    pts = pointColorsDevice(series);
+                }
+                lineDs.data = series.slice();
+                lineDs.label = label;
+                lineDs.borderColor = border;
+                lineDs.pointBackgroundColor = pts;
+            }
+
+            function activePackingMdWowPercent(weekIndex) {
+                const chart = window.packingManualDeviceWeekComparisonChart;
+                if (!chart) return data[weekIndex].total_change_percent;
+                const v0 = chart.isDatasetVisible(0);
+                const v1 = chart.isDatasetVisible(1);
+                if (v0 && v1) return data[weekIndex].total_change_percent;
+                if (v0) return manualChangeData[weekIndex];
+                if (v1) return deviceChangeData[weekIndex];
+                return data[weekIndex].total_change_percent;
+            }
+
+            const yBarTitle = (t.pieces || '件数') + ' (万)';
+            const chartTitle = t.packing_manual_device_week_comparison_summary || '（人工 / 设备）集包周环比';
+
+            window.packingManualDeviceWeekComparisonChart = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: labels, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            onClick: function (e, legendItem, legend) {
+                                const chart = legend.chart;
+                                const i = legendItem.datasetIndex;
+                                if (chart.isDatasetVisible(i)) {
+                                    chart.hide(i);
+                                    legendItem.hidden = true;
+                                } else {
+                                    chart.show(i);
+                                    legendItem.hidden = false;
+                                }
+                                if (i !== 2) {
+                                    syncPackingMdWeekLineFromBars(chart);
+                                }
+                                chart.update();
+                            },
+                            labels: {
+                                font: { size: isMobile ? 9 : 11 },
+                                boxWidth: isMobile ? 12 : 15,
+                                padding: isMobile ? 5 : 10
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: chartTitle,
+                            font: { size: isMobile ? 14 : 16 },
+                            padding: { top: isMobile ? 2 : 4, bottom: isMobile ? 22 : 30 }
+                        },
+                        tooltip: {
+                            filter: function (tooltipItem) {
+                                if (tooltipItem.datasetIndex === 2 && tooltipItem.dataIndex === lastWeekIdx) {
+                                    return false;
+                                }
+                                return true;
+                            },
+                            callbacks: {
+                                title: function (context) {
+                                    const weekIndex = context[0].dataIndex;
+                                    const week = data[weekIndex];
+                                    const wn = statsISOWeekNumber(week.start_date);
+                                    const wk = (wn === '' || wn == null)
+                                        ? week.week_label
+                                        : (currentLang === 'zh' ? `第${wn}周` :
+                                            currentLang === 'es' ? `S${wn}` : `W${wn}`);
+                                    return `${statsMdShort(week.start_date)} ${wk} (${week.start_date} ~ ${week.end_date})`;
+                                },
+                                label: function (context) {
+                                    const weekIndex = context.dataIndex;
+                                    const ds = context.datasetIndex;
+                                    const week = data[weekIndex];
+                                    if (ds === 2) {
+                                        const p = context.parsed.y;
+                                        const sign = p >= 0 ? '+' : '';
+                                        const trend = p > 0 ? '↑' : (p < 0 ? '↓' : '→');
+                                        const lineLegend = context.chart.data.datasets[2].label || (t.change_percent || '环比');
+                                        return `${lineLegend}: ${sign}${Number(p).toFixed(1)}% ${trend}`;
+                                    }
+                                    const pm = weekPctManual(week);
+                                    const pd = weekPctDevice(week);
+                                    if (ds === 0) {
+                                        const wan = context.parsed.y.toFixed(2);
+                                        return `${ml}: ${(week.week_total_manual || 0).toLocaleString()} (${wan}${wanSuffix}) · ${pm.toFixed(1)}%`;
+                                    }
+                                    const wan = context.parsed.y.toFixed(2);
+                                    return `${dl}: ${(week.week_total_device || 0).toLocaleString()} (${wan}${wanSuffix}) · ${pd.toFixed(1)}%`;
+                                },
+                                footer: function (context) {
+                                    if (context.length === 1 && context[0].datasetIndex === 2) return '';
+                                    const weekIndex = context[0].dataIndex;
+                                    const week = data[weekIndex];
+                                    const totalWan = (week.week_total / 10000).toFixed(2);
+                                    let footer = `\n${t.week_total || '周总计'}: ${week.week_total.toLocaleString()} (${totalWan}${wanSuffix})`;
+                                    footer += `\n${ml}: ${(week.week_total_manual || 0).toLocaleString()} · ${dl}: ${(week.week_total_device || 0).toLocaleString()}`;
+                                    if (weekIndex !== lastWeekIdx) {
+                                        const wow = activePackingMdWowPercent(weekIndex);
+                                        if (wow !== undefined && wow !== null && Number(wow) !== 0) {
+                                            const sign = Number(wow) >= 0 ? '+' : '';
+                                            footer += `\n${t.change_percent || '环比'}: ${sign}${wow}%`;
+                                        }
+                                    }
+                                    return footer;
+                                },
+                                labelColor: function (context) {
+                                    if (context.datasetIndex === 2) {
+                                        const p = context.parsed.y;
+                                        let color = '#999999';
+                                        if (p > 0) color = context.dataset.borderColor || '#FF6384';
+                                        else if (p < 0) color = '#4BC0C0';
+                                        return { borderColor: color, backgroundColor: color };
+                                    }
+                                    return {
+                                        borderColor: context.dataset.borderColor,
+                                        backgroundColor: context.dataset.backgroundColor
+                                    };
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: currentLang === 'zh' ? '日期 / 周数' :
+                                    currentLang === 'en' ? 'Date / Week #' : 'Fecha / Sem.',
+                                font: { size: isMobile ? 12 : 14 }
+                            },
+                            ticks: { font: { size: isMobile ? 8 : 10 } }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: yBarTitle,
+                                font: { size: isMobile ? 12 : 14 }
+                            },
+                            ticks: {
+                                callback: function (value) {
+                                    return Number(value).toFixed(1);
+                                },
+                                font: { size: isMobile ? 10 : 12 }
+                            }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            title: {
+                                display: true,
+                                text: (t.change_percent || '环比') + ' (%)',
+                                font: { size: isMobile ? 12 : 14 }
+                            },
+                            ticks: {
+                                callback: function (value) {
+                                    return Number(value).toFixed(1) + '%';
+                                },
+                                font: { size: isMobile ? 10 : 12 }
+                            }
+                        }
+                    },
+                    interaction: { intersect: false, mode: 'index' },
+                    layout: {
+                        padding: {
+                            top: isMobile ? 44 : 56,
+                            right: isMobile ? 10 : 20,
+                            bottom: isMobile ? 10 : 20,
+                            left: isMobile ? 10 : 20
+                        }
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
+            syncPackingMdWeekLineFromBars(window.packingManualDeviceWeekComparisonChart);
+            window.packingManualDeviceWeekComparisonChart.update();
+        }
+
         // Show message function
         function showMessage(text, type) {
             const messageDiv = document.getElementById('message');
@@ -6250,6 +6842,9 @@
             loadWeekComparisonData();
             if (typeof loadCenterCollectWeekComparisonData === 'function') {
                 loadCenterCollectWeekComparisonData();
+            }
+            if (typeof loadPackingManualDeviceWeekComparisonData === 'function') {
+                loadPackingManualDeviceWeekComparisonData();
             }
         }
 

@@ -142,6 +142,7 @@ schema_dump.txt
 trace_output.txt
 update_result.txt
 watchdog.log
+app_stdout.log*
 
 # Email configuration (contains sensitive data)
 email_config.py

@@ -15,7 +15,8 @@ echo ========================================
 echo   Inbound Recorder - HA Monitor
 echo ========================================
 echo.
-echo Monitor port: 8081   App port: 8080
+echo Default ports: monitor 8081, app 8080 ^(override with MONITOR_PORT / PORT / APP_PORT^)
+echo On Windows Hyper-V/WSL, 8057-8156 are often reserved — use e.g. MONITOR_PORT=18081 PORT=8780
 echo.
 
 REM Neon sync watch: set NEON_SYNC_WITH_MONITOR=0 to skip
