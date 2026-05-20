@@ -8,6 +8,7 @@ CNO 直线窄带分拣机（Gofo operatelog）按小时产能同步。
   重拉「今日 LA 从 0 点至今」各小时并 UPSERT 入库。
 - 接口限制：单窗命中总条数 >10000 会报错；实际按 env CNO_NARROWBELT_OPERLOG_CHUNK_MINUTES（默认 5）
   分钟切片拉取，仍失败则自动降为 1 分钟、再不行 20 秒。
+- 件数：同时写入 **pieces**（operatelog 逐条、映射到产线即 +1）与 **pieces_deduped**（按 运单号+scanTypeStr+操作员 去重后再计）。统计页可切换展示口径。
 """
 from __future__ import annotations
 
@@ -239,44 +240,54 @@ def fetch_operatelog_window(
     return combined
 
 
-def counts_by_production_line(rows: List[Dict[str, Any]]) -> Dict[str, int]:
-    """按运单+类型+操作员去重后，按生产线 A-D 计数。"""
-    seen = set()
-    counts: Dict[str, int] = {k: 0 for k in LINE_NAMES}
+def counts_by_production_line_both(
+    rows: List[Dict[str, Any]],
+) -> tuple[Dict[str, int], Dict[str, int]]:
+    """返回 (逐条计数, 去重计数)：去重键 (waybillNo, scanTypeStr, createByName)。"""
+    raw: Dict[str, int] = {k: 0 for k in LINE_NAMES}
+    dedup: Dict[str, int] = {k: 0 for k in LINE_NAMES}
+    seen: set = set()
     for r in rows:
         op = r.get("createByName")
         line = narrowbelt_line_from_operator(op)
         if not line:
             continue
+        raw[line] = raw.get(line, 0) + 1
         waybill = r.get("waybillNo") or ""
         st = r.get("scanTypeStr") or ""
         key = (waybill, st, op)
         if key in seen:
             continue
         seen.add(key)
-        counts[line] = counts.get(line, 0) + 1
-    return counts
+        dedup[line] = dedup.get(line, 0) + 1
+    return raw, dedup
 
 
 def _persist_rows(
-    record_date: str, time_slot: str, counts: Dict[str, int], synced_at: str
+    record_date: str,
+    time_slot: str,
+    counts_raw: Dict[str, int],
+    counts_dedup: Dict[str, int],
+    synced_at: str,
 ) -> None:
     from single_app import get_db
 
     conn = get_db()
     cur = conn.cursor()
     for line in LINE_NAMES:
-        n = int(counts.get(line, 0))
+        n_raw = int(counts_raw.get(line, 0))
+        n_ded = int(counts_dedup.get(line, 0))
         cur.execute(
             """
             INSERT INTO cno_narrowbelt_hourly
-                (record_date, time_slot, line_code, pieces, synced_at)
-            VALUES (?, ?, ?, ?, ?)
+                (record_date, time_slot, line_code, pieces, pieces_deduped, synced_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(record_date, time_slot, line_code) DO UPDATE SET
                 pieces = excluded.pieces,
+                pieces_deduped = excluded.pieces_deduped,
                 synced_at = excluded.synced_at
             """,
-            (record_date, time_slot, line, n, synced_at),
+            (record_date, time_slot, line, n_raw, n_ded, synced_at),
         )
     conn.commit()
     conn.close()
@@ -293,6 +304,7 @@ def sync_one_la_window(start_la: datetime, end_la: datetime) -> Dict[str, Any]:
             "record_date": start_la.strftime("%Y-%m-%d"),
             "time_slot": start_la.strftime("%H:00"),
             "counts": {k: 0 for k in LINE_NAMES},
+            "counts_deduped": {k: 0 for k in LINE_NAMES},
             "raw_rows": 0,
         }
 
@@ -303,13 +315,14 @@ def sync_one_la_window(start_la: datetime, end_la: datetime) -> Dict[str, Any]:
     synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
     rows = fetch_operatelog_window(begin_str, end_str)
-    counts = counts_by_production_line(rows)
-    _persist_rows(record_date, time_slot, counts, synced_at)
+    counts_raw, counts_dedup = counts_by_production_line_both(rows)
+    _persist_rows(record_date, time_slot, counts_raw, counts_dedup, synced_at)
     return {
         "success": True,
         "record_date": record_date,
         "time_slot": time_slot,
-        "counts": counts,
+        "counts": counts_raw,
+        "counts_deduped": counts_dedup,
         "raw_rows": len(rows),
     }
 

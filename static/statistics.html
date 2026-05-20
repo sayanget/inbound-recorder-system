@@ -691,6 +691,13 @@
                 style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
                 <h3 style="margin:0;" data-lang="cno_narrowbelt_hourly_chart">CNO 直线窄带分拣产能（按线）</h3>
                 <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                <span data-lang="cno_narrowbelt_count_label" style="font-size:13px;color:var(--text-muted,#666);white-space:nowrap;">计数口径</span>
+                <div class="stats-window-seg" role="group" aria-label="CNO narrowbelt count mode">
+                    <button type="button" id="cnoNarrowbeltCountRawBtn" class="segment-btn active"
+                        data-lang="cno_narrowbelt_count_raw">逐条</button>
+                    <button type="button" id="cnoNarrowbeltCountDedupedBtn" class="segment-btn"
+                        data-lang="cno_narrowbelt_count_deduped">去重</button>
+                </div>
                 <button type="button" id="cnoNarrowbeltChartExportBtn" class="nav-btn"
                     style="padding:6px 14px; font-size:13px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
@@ -700,6 +707,7 @@
                 </button>
                 </div>
             </div>
+            <div id="cnoNarrowbeltDedupHint" style="display:none; margin:0 0 10px 0;"></div>
             <div class="chart-container" style="min-height: 320px;">
                 <canvas id="cnoNarrowbeltHourlyCanvas"></canvas>
             </div>
@@ -716,10 +724,26 @@
             <div
                 style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;">
                 <h3 style="margin:0;" data-lang="daily_packing_split_chart">每日集包（人工 / 设备）</h3>
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                <span data-lang="daily_packing_count_label" style="font-size:13px;color:var(--text-muted,#666);white-space:nowrap;">计数口径</span>
+                <div class="stats-window-seg" role="group" aria-label="Daily packing count mode">
+                    <button type="button" id="dailyPackingCountBoardBtn" class="segment-btn active"
+                        data-lang="daily_packing_count_board">去重（看板）</button>
+                    <button type="button" id="dailyPackingCountRawBtn" class="segment-btn"
+                        data-lang="daily_packing_count_raw">逐条（日志）</button>
+                </div>
+                <button type="button" id="dailyPackingBoardSyncBtn" class="nav-btn"
+                    style="padding:5px 12px; font-size:12px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
+                    data-lang="daily_packing_board_sync_btn">同步看板</button>
+                <button type="button" id="dailyPackingOperlogSyncBtn" class="nav-btn"
+                    style="display:none; padding:5px 12px; font-size:12px; cursor:pointer; background:#6c757d; color:#fff; border:none; border-radius:4px;"
+                    data-lang="daily_packing_operlog_sync_btn">同步日志</button>
                 <button type="button" id="dailyPackingSplitChartExportBtn" class="nav-btn"
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
+                </div>
             </div>
+            <div id="dailyPackingCountHint" style="display:none; margin:0 0 10px 0;"></div>
             <div id="dailyPackingChartsRangeBar"
                 style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 10px 0; font-size:13px;">
                 <span data-lang="daily_packing_range_label" style="color:var(--text-muted, #555); max-width:420px; line-height:1.35;"></span>
@@ -1090,8 +1114,13 @@
                 inbound_sorting_difference: "入库与分拣差异",
                 inbound_sorting_comparison_chart_title: "集包净入与分拣件数时段对比",
                 sorting_capacity_chart_title: "集包产能分时图",
+                cno_narrowbelt_dedup_fallback_hint: "当前「去重」仍按逐条显示：库中该时段的去重列未写入或与逐条相同。请对相应日期执行窄带同步（整点任务或管理端按日同步）后刷新；若同步后仍一致，表示该时段内无重复扫描键。",
+                cno_narrowbelt_dedup_partial_hint: "部分时段未写入去重列，这些时段仍按逐条显示；已写入的时段为去重口径。建议补同步该运营日数据。",
+                cno_narrowbelt_count_label: "窄带计数",
+                cno_narrowbelt_count_raw: "逐条（不去重）",
+                cno_narrowbelt_count_deduped: "去重（运单+类型+操作员）",
                 cno_narrowbelt_hourly_chart: "CNO 直线窄带分拣产能（按线）",
-                cno_narrowbelt_hourly_sub: "数据来源：Gofo 操作日志（scan 217）；横轴与上方集包产能分时图一致，按顶部所选统计口径（本地自然日 / 05–次日05 / 17–次日17）对齐。",
+                cno_narrowbelt_hourly_sub: "数据来源：Gofo 操作日志（scan 217）；横轴与上方集包产能分时图一致，按顶部所选统计口径（本地自然日 / 05–次日05 / 17–次日17）对齐。右上角可切换「逐条 / 去重」两套件数口径。",
                 cno_narrowbelt_hourly_title: "CNO 窄带分拣机 各产线分时件数",
                 cno_narrowbelt_line_a: "产线 A（AA）",
                 cno_narrowbelt_line_b: "产线 B（AB）",
@@ -1145,6 +1174,17 @@
                 packing_manual_device_week_comparison_summary: "（人工 / 设备）集包周环比",
                 packing_manual_device_wow_details_hint: "自然周（周一至周日）；与上方每日集包及顶部统计口径一致。",
                 daily_packing_split_chart: "每日集包（人工 / 设备）",
+                daily_packing_count_label: "计数口径",
+                daily_packing_count_board: "看板（Gofo）",
+                daily_packing_count_raw: "逐条（日志）",
+                daily_packing_operlog_sync_hint: "部分日期操作日志同步失败，已回退为看板分拣数据；请稍后重试或联系管理员补同步。",
+                daily_packing_operlog_cache_hint: "部分日期尚无 operlog 缓存，该日显示为 0；点击「同步日志」拉取逐条数据（较慢，仅当前区间）。",
+                daily_packing_incomplete_hours_hint: "部分日期小时槽不足 24 条，看板同步可能未齐全，可在管理端对区间执行 Gofo 分拣回填。",
+                daily_packing_operlog_raw_hint: "逐条：操作日志 scan 217；人工含 AAS/UNS 等分拣台，设备主要为 CNO 窄带/DWS 等（与看板 Artificial/Device 对齐）。需先「同步日志」。",
+                daily_packing_board_sync_btn: "同步看板",
+                daily_packing_board_cache_hint: "部分日期未缓存 Gofo 看板日汇总，当前为小时累加值，与看板人工/设备可能不一致；请点击「同步看板」。",
+                daily_packing_operlog_sync_btn: "同步日志",
+                daily_packing_chart_loading: "加载中…",
                 daily_packing_split_hint: "按顶部所选统计口径（本地）统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
                 daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
                 daily_packing_range_label: "显示区间（与顶部统计口径一致的锚点日，含首尾；下图「干线/支线」同步）",
@@ -1286,8 +1326,13 @@
                 inbound_sorting_difference: "Inbound vs Sorting Diff.",
                 inbound_sorting_comparison_chart_title: "Net pack-in vs sorted pieces by hour",
                 sorting_capacity_chart_title: "Sorting Capacity Hourly Chart",
+                cno_narrowbelt_dedup_fallback_hint: "Dedup mode still matches per-log counts: dedup column missing or identical for this window. Re-sync narrowbelt for this date (hourly job or admin day sync) and refresh. If still equal, there were no duplicate scan keys.",
+                cno_narrowbelt_dedup_partial_hint: "Some slots lack dedup counts and still use per-log numbers; filled slots use dedup. Consider re-syncing this operating day.",
+                cno_narrowbelt_count_label: "Count mode",
+                cno_narrowbelt_count_raw: "Per log line",
+                cno_narrowbelt_count_deduped: "Dedup (waybill+type+op)",
                 cno_narrowbelt_hourly_chart: "CNO narrow-belt sorter (by line)",
-                cno_narrowbelt_hourly_sub: "Gofo operation log (scan 217). X-axis matches the capacity chart, aligned to the stats window (local calendar / 05–next 05 / 17–next 17).",
+                cno_narrowbelt_hourly_sub: "Gofo operation log (scan 217). X-axis matches the capacity chart, aligned to the stats window (local calendar / 05–next 05 / 17–next 17). Toggle per-log vs deduped counts at top right.",
                 cno_narrowbelt_hourly_title: "Pieces per hour by production line",
                 cno_narrowbelt_line_a: "Line A (AA)",
                 cno_narrowbelt_line_b: "Line B (AB)",
@@ -1341,6 +1386,17 @@
                 packing_manual_device_week_comparison_summary: "Weekly WoW (manual / device packing)",
                 packing_manual_device_wow_details_hint: "Calendar weeks (Mon–Sun); same stats window as the daily manual/device chart above.",
                 daily_packing_split_chart: "Daily packing (manual / device)",
+                daily_packing_count_label: "Count mode",
+                daily_packing_count_board: "Board (deduped)",
+                daily_packing_count_raw: "Per log line",
+                daily_packing_operlog_sync_hint: "Operlog sync failed for some days; fell back to board sorting data. Retry later or ask admin to backfill.",
+                daily_packing_operlog_cache_hint: "Some days have no operlog cache (shown as 0). Click Sync operlog (slow, current range).",
+                daily_packing_incomplete_hours_hint: "Some days have fewer than 24 hourly slots; run Gofo sorting backfill for the range.",
+                daily_packing_operlog_raw_hint: "Per log: operatelog scan 217, manual/device by operator name rules; may differ from board deduped counts.",
+                daily_packing_board_sync_btn: "Sync board",
+                daily_packing_board_cache_hint: "Some days lack Gofo board daily totals (showing hourly sums). Click Sync board.",
+                daily_packing_operlog_sync_btn: "Sync operlog",
+                daily_packing_chart_loading: "Loading…",
                 daily_packing_split_hint: "Uses the selected stats window (local), last 14 days; bar height = daily total (manual+device); segment labels show share.",
                 daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
                 daily_packing_range_label: "Range (anchor dates per stats window, inclusive; trunk/branch chart below matches)",
@@ -1477,8 +1533,13 @@
                 combined_capacity: "Manual + equipo (total)",
                 cno01_collect_waybills: "CNO01 empaquetado (guías)",
                 sorting_capacity_chart_title: "Gráfico Horario de Capacidad de Clasificación",
+                cno_narrowbelt_dedup_fallback_hint: "Modo dedup igual al conteo por registro: falta la columna dedup o coincide. Vuelva a sincronizar el estrecho para esta fecha. Si sigue igual, no hubo claves duplicadas.",
+                cno_narrowbelt_dedup_partial_hint: "Algunas franjas sin dedup (siguen por registro); las demás usan dedup. Re-sincronice el día operativo.",
+                cno_narrowbelt_count_label: "Conteo",
+                cno_narrowbelt_count_raw: "Por registro",
+                cno_narrowbelt_count_deduped: "Dedup (guía+tipo+op)",
                 cno_narrowbelt_hourly_chart: "Clasificador estrecho CNO (por línea)",
-                cno_narrowbelt_hourly_sub: "Registro Gofo (scan 217). Eje X alineado al gráfico de capacidad y a la ventana de estadísticas (día natural local / 05–siguiente 05 / 17–siguiente 17).",
+                cno_narrowbelt_hourly_sub: "Registro Gofo (scan 217). Eje X alineado al gráfico de capacidad y a la ventana de estadísticas (día natural local / 05–siguiente 05 / 17–siguiente 17). Arriba a la derecha: alternar conteo por registro vs deduplicado.",
                 cno_narrowbelt_hourly_title: "Piezas por hora por línea",
                 cno_narrowbelt_line_a: "Línea A (AA)",
                 cno_narrowbelt_line_b: "Línea B (AB)",
@@ -1532,6 +1593,17 @@
                 packing_manual_device_week_comparison_summary: "WoW semanal (empaque manual / dispositivo)",
                 packing_manual_device_wow_details_hint: "Semanas naturales (lun–dom); misma ventana de estadísticas que el gráfico diario manual/dispositivo superior.",
                 daily_packing_split_chart: "Empaque diario (manual / dispositivo)",
+                daily_packing_count_label: "Modo de conteo",
+                daily_packing_count_board: "Tablero (dedup)",
+                daily_packing_count_raw: "Por registro",
+                daily_packing_operlog_sync_hint: "Falló sync de operlog en algunos días; se usó dato del tablero. Reintente o pida resincronización.",
+                daily_packing_operlog_cache_hint: "Días sin caché operlog se muestran como 0. Pulse Sincronizar operlog (lento).",
+                daily_packing_incomplete_hours_hint: "Algunos días tienen menos de 24 franjas horarias; rellene desde Gofo.",
+                daily_packing_operlog_raw_hint: "Por registro: operlog scan 217; manual/dispositivo por reglas de nombre; puede diferir del tablero.",
+                daily_packing_board_sync_btn: "Sincronizar tablero",
+                daily_packing_board_cache_hint: "Faltan totales diarios del tablero Gofo; pulse Sincronizar tablero.",
+                daily_packing_operlog_sync_btn: "Sincronizar operlog",
+                daily_packing_chart_loading: "Cargando…",
                 daily_packing_split_hint: "Ventana de estadísticas seleccionada (hora local), últimos 14 días; altura = total diario (manual+dispositivo); etiquetas = proporción.",
                 daily_packing_split_tooltip_footer: "(Proporción respecto al total manual+dispositivo del día)",
                 daily_packing_range_label: "Rango (fechas ancla según ventana de estadísticas, inclusive; el gráfico troncal/ramal debajo coincide)",
@@ -1633,15 +1705,13 @@
             if (window.hourlyChart) {
                 loadHourlyComparisonData();
             }
-            if (window.cnoNarrowbeltHourlyChartInstance) {
+            syncCnoNarrowbeltCountModeUi();
+            syncDailyPackingCountModeUi();
+            if (typeof loadCnoNarrowbeltHourlyData === 'function') {
                 loadCnoNarrowbeltHourlyData();
             }
-            if (window.dailyPackingSplitChart && window.dailyPackingSplitChart.data && window.dailyPackingSplitChart.data.datasets) {
-                const ds = window.dailyPackingSplitChart.data.datasets;
-                const t = translations[lang];
-                if (ds[0]) ds[0].label = t.packing_manual || '人工集包';
-                if (ds[1]) ds[1].label = t.packing_device || '设备集包';
-                window.dailyPackingSplitChart.update();
+            if (typeof loadDailyPackingSplitData === 'function') {
+                loadDailyPackingSplitData();
             }
             if (window.dailyCenterCollectSplitChart && window.dailyCenterCollectSplitChart.data && window.dailyCenterCollectSplitChart.data.datasets) {
                 const ds2 = window.dailyCenterCollectSplitChart.data.datasets;
@@ -1733,6 +1803,66 @@
             return q ? `${base}?${q}` : base;
         }
 
+        const CNO_NARROWBELT_COUNT_MODE_LS = 'cno_narrowbelt_count_mode';
+
+        function getCnoNarrowbeltCountMode() {
+            const v = (localStorage.getItem(CNO_NARROWBELT_COUNT_MODE_LS) || 'raw').toLowerCase();
+            return v === 'deduped' ? 'deduped' : 'raw';
+        }
+
+        function setCnoNarrowbeltCountMode(mode) {
+            const m = (mode === 'deduped') ? 'deduped' : 'raw';
+            localStorage.setItem(CNO_NARROWBELT_COUNT_MODE_LS, m);
+            syncCnoNarrowbeltCountModeUi();
+        }
+
+        function syncCnoNarrowbeltCountModeUi() {
+            const m = getCnoNarrowbeltCountMode();
+            const rBtn = document.getElementById('cnoNarrowbeltCountRawBtn');
+            const dBtn = document.getElementById('cnoNarrowbeltCountDedupedBtn');
+            const rawOn = m !== 'deduped';
+            if (rBtn) {
+                rBtn.classList.toggle('active', rawOn);
+                rBtn.setAttribute('aria-pressed', rawOn ? 'true' : 'false');
+            }
+            if (dBtn) {
+                dBtn.classList.toggle('active', !rawOn);
+                dBtn.setAttribute('aria-pressed', !rawOn ? 'true' : 'false');
+            }
+        }
+
+        const DAILY_PACKING_COUNT_MODE_LS = 'daily_packing_count_mode';
+
+        function getDailyPackingCountMode() {
+            const v = (localStorage.getItem(DAILY_PACKING_COUNT_MODE_LS) || 'board').toLowerCase();
+            return v === 'raw' ? 'raw' : 'board';
+        }
+
+        function setDailyPackingCountMode(mode) {
+            const m = mode === 'raw' ? 'raw' : 'board';
+            localStorage.setItem(DAILY_PACKING_COUNT_MODE_LS, m);
+            syncDailyPackingCountModeUi();
+        }
+
+        function syncDailyPackingCountModeUi() {
+            const m = getDailyPackingCountMode();
+            const boardBtn = document.getElementById('dailyPackingCountBoardBtn');
+            const rawBtn = document.getElementById('dailyPackingCountRawBtn');
+            const operlogSyncBtn = document.getElementById('dailyPackingOperlogSyncBtn');
+            const boardSyncBtn = document.getElementById('dailyPackingBoardSyncBtn');
+            const boardOn = m !== 'raw';
+            if (boardBtn) {
+                boardBtn.classList.toggle('active', boardOn);
+                boardBtn.setAttribute('aria-pressed', boardOn ? 'true' : 'false');
+            }
+            if (rawBtn) {
+                rawBtn.classList.toggle('active', !boardOn);
+                rawBtn.setAttribute('aria-pressed', !boardOn ? 'true' : 'false');
+            }
+            if (operlogSyncBtn) operlogSyncBtn.style.display = boardOn ? 'none' : '';
+            if (boardSyncBtn) boardSyncBtn.style.display = boardOn ? '' : 'none';
+        }
+
         function syncStatsWindowToggleUi() {
             const cb = document.getElementById('statsWindowCalendarBtn');
             const bb = document.getElementById('statsWindowBusinessBtn');
@@ -1768,7 +1898,23 @@
 
         let loadedStatsData = null;
 
-        const DAILY_PACKING_CHARTS_DEFAULT_RANGE = { start: '2026-04-20', end: '2026-05-03' };
+        function dailyPackingChartsDefaultRange(anchorYmd) {
+            const end = anchorYmd || getDefaultStatsAnchorYmd();
+            const t = new Date(end + 'T12:00:00');
+            const t0 = new Date(t);
+            t0.setDate(t0.getDate() - 13);
+            const pad = function (n) { return String(n).padStart(2, '0'); };
+            const start = t0.getFullYear() + '-' + pad(t0.getMonth() + 1) + '-' + pad(t0.getDate());
+            return { start: start, end: end };
+        }
+
+        function initDailyPackingChartsRangeInputs(anchorYmd) {
+            const r = dailyPackingChartsDefaultRange(anchorYmd);
+            const s = document.getElementById('dailyPackingChartsStart');
+            const e = document.getElementById('dailyPackingChartsEnd');
+            if (s) s.value = r.start;
+            if (e) e.value = r.end;
+        }
 
         function dailyPackingChartsRangeForFetch() {
             const sEl = document.getElementById('dailyPackingChartsStart');
@@ -1776,8 +1922,9 @@
             let start = (sEl && sEl.value && sEl.value.trim()) || '';
             let end = (eEl && eEl.value && eEl.value.trim()) || '';
             if (!start || !end) {
-                start = DAILY_PACKING_CHARTS_DEFAULT_RANGE.start;
-                end = DAILY_PACKING_CHARTS_DEFAULT_RANGE.end;
+                const r = dailyPackingChartsDefaultRange(currentDate);
+                start = r.start;
+                end = r.end;
             }
             if (start > end) {
                 const x = start; start = end; end = x;
@@ -2170,15 +2317,59 @@
             syncStatsWindowToggleUi();
             updateFloatingStatsNavState();
 
-            (function initDailyPackingChartsRangeInputs() {
-                const s = document.getElementById('dailyPackingChartsStart');
-                const e = document.getElementById('dailyPackingChartsEnd');
-                if (s) s.value = DAILY_PACKING_CHARTS_DEFAULT_RANGE.start;
-                if (e) e.value = DAILY_PACKING_CHARTS_DEFAULT_RANGE.end;
-            })();
+            initDailyPackingChartsRangeInputs(formattedDate);
             initWowChartsWeekRangeInputs(formattedDate);
             initPackingMdWowWeekRangeInputs(formattedDate);
             initWeeklyWaybillChartsWeekRangeInputs(formattedDate);
+
+            syncCnoNarrowbeltCountModeUi();
+            syncDailyPackingCountModeUi();
+            const cnoNarrowbeltRawBtn = document.getElementById('cnoNarrowbeltCountRawBtn');
+            const cnoNarrowbeltDedBtn = document.getElementById('cnoNarrowbeltCountDedupedBtn');
+            if (cnoNarrowbeltRawBtn) {
+                cnoNarrowbeltRawBtn.addEventListener('click', function () {
+                    if (getCnoNarrowbeltCountMode() === 'raw') return;
+                    setCnoNarrowbeltCountMode('raw');
+                    loadCnoNarrowbeltHourlyData();
+                });
+            }
+            if (cnoNarrowbeltDedBtn) {
+                cnoNarrowbeltDedBtn.addEventListener('click', function () {
+                    if (getCnoNarrowbeltCountMode() === 'deduped') return;
+                    setCnoNarrowbeltCountMode('deduped');
+                    loadCnoNarrowbeltHourlyData();
+                });
+            }
+            const dailyPackingBoardBtn = document.getElementById('dailyPackingCountBoardBtn');
+            const dailyPackingRawBtn = document.getElementById('dailyPackingCountRawBtn');
+            if (dailyPackingBoardBtn) {
+                dailyPackingBoardBtn.addEventListener('click', function () {
+                    if (getDailyPackingCountMode() === 'board') return;
+                    setDailyPackingCountMode('board');
+                    loadDailyPackingSplitData();
+                });
+            }
+            if (dailyPackingRawBtn) {
+                dailyPackingRawBtn.addEventListener('click', function () {
+                    if (getDailyPackingCountMode() === 'raw') return;
+                    setDailyPackingCountMode('raw');
+                    loadDailyPackingSplitData();
+                });
+            }
+            const dailyPackingBoardSyncBtn = document.getElementById('dailyPackingBoardSyncBtn');
+            if (dailyPackingBoardSyncBtn) {
+                dailyPackingBoardSyncBtn.addEventListener('click', function () {
+                    if (getDailyPackingCountMode() !== 'board') return;
+                    loadDailyPackingSplitData({ syncBoard: true });
+                });
+            }
+            const dailyPackingOperlogSyncBtn = document.getElementById('dailyPackingOperlogSyncBtn');
+            if (dailyPackingOperlogSyncBtn) {
+                dailyPackingOperlogSyncBtn.addEventListener('click', function () {
+                    if (getDailyPackingCountMode() !== 'raw') return;
+                    loadDailyPackingSplitData({ syncOperlog: true });
+                });
+            }
 
             (function syncWeekComparisonBarSectionVisibility() {
                 const sec = document.getElementById('statsWeekComparisonBarSection');
@@ -2273,12 +2464,16 @@
             if (manualSyncBtnEl) manualSyncBtnEl.addEventListener('click', manualGofoSync);
             const cnoNbExp = document.getElementById('cnoNarrowbeltExportCsvBtn');
             if (cnoNbExp) cnoNbExp.addEventListener('click', exportCnoNarrowbeltHourlyCsv);
-            bindStatsChartExportBtn('cnoNarrowbeltChartExportBtn', function () { return window.cnoNarrowbeltHourlyChartInstance; }, 'cno_narrowbelt_hourly_chart');
+            bindStatsChartExportBtn('cnoNarrowbeltChartExportBtn', function () { return window.cnoNarrowbeltHourlyChartInstance; }, function () {
+                return 'cno_narrowbelt_hourly_chart_' + getCnoNarrowbeltCountMode();
+            });
             bindStatsChartExportBtn('waybillTrendChartExportBtn', function () { return window.waybillTrendChartInstance; }, 'waybill_trend_daily');
             bindStatsChartExportBtn('weeklyWaybillTrendChartExportBtn', function () { return window.weeklyWaybillTrendChartInstance; }, 'waybill_trend_weekly_stacked');
             bindStatsChartExportBtn('hourlyComparisonChartExportBtn', function () { return window.hourlyChart; }, 'inbound_sorting_hourly_comparison');
             bindStatsChartExportBtn('sortingCapacityChartExportBtn', function () { return window.capacityChart; }, 'sorting_capacity_hourly');
-            bindStatsChartExportBtn('dailyPackingSplitChartExportBtn', function () { return window.dailyPackingSplitChart; }, 'daily_packing_manual_device');
+            bindStatsChartExportBtn('dailyPackingSplitChartExportBtn', function () { return window.dailyPackingSplitChart; }, function () {
+                return 'daily_packing_manual_device_' + getDailyPackingCountMode();
+            });
             bindStatsChartExportBtn('dailyCenterCollectSplitChartExportBtn', function () { return window.dailyCenterCollectSplitChart; }, 'daily_center_collect_trunk_branch');
             const dailyPackRangeBtn = document.getElementById('dailyPackingChartsApplyRangeBtn');
             if (dailyPackRangeBtn) dailyPackRangeBtn.addEventListener('click', applyDailyPackingChartsRange);
@@ -2974,8 +3169,12 @@
         }
 
         function loadCnoNarrowbeltHourlyData() {
-            let url = withStatsWindowParams('/api/statistics/cno_narrowbelt_hourly', currentDate ? { date: currentDate } : {});
-            fetch(url)
+            const qp = Object.assign(
+                currentDate ? { date: currentDate } : {},
+                { count_mode: getCnoNarrowbeltCountMode() }
+            );
+            let url = withStatsWindowParams('/api/statistics/cno_narrowbelt_hourly', qp);
+            fetch(url, { cache: 'no-store', credentials: 'same-origin' })
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('HTTP ' + response.status);
@@ -2985,6 +3184,9 @@
                 .then(data => {
                     if (data.error) {
                         throw new Error(data.error);
+                    }
+                    if (data.count_mode !== getCnoNarrowbeltCountMode()) {
+                        console.warn('[CNO narrowbelt] count_mode mismatch:', data.count_mode, getCnoNarrowbeltCountMode());
                     }
                     renderCnoNarrowbeltHourlyChart(data);
                 })
@@ -2999,7 +3201,11 @@
         }
 
         function exportCnoNarrowbeltHourlyCsv() {
-            let url = withStatsWindowParams('/api/statistics/cno_narrowbelt_hourly/export', currentDate ? { date: currentDate } : {});
+            const qp = Object.assign(
+                currentDate ? { date: currentDate } : {},
+                { count_mode: getCnoNarrowbeltCountMode() }
+            );
+            let url = withStatsWindowParams('/api/statistics/cno_narrowbelt_hourly/export', qp);
             window.location.href = url;
         }
 
@@ -3693,9 +3899,37 @@
 
         function renderCnoNarrowbeltHourlyChart(payload) {
             try {
+                const hintEl = document.getElementById('cnoNarrowbeltDedupHint');
+                const t = translations[currentLang] || {};
+                if (hintEl) {
+                    hintEl.style.display = 'none';
+                    hintEl.textContent = '';
+                    if (payload && payload.count_mode === 'deduped') {
+                        const fc = Number(payload.dedup_fallback_cells) || 0;
+                        const dc = Number(payload.dedup_column_cells) || 0;
+                        if (fc > 0 && dc === 0) {
+                            hintEl.style.display = 'block';
+                            hintEl.style.fontSize = '13px';
+                            hintEl.style.color = '#856404';
+                            hintEl.style.background = '#fff3cd';
+                            hintEl.style.padding = '10px 12px';
+                            hintEl.style.borderRadius = '6px';
+                            hintEl.style.lineHeight = '1.45';
+                            hintEl.textContent = t.cno_narrowbelt_dedup_fallback_hint || '';
+                        } else if (fc > 0 && dc > 0) {
+                            hintEl.style.display = 'block';
+                            hintEl.style.fontSize = '13px';
+                            hintEl.style.color = '#664d03';
+                            hintEl.style.background = '#fff3cd';
+                            hintEl.style.padding = '10px 12px';
+                            hintEl.style.borderRadius = '6px';
+                            hintEl.style.lineHeight = '1.45';
+                            hintEl.textContent = t.cno_narrowbelt_dedup_partial_hint || '';
+                        }
+                    }
+                }
                 const labels = (payload && payload.labels) ? payload.labels : [];
                 const lines = (payload && payload.lines) ? payload.lines : {};
-                const t = translations[currentLang];
                 const datasets = [
                     {
                         label: t.cno_narrowbelt_line_a || '产线 A（AA）',
@@ -3764,7 +3998,11 @@
 
                 const dateTxt = (payload && payload.date) ? payload.date : '';
                 const titleBase = t.cno_narrowbelt_hourly_title || 'CNO 窄带分拣机 各产线分时件数';
-                const titleText = dateTxt ? `${titleBase} (${dateTxt})` : titleBase;
+                const cm = (payload && payload.count_mode) === 'deduped' ? 'deduped' : 'raw';
+                const modeLab = cm === 'deduped'
+                    ? (t.cno_narrowbelt_count_deduped || '去重')
+                    : (t.cno_narrowbelt_count_raw || '逐条');
+                const titleText = dateTxt ? `${titleBase} (${dateTxt}) · ${modeLab}` : `${titleBase} · ${modeLab}`;
 
                 window.cnoNarrowbeltHourlyChartInstance = new Chart(chartCtx, {
                     type: 'line',
@@ -4286,15 +4524,39 @@
             }
         }
 
-        function loadDailyPackingSplitData() {
+        function loadDailyPackingSplitData(opts) {
+            opts = opts || {};
             const r = dailyPackingChartsRangeForFetch();
-            const packUrl = withStatsWindowParams('/api/statistics/daily_packing_split', { start_date: r.start, end_date: r.end });
-            fetch(packUrl)
+            const qp = {
+                start_date: r.start,
+                end_date: r.end,
+                count_mode: getDailyPackingCountMode()
+            };
+            if (opts.syncOperlog) qp.sync_operlog = '1';
+            if (opts.syncBoard) qp.sync_board = '1';
+            const packUrl = withStatsWindowParams('/api/statistics/daily_packing_split', qp);
+            const canvas = document.getElementById('dailyPackingSplitChart');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                const t0 = translations[currentLang] || {};
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText(t0.daily_packing_chart_loading || '加载中…', canvas.width / 2, canvas.height / 2);
+            }
+            const operlogSyncBtn = document.getElementById('dailyPackingOperlogSyncBtn');
+            const boardSyncBtn = document.getElementById('dailyPackingBoardSyncBtn');
+            if (operlogSyncBtn) operlogSyncBtn.disabled = !!opts.syncOperlog;
+            if (boardSyncBtn) boardSyncBtn.disabled = !!opts.syncBoard;
+            fetch(packUrl, { cache: 'no-store', credentials: 'same-origin' })
                 .then(response => {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                     return response.json();
                 })
                 .then(data => {
+                    if (operlogSyncBtn) operlogSyncBtn.disabled = false;
+                    if (boardSyncBtn) boardSyncBtn.disabled = false;
                     if (data.error) {
                         console.error('daily_packing_split:', data.error);
                         if (typeof showMessage === 'function') {
@@ -4306,6 +4568,8 @@
                     renderDailyPackingSplitChart(data);
                 })
                 .catch(err => {
+                    if (operlogSyncBtn) operlogSyncBtn.disabled = false;
+                    if (boardSyncBtn) boardSyncBtn.disabled = false;
                     console.error('loadDailyPackingSplitData', err);
                     renderDailyPackingSplitChart(null);
                 });
@@ -4315,9 +4579,47 @@
             const canvas = document.getElementById('dailyPackingSplitChart');
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
+            const t = translations[currentLang] || {};
+            const hintEl = document.getElementById('dailyPackingCountHint');
+            if (hintEl) {
+                hintEl.style.display = 'none';
+                hintEl.textContent = '';
+                const cm = (data && data.count_mode) || getDailyPackingCountMode();
+                const failures = Number(data && data.operlog_sync_failures) || 0;
+                const cacheMiss = Number(data && data.operlog_cache_misses) || 0;
+                const boardFb = Number(data && data.board_fallback_days) || 0;
+                const boardMiss = Number(data && data.board_cache_misses) || 0;
+                const hourSlots = (data && data.hour_slots) || [];
+                let hintParts = [];
+                if (cm === 'board' && boardMiss > 0) {
+                    hintParts.push(t.daily_packing_board_cache_hint || '');
+                }
+                if (cm === 'raw') {
+                    if (failures > 0 || boardFb > 0) {
+                        hintParts.push(t.daily_packing_operlog_sync_hint || '');
+                    } else if (cacheMiss > 0) {
+                        hintParts.push(t.daily_packing_operlog_cache_hint || '');
+                    } else {
+                        hintParts.push(t.daily_packing_operlog_raw_hint || '');
+                    }
+                } else if (hourSlots.some(function (n) { return Number(n) > 0 && Number(n) < 24; })) {
+                    hintParts.push(t.daily_packing_incomplete_hours_hint || '');
+                }
+                if (hintParts.length) {
+                    hintEl.style.display = 'block';
+                    hintEl.style.fontSize = '13px';
+                    hintEl.style.padding = '10px 12px';
+                    hintEl.style.borderRadius = '6px';
+                    hintEl.style.lineHeight = '1.45';
+                    hintEl.style.color = '#856404';
+                    hintEl.style.background = '#fff3cd';
+                    hintEl.textContent = hintParts.join(' ');
+                }
+            }
 
             if (window.dailyPackingSplitChart && typeof window.dailyPackingSplitChart.destroy === 'function') {
                 window.dailyPackingSplitChart.destroy();
+                window.dailyPackingSplitChart = null;
             }
 
             if (!data || !data.dates || data.dates.length === 0) {
@@ -4333,6 +4635,11 @@
             const manualRaw = (data.manual || []).map(v => Number(v) || 0);
             const deviceRaw = (data.device || []).map(v => Number(v) || 0);
             const isMobile = window.innerWidth < 768;
+            const cm = (data.count_mode === 'raw') ? 'raw' : 'board';
+            const modeLab = cm === 'raw'
+                ? (t.daily_packing_count_raw || '逐条（日志）')
+                : (t.daily_packing_count_board || '去重（看板）');
+            const chartTitle = (t.daily_packing_split_chart || '每日集包（人工 / 设备）') + ' · ' + modeLab;
 
             function dayTotal(i) {
                 return (manualRaw[i] || 0) + (deviceRaw[i] || 0);
@@ -4351,13 +4658,14 @@
                 return p.toFixed(1).replace(/\.0$/, '') + '%';
             }
 
+            try {
             window.dailyPackingSplitChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [
                         {
-                            label: translations[currentLang].packing_manual || '人工集包',
+                            label: t.packing_manual || '人工集包',
                             data: manualRaw,
                             backgroundColor: 'rgba(54, 162, 235, 0.85)',
                             borderColor: 'rgba(54, 162, 235, 1)',
@@ -4376,7 +4684,7 @@
                             }
                         },
                         {
-                            label: translations[currentLang].packing_device || '设备集包',
+                            label: t.packing_device || '设备集包',
                             data: deviceRaw,
                             backgroundColor: 'rgba(255, 159, 64, 0.85)',
                             borderColor: 'rgba(255, 159, 64, 1)',
@@ -4422,6 +4730,11 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'top' },
+                        title: {
+                            display: true,
+                            text: chartTitle,
+                            font: { size: isMobile ? 14 : 16 }
+                        },
                         tooltip: {
                             mode: 'index',
                             intersect: false,
@@ -4468,6 +4781,14 @@
                 },
                 plugins: [ChartDataLabels]
             });
+            } catch (chartErr) {
+                console.error('renderDailyPackingSplitChart', chartErr);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#f72585';
+                ctx.fillText((t.render_packing_error || '渲染集包图表出错: ') + chartErr.message, canvas.width / 2, canvas.height / 2);
+            }
         }
 
         function loadDailyCenterCollectSplitData() {
@@ -4723,7 +5044,8 @@
             const btn = document.getElementById(btnId);
             if (!btn) return;
             btn.addEventListener('click', function () {
-                exportChartJsToCsv(chartGetter(), filenameStem);
+                const stem = typeof filenameStem === 'function' ? filenameStem() : filenameStem;
+                exportChartJsToCsv(chartGetter(), stem);
             });
         }
 

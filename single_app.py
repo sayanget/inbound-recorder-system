@@ -869,14 +869,59 @@ def init_db():
         );""")
         cursor.execute(sql)
 
-        # CNO 直线窄带分拣机 AA–AD → 生产线 A–D，按 LA 整点小时 operatelog 产能
+        # CNO 直线窄带分拣机 AA–AD → 生产线 A–D，按 LA 整点小时 operatelog 产能 pieces=逐条 pieces_deduped=运单+类型+操作员去重
         sql = convert_sql("""CREATE TABLE IF NOT EXISTS cno_narrowbelt_hourly (
             record_date TEXT NOT NULL,
             time_slot TEXT NOT NULL,
             line_code TEXT NOT NULL,
             pieces INTEGER NOT NULL DEFAULT 0,
+            pieces_deduped INTEGER,
             synced_at TEXT,
             PRIMARY KEY (record_date, time_slot, line_code)
+        );""")
+        cursor.execute(sql)
+
+        try:
+            cursor.execute("SELECT pieces_deduped FROM cno_narrowbelt_hourly LIMIT 1")
+        except Exception:
+            if USE_POSTGRES:
+                cursor.execute(
+                    "ALTER TABLE cno_narrowbelt_hourly ADD COLUMN pieces_deduped INTEGER"
+                )
+            else:
+                cursor.execute("ALTER TABLE cno_narrowbelt_hourly ADD COLUMN pieces_deduped INTEGER")
+
+        # 有逐条件数但去重为 0：视为未写入双口径（旧 DEFAULT），清为 NULL 以便与「仅 pieces」旧数据区分；同步后会写入真实去重值
+        try:
+            cursor.execute(
+                convert_query_placeholders(
+                    "UPDATE cno_narrowbelt_hourly SET pieces_deduped = NULL "
+                    "WHERE pieces > 0 AND pieces_deduped = 0"
+                )
+            )
+        except Exception:
+            pass
+
+        sql = convert_sql("""CREATE TABLE IF NOT EXISTS daily_packing_operlog_daily (
+            anchor_date TEXT NOT NULL,
+            stats_window TEXT NOT NULL DEFAULT 'calendar',
+            manual_raw INTEGER NOT NULL DEFAULT 0,
+            device_raw INTEGER NOT NULL DEFAULT 0,
+            manual_dedup INTEGER NOT NULL DEFAULT 0,
+            device_dedup INTEGER NOT NULL DEFAULT 0,
+            synced_at TEXT,
+            PRIMARY KEY (anchor_date, stats_window)
+        );""")
+        cursor.execute(sql)
+
+        sql = convert_sql("""CREATE TABLE IF NOT EXISTS daily_packing_board_daily (
+            anchor_date TEXT NOT NULL,
+            stats_window TEXT NOT NULL DEFAULT 'calendar',
+            manual_count INTEGER NOT NULL DEFAULT 0,
+            device_count INTEGER NOT NULL DEFAULT 0,
+            total_pieces INTEGER NOT NULL DEFAULT 0,
+            synced_at TEXT,
+            PRIMARY KEY (anchor_date, stats_window)
         );""")
         cursor.execute(sql)
 
@@ -1952,33 +1997,100 @@ def api_statistics_daily_packing_split():
             else:
                 end_date = datetime.now(LA_TZ).date()
             start_date = end_date - timedelta(days=days - 1)
+        count_mode = _parse_daily_packing_count_mode(request.args.get('count_mode'))
+        sync_operlog = (request.args.get('sync_operlog') or '').strip().lower() in (
+            '1', 'true', 'yes', 'on',
+        )
         conn = get_db()
         cursor = conn.cursor()
         dates = []
         manual = []
         device = []
         total_pieces = []
+        operlog_sync_failures = 0
+        operlog_cache_misses = 0
+        board_fallback_days = 0
+        board_cache_misses = 0
+        hour_slots = []
+        sync_board = (request.args.get('sync_board') or '').strip().lower() in (
+            '1', 'true', 'yes', 'on',
+        )
+        import sync_daily_packing_board as _dp_board
+
         d = start_date
         while d <= end_date:
             dates.append(d.strftime('%Y-%m-%d'))
-            clause, binds = _sorting_slot_window_sql_binds(window_mode, d)
-            cursor.execute(convert_query_placeholders(f"""
-                SELECT COALESCE(SUM(manual_count), 0), COALESCE(SUM(device_count), 0), COALESCE(SUM(pieces), 0)
-                FROM sorting_records
-                WHERE {clause}
-            """), binds)
-            r = cursor.fetchone()
-            manual.append(int(r[0]) if r and r[0] is not None else 0)
-            device.append(int(r[1]) if r and r[1] is not None else 0)
-            total_pieces.append(int(r[2]) if r and r[2] is not None else 0)
+            if count_mode == 'board':
+                board_res = None
+                if sync_board:
+                    board_res = _dp_board.sync_daily_packing_board_anchor(d, window_mode, force=True)
+                else:
+                    cached = _dp_board.read_daily_packing_board_anchor(d, window_mode)
+                    if cached is not None:
+                        board_res = {"success": True, **cached}
+                    else:
+                        board_cache_misses += 1
+                        board_res = None
+                if board_res and board_res.get("success"):
+                    m = int(board_res.get("manual_count") or 0)
+                    d0 = int(board_res.get("device_count") or 0)
+                    tp = int(board_res.get("total_pieces") or 0)
+                    if tp <= 0:
+                        tp = m + d0
+                    elif m + d0 > 0 and m + d0 != tp:
+                        m = int(round(tp * m / (m + d0)))
+                        d0 = tp - m
+                    _, _, slots = _sorting_biz_day_manual_device_from_records(cursor, d, window_mode)
+                else:
+                    m, d0, slots = _sorting_biz_day_manual_device_from_records(cursor, d, window_mode)
+                    tp = m + d0
+                manual.append(m)
+                device.append(d0)
+                total_pieces.append(tp if board_res and board_res.get("success") else m + d0)
+                hour_slots.append(slots)
+            else:
+                import sync_daily_packing_operlog as _dp_oper
+
+                if sync_operlog:
+                    sync_res = _dp_oper.sync_daily_packing_operlog_anchor(d, window_mode)
+                else:
+                    sync_res = _dp_oper.read_daily_packing_operlog_anchor(d, window_mode)
+                if not sync_res.get('success'):
+                    if not sync_operlog:
+                        operlog_cache_misses += 1
+                        m, dv = 0, 0
+                    else:
+                        operlog_sync_failures += 1
+                        m, dv = _sorting_biz_day_manual_device_split(cursor, d, window_mode)
+                        board_fallback_days += 1
+                elif count_mode == 'raw':
+                    m = int(sync_res.get('manual_raw') or 0)
+                    dv = int(sync_res.get('device_raw') or 0)
+                else:
+                    m = int(sync_res.get('manual_dedup') or 0)
+                    dv = int(sync_res.get('device_dedup') or 0)
+                manual.append(m)
+                device.append(dv)
+                total_pieces.append(m + dv)
+                hour_slots.append(0)
             d += timedelta(days=1)
         conn.close()
-        return jsonify({
+        resp = jsonify({
             'dates': dates,
             'manual': manual,
             'device': device,
             'total_pieces': total_pieces,
+            'count_mode': count_mode,
+            'sync_operlog': sync_operlog,
+            'operlog_sync_failures': operlog_sync_failures,
+            'operlog_cache_misses': operlog_cache_misses,
+            'board_fallback_days': board_fallback_days,
+            'board_cache_misses': board_cache_misses,
+            'sync_board': sync_board,
+            'hour_slots': hour_slots if count_mode == 'board' else [],
         })
+        resp.headers['Cache-Control'] = 'no-store, max-age=0'
+        return resp
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -2003,13 +2115,14 @@ def _gofo_collect_biz_day_trunk_branch(cursor, d: datetime.date, window_mode: st
     return int(_db_row_get(r, 0, 0) or 0), int(_db_row_get(r, 1, 0) or 0)
 
 
-def _sorting_biz_day_manual_device_split(cursor, d: datetime.date, window_mode: str = 'calendar') -> tuple:
-    """锚点日 D 的 sorting_records 人工、设备件数；与 daily_packing_split 同源。"""
+def _sorting_biz_day_manual_device_from_records(cursor, d: datetime.date, window_mode: str = 'calendar') -> tuple:
+    """sorting_records 按小时累加（可能因 popover 与 overview 口径不一致而偏离看板）。"""
     clause, binds = _sorting_slot_window_sql_binds(window_mode, d)
     cursor.execute(
         convert_query_placeholders(
             f"""
-            SELECT COALESCE(SUM(manual_count), 0), COALESCE(SUM(device_count), 0)
+            SELECT COALESCE(SUM(manual_count), 0), COALESCE(SUM(device_count), 0),
+                   COALESCE(SUM(pieces), 0), COUNT(*)
             FROM sorting_records
             WHERE {clause}
             """
@@ -2019,6 +2132,18 @@ def _sorting_biz_day_manual_device_split(cursor, d: datetime.date, window_mode: 
     r = cursor.fetchone()
     m = int(_db_row_get(r, 0, 0) or 0)
     dv = int(_db_row_get(r, 1, 0) or 0)
+    slots = int(_db_row_get(r, 3, 0) or 0)
+    return m, dv, slots
+
+
+def _sorting_biz_day_manual_device_split(cursor, d: datetime.date, window_mode: str = 'calendar') -> tuple:
+    """锚点日 D 人工/设备：优先 Gofo overview 缓存，否则 sorting_records。"""
+    import sync_daily_packing_board as _dp_board
+
+    cached = _dp_board.read_daily_packing_board_anchor(d, window_mode)
+    if cached is not None:
+        return int(cached["manual_count"]), int(cached["device_count"])
+    m, dv, _ = _sorting_biz_day_manual_device_from_records(cursor, d, window_mode)
     return m, dv
 
 
@@ -2117,13 +2242,34 @@ def api_statistics_daily_center_collect_split():
         return jsonify({'error': str(e)}), 500
 
 
-def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calendar'):
-    """窄带 A–D 各时段件数；calendar=当日00–23；business=05–次日04（与 sorting_hourly 同源）。"""
+def _parse_daily_packing_count_mode(val):
+    """daily_packing_split count_mode：board=看板 sorting_records（默认）；raw=operatelog 逐条；deduped=operatelog 去重。"""
+    s = (val or '').strip().lower()
+    if s in ('raw', 'per_log', 'log', 'norepeat', 'no_dedup'):
+        return 'raw'
+    if s in ('deduped', 'dedup', 'operlog_dedup', 'log_dedup'):
+        return 'deduped'
+    if s in ('board', 'sorting', 'overview', 'gofo'):
+        return 'board'
+    return 'board'
+
+
+def _parse_cno_narrowbelt_count_mode(val):
+    """API count_mode：raw=operatelog 逐条计数；deduped=按 (运单, scanTypeStr, 操作员) 去重后计数。"""
+    s = (val or '').strip().lower()
+    if s in ('deduped', 'dedup', 'd', '1', 'true', 'yes'):
+        return 'deduped'
+    return 'raw'
+
+
+def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calendar', count_mode: str = 'raw'):
+    """窄带 A–D 各时段件数；calendar=当日00–23；business=05–次日04（与 sorting_hourly 同源）。count_mode raw|deduped。"""
     if isinstance(anchor_date, datetime):
         anchor_date = anchor_date.date()
     next_cal = anchor_date + timedelta(days=1)
     anchor_str = anchor_date.strftime('%Y-%m-%d')
     next_str = next_cal.strftime('%Y-%m-%d')
+    cm = _parse_cno_narrowbelt_count_mode(count_mode)
 
     if window_mode == 'business':
         labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
@@ -2133,6 +2279,8 @@ def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calenda
         labels = [f"{i:02d}:00" for i in range(24)]
     slot_to_idx = {s: i for i, s in enumerate(labels)}
     lines = {'A': [0] * 24, 'B': [0] * 24, 'C': [0] * 24, 'D': [0] * 24}
+    dedup_column_cells = 0
+    dedup_fallback_cells = 0
 
     def _norm_time_slot(val):
         s = str(val or '').strip()
@@ -2157,7 +2305,7 @@ def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calenda
         cursor.execute(
             convert_query_placeholders(
                 f"""
-                SELECT record_date, time_slot, line_code, pieces
+                SELECT record_date, time_slot, line_code, pieces, pieces_deduped
                 FROM cno_narrowbelt_hourly
                 WHERE {clause}
                 ORDER BY record_date, time_slot, line_code
@@ -2177,9 +2325,30 @@ def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calenda
                 _db_row_get(row, 'line_code', '') or _db_row_get(row, 2, '')
             ).strip().upper()
             try:
-                n = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 3, 0) or 0)
+                n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 3, 0) or 0)
             except (TypeError, ValueError):
-                n = 0
+                n_raw = 0
+            pd = _db_row_get(row, 'pieces_deduped', None)
+            if pd is None:
+                pd = _db_row_get(row, 4, None)
+            try:
+                n_dedup = int(pd) if pd is not None and pd != '' else None
+            except (TypeError, ValueError):
+                n_dedup = None
+            used_dedup_fallback = False
+            if cm == 'deduped':
+                # NULL：尚未写入去重列，用逐条口径避免空白图
+                # pieces_deduped=0 且 pieces>0：多为未双写同步；回退到逐条
+                if n_dedup is None:
+                    n = n_raw
+                    used_dedup_fallback = True
+                elif n_raw > 0 and n_dedup == 0:
+                    n = n_raw
+                    used_dedup_fallback = True
+                else:
+                    n = n_dedup
+            else:
+                n = n_raw
             if line not in lines or not slot:
                 continue
             if window_mode == 'business':
@@ -2204,6 +2373,11 @@ def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calenda
             idx = slot_to_idx.get(slot)
             if idx is None:
                 continue
+            if cm == 'deduped':
+                if used_dedup_fallback:
+                    dedup_fallback_cells += 1
+                else:
+                    dedup_column_cells += 1
             lines[line][idx] = n
     finally:
         conn.close()
@@ -2211,6 +2385,9 @@ def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calenda
     return {
         'timezone': 'server_local',
         'stats_window': window_mode,
+        'count_mode': cm,
+        'dedup_column_cells': dedup_column_cells if cm == 'deduped' else 0,
+        'dedup_fallback_cells': dedup_fallback_cells if cm == 'deduped' else 0,
         'date': anchor_str,
         'labels': labels,
         'lines': lines,
@@ -2234,8 +2411,12 @@ def api_statistics_cno_narrowbelt_hourly():
     else:
         anchor = _default_stats_request_date(wm)
 
+    cm = _parse_cno_narrowbelt_count_mode(request.args.get('count_mode'))
     try:
-        return jsonify(_build_cno_narrowbelt_hourly_series(anchor, wm))
+        data = _build_cno_narrowbelt_hourly_series(anchor, wm, cm)
+        resp = jsonify(data)
+        resp.headers['Cache-Control'] = 'no-store, max-age=0'
+        return resp
     except Exception as e:
         labels = (
             [f"{((17 + i) % 24):02d}:00" for i in range(24)] if wm == 'seventeen'
@@ -2244,6 +2425,7 @@ def api_statistics_cno_narrowbelt_hourly():
         return jsonify({
             'error': str(e),
             'date': anchor.strftime('%Y-%m-%d'),
+            'count_mode': _parse_cno_narrowbelt_count_mode(request.args.get('count_mode')),
             'labels': labels,
             'lines': {'A': [0] * 24, 'B': [0] * 24, 'C': [0] * 24, 'D': [0] * 24},
         }), 500
@@ -2266,8 +2448,9 @@ def api_statistics_cno_narrowbelt_hourly_export():
     else:
         anchor = _default_stats_request_date(wm)
 
+    cm = _parse_cno_narrowbelt_count_mode(request.args.get('count_mode'))
     try:
-        data = _build_cno_narrowbelt_hourly_series(anchor, wm)
+        data = _build_cno_narrowbelt_hourly_series(anchor, wm, cm)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -2291,7 +2474,7 @@ def api_statistics_cno_narrowbelt_hourly_export():
             data['lines']['D'][i],
         ])
 
-    fn = f"cno_narrowbelt_hourly_{data['date']}.csv"
+    fn = f"cno_narrowbelt_hourly_{data['date']}_{data.get('count_mode', 'raw')}.csv"
     return Response(
         buf.getvalue().encode('utf-8-sig'),
         mimetype='text/csv; charset=utf-8',
@@ -5730,14 +5913,7 @@ def _enrich_hourly_results_gofo_popover(hourly_results):
                     psum = int(psum)
                     res["pieces"] = wsum
                     res["popover_pkg"] = psum
-                    m, d = int(res["manual"]), int(res["device"])
-                    split = m + d
-                    if split > 0:
-                        res["manual"] = int(round(wsum * m / split))
-                        res["device"] = wsum - res["manual"]
-                    else:
-                        res["manual"] = wsum
-                        res["device"] = 0
+                    # 人工/设备保持 Gofo overview 原值，不按运单数比例缩放（与看板 collectArtificial/Device 一致）
                 else:
                     res["popover_pkg"] = None
                 cno = popover_destin_hour_totals(hs, he, _cno_destin_id)
@@ -6081,12 +6257,33 @@ def perform_gofo_hourly_sync():
             "collect_device": collect_device,
         },
     )
-    return {
+    result = {
         **wr,
         "total_today": collect_total,
         "manual_today": collect_art,
         "device_today": collect_device,
     }
+    try:
+        import sync_daily_packing_board as _dp_board
+        import sync_daily_packing_operlog as _dp_oper
+
+        anchor = now_la.date()
+        for wm in ("calendar", "business", "seventeen"):
+            threading.Thread(
+                target=_dp_board.sync_daily_packing_board_anchor,
+                args=(anchor, wm),
+                kwargs={"force": True},
+                daemon=True,
+            ).start()
+            threading.Thread(
+                target=_dp_oper.sync_daily_packing_operlog_anchor,
+                args=(anchor, wm),
+                kwargs={"force": True},
+                daemon=True,
+            ).start()
+    except Exception as _ex:
+        print(f"[daily_packing cache] post-sync skip: {_ex}")
+    return result
 
 
 def perform_gofo_backfill_range(start_date_str, end_date_str):
@@ -6220,6 +6417,20 @@ def perform_gofo_backfill_range(start_date_str, end_date_str):
         current_la_time_str,
         gofo_hourly_stats=None,
     )
+
+    try:
+        import sync_daily_packing_board as _dp_board
+
+        d_cache = d0
+        while d_cache <= d1:
+            for wm in ("calendar", "business", "seventeen"):
+                try:
+                    _dp_board.sync_daily_packing_board_anchor(d_cache, wm, force=True)
+                except Exception as _bc:
+                    print(f"[daily_packing board] backfill cache {d_cache} {wm}: {_bc}")
+            d_cache += timedelta(days=1)
+    except Exception as _bx:
+        print(f"[daily_packing board] backfill cache skip: {_bx}")
 
     return {
         "success": True,
