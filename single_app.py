@@ -1253,7 +1253,7 @@ def init_db():
             admin_user_id = result[0] if USE_POSTGRES else result[0]
             
             # 管理员拥有所有页面的所有权限
-            pages = ['index', 'sorting', 'history', 'statistics', 'logs', 'sorting-schedule', 'outbound-stats', 'consumables']
+            pages = ['index', 'sorting', 'history', 'statistics', 'logs', 'sorting-schedule', 'outbound-stats', 'consumables', 'operations_metrics']
             for page in pages:
                 cursor.execute(f"""INSERT INTO user_permissions 
                     (user_id, page_name, can_view, can_edit, can_delete) 
@@ -1340,7 +1340,7 @@ def init_db():
                 admin_user_id = result['id'] if USE_POSTGRES else result[0]
                 
                 # 管理员拥有所有页面的所有权限
-                pages = ['index', 'sorting', 'history', 'statistics', 'logs', 'sorting-schedule', 'outbound-stats', 'consumables', 'cost_accounting']
+                pages = ['index', 'sorting', 'history', 'statistics', 'logs', 'sorting-schedule', 'outbound-stats', 'consumables', 'cost_accounting', 'operations_metrics']
                 for page in pages:
                     cursor.execute(f"""INSERT INTO user_permissions 
                         (user_id, page_name, can_view, can_edit, can_delete) 
@@ -1787,6 +1787,25 @@ def statistics():
     # 返回统计数据页面
     static_dir = get_static_dir()
     file_path = os.path.join(static_dir, 'statistics.html')
+    if os.path.exists(file_path):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+    else:
+        return f"File not found: {file_path}", 404
+
+@app.route('/operations_metrics')
+def operations_metrics():
+    # 用户权限
+    if 'user_id' not in session:
+        return redirect('/login')
+    
+    if not check_page_permission('cost_accounting'):
+        return redirect('/no_permission')
+    
+    # 返回成本核算页面 (原 cost_accounting，已迁移至 /operations_metrics)
+    static_dir = get_static_dir()
+    file_path = os.path.join(static_dir, 'cost_accounting.html')
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -2809,24 +2828,10 @@ def consumables():
     else:
         return f"File not found: {file_path}", 404
 
+# [已迁移] /cost_accounting 页面已移至 /operations_metrics
 @app.route('/cost_accounting')
 def cost_accounting():
-    # 检查用户权限
-    if 'user_id' not in session:
-        return redirect('/login')
-    
-    if not check_page_permission('cost_accounting'):
-        return redirect('/no_permission')
-    
-    # 返回成本核算页面
-    static_dir = get_static_dir()
-    file_path = os.path.join(static_dir, 'cost_accounting.html')
-    if os.path.exists(file_path):
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
-    else:
-        return f"File not found: {file_path}", 404
+    return redirect('/operations_metrics')
 
 def _save_sorting_shift_rows(cursor, config_id, data):
     """将人工多班次与分拣机按日排班写入结构化表（与 config_json 一致）。"""
@@ -12423,6 +12428,148 @@ def delete_cost_accounting():
         conn.close()
         
     return jsonify({'success': True})
+
+
+@app.route('/api/admin/cost_accounting/waybill_comparison', methods=['GET'])
+def get_waybill_comparison():
+    if 'user_id' not in session: return jsonify({'error': '未登录', 'success': False}), 401
+    conn = get_db(); cursor = conn.cursor()
+    if not require_admin(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
+    
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    if not start_date or not end_date:
+        conn.close()
+        return jsonify({'success': False, 'error': '缺失日期参数'}), 400
+        
+    def normalize_route(route):
+        if not route:
+            return ""
+        r = str(route).upper().strip()
+        if r.endswith('.H'):
+            r = r[:-2]
+        if r.endswith('.G'):
+            r = r[:-2]
+        if 'LAS' in r:
+            return 'LAS'
+        if 'PHX' in r:
+            return 'PHX'
+        if 'LAX' in r:
+            return 'LAX'
+        if 'SEA' in r:
+            return 'SEA'
+        if 'MCO' in r:
+            return 'MCO'
+        return r
+
+    try:
+        # 1. Fetch Feishu tickets
+        f_query = """
+            SELECT record_date, destination, SUM(tickets_count) as total_tickets
+            FROM feishu_raw_data
+            WHERE record_date >= ? AND record_date <= ?
+            GROUP BY record_date, destination
+        """
+        cursor.execute(convert_query_placeholders(f_query), (start_date, end_date))
+        f_rows = cursor.fetchall()
+        
+        # Aggregate by normalized route in Python
+        feishu_data = {} # { (date, route): tickets }
+        for row in f_rows:
+            r_date = str(row['record_date']).split(' ')[0][:10]
+            dest = row['destination']
+            t_cnt = row['total_tickets'] or 0
+            
+            norm_dest = normalize_route(dest)
+            if not norm_dest: continue
+            
+            key = (r_date, norm_dest)
+            feishu_data[key] = feishu_data.get(key, 0) + t_cnt
+            
+        # 2. Fetch Gofo waybills
+        g_query = """
+            SELECT record_date, destin_name, SUM(waybill_cnt) as total_waybills
+            FROM gofo_center_collect_stats
+            WHERE record_date >= ? AND record_date <= ?
+            GROUP BY record_date, destin_name
+        """
+        cursor.execute(convert_query_placeholders(g_query), (start_date, end_date))
+        g_rows = cursor.fetchall()
+        
+        gofo_data = {} # { (date, route): waybills }
+        for row in g_rows:
+            r_date = str(row['record_date']).split(' ')[0][:10]
+            dest = row['destin_name']
+            w_cnt = row['total_waybills'] or 0
+            
+            norm_dest = normalize_route(dest)
+            if not norm_dest: continue
+            
+            key = (r_date, norm_dest)
+            gofo_data[key] = gofo_data.get(key, 0) + w_cnt
+            
+        # 3. Align and Compare
+        all_keys = sorted(list(set(feishu_data.keys()) | set(gofo_data.keys())), key=lambda x: (x[0], x[1]), reverse=True)
+        
+        records = []
+        tot_feishu = 0
+        tot_gofo = 0
+        tot_abs_diff = 0
+        
+        for key in all_keys:
+            f_val = feishu_data.get(key, 0)
+            g_val = gofo_data.get(key, 0)
+            diff = f_val - g_val
+            abs_diff = abs(diff)
+            
+            # calculate diff pct
+            if f_val > 0:
+                diff_pct = round((diff / f_val) * 100, 2)
+            elif g_val > 0:
+                diff_pct = -100.0
+            else:
+                diff_pct = 0.0
+                
+            records.append({
+                'record_date': key[0],
+                'direction': key[1],
+                'feishu_tickets': f_val,
+                'gofo_tickets': g_val,
+                'diff': diff,
+                'abs_diff': abs_diff,
+                'diff_pct': diff_pct
+            })
+            
+            tot_feishu += f_val
+            tot_gofo += g_val
+            tot_abs_diff += abs_diff
+            
+        net_diff = tot_feishu - tot_gofo
+        tot_diff_pct = round((net_diff / tot_feishu * 100), 2) if tot_feishu > 0 else (0.0 if tot_gofo == 0 else -100.0)
+        
+        summary = {
+            'total_feishu_tickets': tot_feishu,
+            'total_gofo_tickets': tot_gofo,
+            'net_diff': net_diff,
+            'total_abs_diff': tot_abs_diff,
+            'total_diff_pct': tot_diff_pct
+        }
+        
+        return jsonify({
+            'success': True,
+            'summary': summary,
+            'records': records
+        })
+        
+    except Exception as e:
+        import traceback
+        print("Waybill comparison API error:", e)
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
 
 def get_route_type(route_code):
     """

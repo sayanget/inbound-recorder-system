@@ -435,6 +435,54 @@
             cursor: pointer;
             flex-shrink: 0;
         }
+
+        /* ─── Comparison Specific Styles ─── */
+        .style-positive {
+            color: #28a745 !important;
+        }
+        .style-negative {
+            color: #dc3545 !important;
+        }
+        .style-neutral {
+            color: var(--text-color) !important;
+        }
+        
+        .style-negative-badge {
+            background-color: rgba(220, 53, 69, 0.15);
+            color: #dc3545;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .style-warning-badge {
+            background-color: rgba(230, 126, 34, 0.15);
+            color: #e67e22;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .style-neutral-badge {
+            background-color: rgba(108, 117, 125, 0.1);
+            color: #6c757d;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        
+        .route-badge {
+            background-color: var(--table-header-bg);
+            color: var(--text-color);
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+            border: 1px solid var(--border-color);
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
     </style>
 </head>
 
@@ -451,6 +499,8 @@
                 数据采集与核算</button>
             <button class="tab-btn" onclick="switchTab('report')"><i class="fas fa-file-invoice-dollar"></i>
                 核算报表明细</button>
+            <button class="tab-btn" onclick="switchTab('comparison')"><i class="fas fa-balance-scale"></i>
+                运单数据对比</button>
         </div>
 
         <!-- 标签页1：成本看板 -->
@@ -848,6 +898,84 @@
             </table>
         </div>
 
+        <!-- 标签页4：运单数据对比 -->
+        <div id="tab-comparison" class="tab-content">
+            <!-- 操作面板 -->
+            <div style="display:flex; gap:16px; align-items:center; background:var(--card-bg,#fff); border:1px solid var(--border-color,#ddd); border-radius:10px; padding:16px; margin-bottom:20px; flex-wrap:wrap;">
+                <div class="form-group" style="margin:0; width:180px;">
+                    <label style="font-size:12px; font-weight:600; color:#555;">对比起始日期</label>
+                    <input type="date" id="compStartDate" style="width:100%; padding:6px 10px;">
+                </div>
+                <div class="form-group" style="margin:0; width:180px;">
+                    <label style="font-size:12px; font-weight:600; color:#555;">对比截止日期</label>
+                    <input type="date" id="compEndDate" style="width:100%; padding:6px 10px;">
+                </div>
+                <div class="form-group" style="margin:0; width:220px;">
+                    <label style="font-size:12px; font-weight:600; color:#555;">流向筛选</label>
+                    <select id="compSearchRoute" style="width:100%; padding:6px 10px; border-radius:4px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-color); font-size:13px; cursor:pointer;">
+                        <option value="">全部流向</option>
+                    </select>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button class="action-btn" onclick="loadComparisonData()" style="padding:6px 16px;">
+                        <i class="fas fa-sync-alt"></i> 刷新对比
+                    </button>
+                    <button class="action-btn btn-success" onclick="exportComparisonCSV()" style="padding:6px 16px;">
+                        <i class="fas fa-file-csv"></i> 导出对比报表 (CSV)
+                    </button>
+                </div>
+            </div>
+
+            <!-- KPI 指标卡片 -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:20px;">
+                <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:16px; border-left:4px solid #206bc4; box-shadow:var(--card-shadow);">
+                    <div style="font-size:12px; color:#888; margin-bottom:4px; font-weight:600;">装载执行监控总票数</div>
+                    <div id="compFeishuTotal" style="font-size:24px; font-weight:700; color:#206bc4;">0</div>
+                </div>
+                <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:16px; border-left:4px solid #17a2b8; box-shadow:var(--card-shadow);">
+                    <div style="font-size:12px; color:#888; margin-bottom:4px; font-weight:600;">CNO集包量总票数</div>
+                    <div id="compGofoTotal" style="font-size:24px; font-weight:700; color:#17a2b8;">0</div>
+                </div>
+                <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:16px; border-left:4px solid #28a745; box-shadow:var(--card-shadow);" id="compNetDiffCard">
+                    <div style="font-size:12px; color:#888; margin-bottom:4px; font-weight:600;">净差异 (装载执行 - CNO集包)</div>
+                    <div id="compNetDiff" style="font-size:24px; font-weight:700; color:#28a745;">0</div>
+                </div>
+                <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:16px; border-left:4px solid #dc3545; box-shadow:var(--card-shadow);">
+                    <div style="font-size:12px; color:#888; margin-bottom:4px; font-weight:600;">绝对累计差异 (Audit Delta)</div>
+                    <div id="compAbsDiff" style="font-size:24px; font-weight:700; color:#dc3545;">0</div>
+                </div>
+            </div>
+
+            <!-- ECharts 图表 -->
+            <div class="chart-container" id="waybillComparisonChart" style="height:400px; margin-bottom:25px; background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:15px; box-shadow:var(--card-shadow);"></div>
+
+            <!-- 详细数据表格 -->
+            <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:15px; box-shadow:var(--card-shadow);">
+                <div style="font-size:14px; font-weight:700; margin-bottom:12px; color:var(--text-color); display:flex; justify-content:space-between; align-items:center;">
+                    <span><i class="fas fa-list"></i> 流向日明细对比</span>
+                    <span style="font-size:12px; font-weight:normal; color:#888;">说明：差异 = 装载执行监控 - CNO集包量</span>
+                </div>
+                <div style="max-height:600px; overflow-y:auto; border:1px solid var(--border-color); border-radius:6px;">
+                    <table id="comparisonTable" style="margin:0;">
+                        <thead style="position:sticky; top:0; z-index:10; background:var(--table-header-bg);">
+                            <tr>
+                                <th style="cursor:pointer;" onclick="sortCompTable('record_date')">日期 <i class="fas fa-sort"></i></th>
+                                <th style="cursor:pointer;" onclick="sortCompTable('direction')">流向/目的地 <i class="fas fa-sort"></i></th>
+                                <th class="num" style="cursor:pointer;" onclick="sortCompTable('feishu_tickets')">装载执行监控 <i class="fas fa-sort"></i></th>
+                                <th class="num" style="cursor:pointer;" onclick="sortCompTable('gofo_tickets')">CNO集包量 <i class="fas fa-sort"></i></th>
+                                <th class="num" style="cursor:pointer;" onclick="sortCompTable('diff')">差异值 <i class="fas fa-sort"></i></th>
+                                <th class="num" style="cursor:pointer;" onclick="sortCompTable('abs_diff')">绝对值差异 <i class="fas fa-sort"></i></th>
+                                <th class="num" style="cursor:pointer;" onclick="sortCompTable('diff_pct')">差异比例 <i class="fas fa-sort"></i></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 由 JS 渲染 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     </div>
@@ -950,6 +1078,34 @@
             // 日期改变时自动刷新飞书数据表
             document.getElementById('calcStartDate').addEventListener('change', fetchFeishuData);
             document.getElementById('calcEndDate').addEventListener('change', fetchFeishuData);
+
+            // Sync dates between calculation tab and comparison tab
+            document.getElementById('calcStartDate').addEventListener('change', (e) => {
+                document.getElementById('compStartDate').value = e.target.value;
+                if (document.getElementById('tab-comparison').classList.contains('active')) {
+                    loadComparisonData();
+                }
+            });
+            document.getElementById('calcEndDate').addEventListener('change', (e) => {
+                document.getElementById('compEndDate').value = e.target.value;
+                if (document.getElementById('tab-comparison').classList.contains('active')) {
+                    loadComparisonData();
+                }
+            });
+            document.getElementById('compStartDate').addEventListener('change', (e) => {
+                document.getElementById('calcStartDate').value = e.target.value;
+                loadComparisonData();
+            });
+            document.getElementById('compEndDate').addEventListener('change', (e) => {
+                document.getElementById('calcEndDate').value = e.target.value;
+                loadComparisonData();
+            });
+            
+            // Route dropdown filter
+            document.getElementById('compSearchRoute').addEventListener('change', () => {
+                renderComparisonTable();
+                renderComparisonChart();
+            });
         });
 
         function showMessage(msg, type = 'success') {
@@ -995,6 +1151,8 @@
             end.setDate(start.getDate() + 6);
             document.getElementById('calcStartDate').value = formatDate(start);
             document.getElementById('calcEndDate').value = formatDate(end);
+            document.getElementById('compStartDate').value = formatDate(start);
+            document.getElementById('compEndDate').value = formatDate(end);
         }
 
         function switchTab(tabId) {
@@ -1005,6 +1163,7 @@
 
             if (tabId === 'dashboard') initCharts();
             if (tabId === 'report') loadHistory();
+            if (tabId === 'comparison') loadComparisonData();
         }
 
         // ======================= 数据提取与核算逻辑 =======================
@@ -2233,6 +2392,319 @@
                 });
         }
 
+        // ======================= 运单数据对比逻辑 =======================
+        let comparisonRecords = [];
+        let comparisonSummary = {};
+        let compSortKey = 'record_date';
+        let compSortOrder = 'desc';
+        let comparisonChart = null;
+
+        function loadComparisonData() {
+            const startStr = document.getElementById('compStartDate').value;
+            const endStr = document.getElementById('compEndDate').value;
+            if (!startStr || !endStr) {
+                showMessage('请选择对比日期范围', 'error');
+                return;
+            }
+
+            // Show a nice loading visual for KPIs and chart
+            document.getElementById('compFeishuTotal').textContent = '加载中...';
+            document.getElementById('compGofoTotal').textContent = '加载中...';
+            document.getElementById('compNetDiff').textContent = '加载中...';
+            document.getElementById('compAbsDiff').textContent = '加载中...';
+
+            fetch(`/api/admin/cost_accounting/waybill_comparison?start_date=${startStr}&end_date=${endStr}`)
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        comparisonRecords = res.records || [];
+                        comparisonSummary = res.summary || {};
+                        
+                        // Populate route dropdown from data
+                        populateRouteDropdown();
+                        // Render KPIs
+                        renderComparisonKPIs();
+                        // Render Table
+                        renderComparisonTable();
+                        // Render Chart
+                        renderComparisonChart();
+                    } else {
+                        showMessage(res.error || '获取对比数据失败', 'error');
+                    }
+                })
+                .catch(err => {
+                    console.error('Error loading comparison data:', err);
+                    showMessage('获取对比数据时发生网络错误', 'error');
+                });
+        }
+
+        function renderComparisonKPIs() {
+            const sum = comparisonSummary;
+            document.getElementById('compFeishuTotal').textContent = fmtNum(sum.total_feishu_tickets || 0);
+            document.getElementById('compGofoTotal').textContent = fmtNum(sum.total_gofo_tickets || 0);
+            
+            const netDiff = sum.net_diff || 0;
+            const netDiffEl = document.getElementById('compNetDiff');
+            const netDiffCard = document.getElementById('compNetDiffCard');
+            
+            // Format Net Diff with +/- sign
+            const prefix = netDiff > 0 ? '+' : '';
+            netDiffEl.textContent = prefix + fmtNum(netDiff);
+            
+            // Dynamic Color Coding for Net Diff
+            if (netDiff > 0) {
+                netDiffEl.style.color = '#e67e22'; // Orange/warning: Feishu has more than GoFo
+                netDiffCard.style.borderLeftColor = '#e67e22';
+            } else if (netDiff < 0) {
+                netDiffEl.style.color = '#dc3545'; // Red: GoFo has more than Feishu
+                netDiffCard.style.borderLeftColor = '#dc3545';
+            } else {
+                netDiffEl.style.color = '#28a745'; // Green: Perfect match
+                netDiffCard.style.borderLeftColor = '#28a745';
+            }
+            
+            document.getElementById('compAbsDiff').textContent = fmtNum(sum.total_abs_diff || 0);
+        }
+
+        function sortCompTable(key) {
+            if (compSortKey === key) {
+                compSortOrder = compSortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                compSortKey = key;
+                compSortOrder = 'desc'; // Default to desc for new keys
+            }
+            renderComparisonTable();
+        }
+
+        function populateRouteDropdown() {
+            const sel = document.getElementById('compSearchRoute');
+            const prevVal = sel.value;
+            // Extract unique routes sorted
+            const routes = [...new Set(comparisonRecords.map(r => r.direction))].sort();
+            sel.innerHTML = '<option value="">全部流向</option>';
+            routes.forEach(r => {
+                sel.innerHTML += `<option value="${r}">${r}</option>`;
+            });
+            // Restore previous selection if still valid
+            if (routes.includes(prevVal)) sel.value = prevVal;
+        }
+
+        function renderComparisonTable() {
+            const tbody = document.querySelector('#comparisonTable tbody');
+            const query = (document.getElementById('compSearchRoute').value || '').trim().toUpperCase();
+            
+            // 1. Filter
+            let records = comparisonRecords;
+            if (query) {
+                records = records.filter(r => 
+                    String(r.direction).toUpperCase() === query
+                );
+            }
+            
+            // 2. Sort
+            records = [...records].sort((a, b) => {
+                let valA = a[compSortKey];
+                let valB = b[compSortKey];
+                
+                // Handle string comparisons
+                if (typeof valA === 'string') {
+                    return compSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }
+                
+                // Handle numbers
+                valA = Number(valA) || 0;
+                valB = Number(valB) || 0;
+                return compSortOrder === 'asc' ? valA - valB : valB - valA;
+            });
+            
+            // 3. Render
+            if (records.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="color:#999; padding: 20px;">没有匹配的对比记录</td></tr>`;
+                return;
+            }
+            
+            let html = '';
+            records.forEach(r => {
+                const diff = r.diff || 0;
+                const absDiff = r.abs_diff || 0;
+                const diffPct = r.diff_pct || 0;
+                
+                let diffClass = 'text-center';
+                let diffText = '0';
+                if (diff > 0) {
+                    diffClass = 'num style-positive';
+                    diffText = `+${fmtNum(diff)}`;
+                } else if (diff < 0) {
+                    diffClass = 'num style-negative';
+                    diffText = fmtNum(diff);
+                } else {
+                    diffClass = 'num style-neutral';
+                    diffText = '0';
+                }
+                
+                // Discrepancy percentage styling
+                let pctClass = '';
+                if (Math.abs(diffPct) > 10) {
+                    pctClass = 'style-negative-badge'; // High discrepancy
+                } else if (Math.abs(diffPct) > 0) {
+                    pctClass = 'style-warning-badge'; // Moderate discrepancy
+                } else {
+                    pctClass = 'style-neutral-badge';
+                }
+                
+                html += `<tr>
+                    <td><b>${r.record_date}</b></td>
+                    <td><span class="route-badge">${r.direction}</span></td>
+                    <td class="num">${fmtNum(r.feishu_tickets)}</td>
+                    <td class="num">${fmtNum(r.gofo_tickets)}</td>
+                    <td class="${diffClass}" style="font-weight:bold;">${diffText}</td>
+                    <td class="num" style="color:#6c757d;">${fmtNum(absDiff)}</td>
+                    <td class="num"><span class="${pctClass}">${diffPct.toFixed(2)}%</span></td>
+                </tr>`;
+            });
+            
+            tbody.innerHTML = html;
+        }
+
+        function renderComparisonChart() {
+            // Use same filter as table
+            const query = (document.getElementById('compSearchRoute').value || '').trim().toUpperCase();
+            let filtered = comparisonRecords;
+            if (query) {
+                filtered = filtered.filter(r => String(r.direction).toUpperCase() === query);
+            }
+            // Aggregate records by direction for a high-impact overview
+            const chartData = {};
+            filtered.forEach(r => {
+                const dir = r.direction;
+                if (!chartData[dir]) {
+                    chartData[dir] = { feishu: 0, gofo: 0 };
+                }
+                chartData[dir].feishu += r.feishu_tickets || 0;
+                chartData[dir].gofo += r.gofo_tickets || 0;
+            });
+            
+            const sortedDirs = Object.keys(chartData).sort();
+            const feishuVals = sortedDirs.map(d => chartData[d].feishu);
+            const gofoVals = sortedDirs.map(d => chartData[d].gofo);
+            const diffVals = sortedDirs.map(d => chartData[d].feishu - chartData[d].gofo);
+            
+            if (!comparisonChart) {
+                comparisonChart = echarts.init(document.getElementById('waybillComparisonChart'));
+            }
+            
+            const option = {
+                title: { 
+                    text: '装载执行监控与CNO集包量及差异流向汇总对比', 
+                    left: 'center',
+                    textStyle: { fontSize: 15, fontWeight: 'bold' }
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: function(params) {
+                        let res = `<b>流向: ${params[0].name}</b><br/>`;
+                        params.forEach(p => {
+                            if (p.seriesName === '差异 (装载执行 - CNO集包)') {
+                                const sign = p.value >= 0 ? '+' : '';
+                                const color = p.value >= 0 ? '#28a745' : '#dc3545';
+                                res += `${p.marker}${p.seriesName}: <b style="color:${color};">${sign}${fmtNum(p.value)} 件</b><br/>`;
+                            } else {
+                                res += `${p.marker}${p.seriesName}: <b>${fmtNum(p.value)} 件</b><br/>`;
+                            }
+                        });
+                        return res;
+                    }
+                },
+                legend: { 
+                    data: ['装载执行监控', 'CNO集包量', '差异 (装载执行 - CNO集包)'],
+                    bottom: 0 
+                },
+                grid: { left: '3%', right: '4%', bottom: '10%', top: '15%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    data: sortedDirs,
+                    axisLabel: { interval: 0, rotate: 25 }
+                },
+                yAxis: [
+                    {
+                        type: 'value',
+                        name: '票数量 (件)',
+                        axisLabel: { formatter: '{value}' }
+                    },
+                    {
+                        type: 'value',
+                        name: '差异量 (件)',
+                        splitLine: { show: false },
+                        axisLabel: { formatter: '{value}' }
+                    }
+                ],
+                series: [
+                    {
+                        name: '装载执行监控',
+                        type: 'bar',
+                        barGap: 0,
+                        itemStyle: { 
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: '#3a86ff' },
+                                { offset: 1, color: '#0056b3' }
+                            ]),
+                            borderRadius: [4, 4, 0, 0]
+                        },
+                        data: feishuVals
+                    },
+                    {
+                        name: 'CNO集包量',
+                        type: 'bar',
+                        itemStyle: { 
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: '#06d6a0' },
+                                { offset: 1, color: '#009a75' }
+                            ]),
+                            borderRadius: [4, 4, 0, 0]
+                        },
+                        data: gofoVals
+                    },
+                    {
+                        name: '差异 (装载执行 - CNO集包)',
+                        type: 'line',
+                        yAxisIndex: 1,
+                        smooth: true,
+                        symbol: 'circle',
+                        symbolSize: 8,
+                        lineStyle: { width: 3, color: '#ff006e' },
+                        itemStyle: { color: '#ff006e' },
+                        data: diffVals
+                    }
+                ]
+            };
+            
+            comparisonChart.setOption(option);
+        }
+
+        function exportComparisonCSV() {
+            if (!comparisonRecords || comparisonRecords.length === 0) {
+                showMessage('没有可导出的对比数据', 'error');
+                return;
+            }
+            
+            let csv = '\uFEFF'; // BOM
+            csv += '核算日期,流向/目的地,装载执行监控,CNO集包量,差异值(装载执行 - CNO集包),绝对值差异,差异百分比\n';
+            
+            comparisonRecords.forEach(r => {
+                csv += `${r.record_date},${r.direction},${r.feishu_tickets},${r.gofo_tickets},${r.diff},${r.abs_diff},${r.diff_pct}%\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `waybill_comparison_report_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         window.addEventListener('resize', () => {
             if (costTrendChart) costTrendChart.resize();
             if (pChart) pChart.resize();
@@ -2241,6 +2713,7 @@
             if (corrChart) corrChart.resize();
             if (impactChart) impactChart.resize();
             if (weeklyLaborChart) weeklyLaborChart.resize();
+            if (comparisonChart) comparisonChart.resize();
         });
     </script>
 </body>

@@ -14,7 +14,7 @@
         { name: '生产及耗材', lang: 'consumables', url: '/consumables', icon: 'fa-box', class: 'nav-item-cost', page: 'consumables' },
         { name: '操作日志', lang: 'operation_logs', url: '/logs', icon: 'fa-file-alt', class: 'nav-item-logs', page: 'logs', hidden: true },
         { name: '基础设置', lang: 'admin_settings', url: '/admin', icon: 'fa-cog', class: 'nav-item-admin', page: 'admin', hidden: true },
-        { name: '成本核算', lang: 'cost_accounting', url: '/cost_accounting', icon: 'fa-calculator', class: 'nav-item-cost-acct', page: 'cost_accounting', hidden: true }
+        { name: '成本核算', lang: 'cost_accounting', url: '/operations_metrics', icon: 'fa-calculator', class: 'nav-item-cost-acct', page: 'cost_accounting', hidden: true }
     ];
 
     function initNav() {
