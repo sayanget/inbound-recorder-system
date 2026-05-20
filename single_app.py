@@ -902,6 +902,43 @@ def init_db():
         except Exception:
             pass
 
+        # 劳务公司 Sorter（XX Sorter xx）分时产能：统一计件
+        sql = convert_sql("""CREATE TABLE IF NOT EXISTS cno_labor_sorter_hourly (
+            record_date TEXT NOT NULL,
+            time_slot TEXT NOT NULL,
+            company_code TEXT NOT NULL,
+            pay_type TEXT NOT NULL,
+            pieces INTEGER NOT NULL DEFAULT 0,
+            pieces_deduped INTEGER,
+            synced_at TEXT,
+            PRIMARY KEY (record_date, time_slot, company_code, pay_type)
+        );""")
+        cursor.execute(sql)
+        try:
+            cursor.execute("SELECT pieces_deduped FROM cno_labor_sorter_hourly LIMIT 1")
+        except Exception:
+            if USE_POSTGRES:
+                cursor.execute(
+                    "ALTER TABLE cno_labor_sorter_hourly ADD COLUMN pieces_deduped INTEGER"
+                )
+            else:
+                cursor.execute(
+                    "ALTER TABLE cno_labor_sorter_hourly ADD COLUMN pieces_deduped INTEGER"
+                )
+
+        sql = convert_sql("""CREATE TABLE IF NOT EXISTS cno_labor_sorter_account_hourly (
+            record_date TEXT NOT NULL,
+            time_slot TEXT NOT NULL,
+            company_code TEXT NOT NULL,
+            account_label TEXT NOT NULL,
+            pay_type TEXT NOT NULL,
+            pieces INTEGER NOT NULL DEFAULT 0,
+            pieces_deduped INTEGER,
+            synced_at TEXT,
+            PRIMARY KEY (record_date, time_slot, company_code, account_label)
+        );""")
+        cursor.execute(sql)
+
         sql = convert_sql("""CREATE TABLE IF NOT EXISTS daily_packing_operlog_daily (
             anchor_date TEXT NOT NULL,
             stats_window TEXT NOT NULL DEFAULT 'calendar',
@@ -2411,6 +2448,629 @@ def _build_cno_narrowbelt_hourly_series(anchor_date, window_mode: str = 'calenda
         'labels': labels,
         'lines': lines,
     }
+
+
+def _norm_labor_time_slot(val):
+    s = str(val or '').strip()
+    if not s:
+        return ''
+    if len(s) >= 8 and s[2] == ':' and s[5] == ':':
+        s = f"{int(s[:2]):02d}:{s[3:5]}"
+    elif ':' in s:
+        parts = s.split(':')
+        try:
+            s = f"{int(parts[0]):02d}:{str(parts[1])[:2]}"
+        except (ValueError, IndexError):
+            return ''
+    if len(s) == 5 and s[2] == ':':
+        return s
+    return ''
+
+
+def _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
+    if window_mode == 'business':
+        return (rd == anchor_str and slot >= '05:00') or (
+            rd == next_str and slot < '05:00'
+        )
+    if window_mode == 'seventeen':
+        return (rd == anchor_str and slot >= '17:00') or (
+            rd == next_str and slot < '17:00'
+        )
+    return rd == anchor_str
+
+
+def _labor_pick_piece_count(cm, n_raw, n_dedup):
+    if cm == 'deduped':
+        if n_dedup is None:
+            return int(n_raw or 0), True
+        if int(n_raw or 0) > 0 and int(n_dedup or 0) == 0:
+            return int(n_raw or 0), True
+        return int(n_dedup or 0), False
+    return int(n_raw or 0), False
+
+
+def _build_cno_labor_sorter_group_summary(
+    anchor_date, window_mode: str = 'calendar', count_mode: str = 'raw'
+):
+    """按公司汇总：计件组数、合计件数、有产工作时长、有产时段平均产能（件/h）。"""
+    if isinstance(anchor_date, datetime):
+        anchor_date = anchor_date.date()
+    next_cal = anchor_date + timedelta(days=1)
+    anchor_str = anchor_date.strftime('%Y-%m-%d')
+    next_str = next_cal.strftime('%Y-%m-%d')
+    cm = _parse_cno_narrowbelt_count_mode(count_mode)
+
+    if window_mode == 'business':
+        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
+    elif window_mode == 'seventeen':
+        labels = [f"{((17 + i) % 24):02d}:00" for i in range(24)]
+    else:
+        labels = [f"{i:02d}:00" for i in range(24)]
+    slot_to_idx = {s: i for i, s in enumerate(labels)}
+
+    clause, binds = _record_date_slot_window_sql_binds(window_mode, anchor_date)
+
+    # (company, account) -> pieces；company -> 24 整点件数
+    account_agg = {}
+    company_hourly = {}
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            convert_query_placeholders(
+                f"""
+                SELECT record_date, time_slot, company_code, pay_type, pieces, pieces_deduped
+                FROM cno_labor_sorter_hourly
+                WHERE {clause}
+                """
+            ),
+            binds,
+        )
+        for row in cursor.fetchall():
+            rd = _db_row_get(row, 'record_date', '') or _db_row_get(row, 0, '')
+            if hasattr(rd, 'strftime'):
+                rd = rd.strftime('%Y-%m-%d')
+            rd = str(rd)[:10]
+            slot = _norm_labor_time_slot(
+                _db_row_get(row, 'time_slot', '') or _db_row_get(row, 1, '')
+            )
+            company = str(
+                _db_row_get(row, 'company_code', '') or _db_row_get(row, 2, '')
+            ).strip()
+            if not company or not slot:
+                continue
+            if not _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
+                continue
+            try:
+                n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 4, 0) or 0)
+            except (TypeError, ValueError):
+                n_raw = 0
+            pd = _db_row_get(row, 'pieces_deduped', None)
+            if pd is None:
+                pd = _db_row_get(row, 5, None)
+            try:
+                n_dedup = int(pd) if pd is not None and pd != '' else None
+            except (TypeError, ValueError):
+                n_dedup = None
+            n, _ = _labor_pick_piece_count(cm, n_raw, n_dedup)
+            idx = slot_to_idx.get(slot)
+            if idx is None:
+                continue
+            if company not in company_hourly:
+                company_hourly[company] = [0] * 24
+            company_hourly[company][idx] += int(n or 0)
+
+        cursor.execute(
+            convert_query_placeholders(
+                f"""
+                SELECT record_date, time_slot, company_code, account_label, pay_type,
+                       pieces, pieces_deduped
+                FROM cno_labor_sorter_account_hourly
+                WHERE {clause}
+                """
+            ),
+            binds,
+        )
+        for row in cursor.fetchall():
+            rd = _db_row_get(row, 'record_date', '') or _db_row_get(row, 0, '')
+            if hasattr(rd, 'strftime'):
+                rd = rd.strftime('%Y-%m-%d')
+            rd = str(rd)[:10]
+            slot = _norm_labor_time_slot(
+                _db_row_get(row, 'time_slot', '') or _db_row_get(row, 1, '')
+            )
+            company = str(
+                _db_row_get(row, 'company_code', '') or _db_row_get(row, 2, '')
+            ).strip()
+            account = str(
+                _db_row_get(row, 'account_label', '') or _db_row_get(row, 3, '')
+            ).strip()
+            pay_type = str(
+                _db_row_get(row, 'pay_type', '') or _db_row_get(row, 4, '')
+            ).strip().lower()
+            if not company or not account or pay_type not in ('piece', 'hourly'):
+                continue
+            if not slot or not _labor_row_in_stats_window(
+                rd, slot, anchor_str, next_str, window_mode
+            ):
+                continue
+            try:
+                n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 5, 0) or 0)
+            except (TypeError, ValueError):
+                n_raw = 0
+            pd = _db_row_get(row, 'pieces_deduped', None)
+            if pd is None:
+                pd = _db_row_get(row, 6, None)
+            try:
+                n_dedup = int(pd) if pd is not None and pd != '' else None
+            except (TypeError, ValueError):
+                n_dedup = None
+            n, _ = _labor_pick_piece_count(cm, n_raw, n_dedup)
+            if n <= 0:
+                continue
+            key = (company, account)
+            if key not in account_agg:
+                account_agg[key] = {'pay_type': pay_type, 'pieces': 0}
+            account_agg[key]['pieces'] += n
+            account_agg[key]['pay_type'] = pay_type
+    finally:
+        conn.close()
+
+    all_companies = set(company_hourly.keys()) | {k[0] for k in account_agg}
+    companies = {}
+    for company in all_companies:
+        hourly_arr = company_hourly.get(company) or [0] * 24
+        total_pieces = int(sum(hourly_arr))
+        active_hours = sum(1 for v in hourly_arr if int(v or 0) > 0)
+        pieces_per_active_hour = (
+            round(total_pieces / active_hours, 1) if active_hours > 0 else 0.0
+        )
+        group_count = sum(
+            1
+            for (c, _a), info in account_agg.items()
+            if c == company and int(info.get('pieces') or 0) > 0
+        )
+        if group_count <= 0 and total_pieces <= 0:
+            continue
+        pieces_per_hour_per_group = (
+            round(total_pieces / group_count / active_hours, 1)
+            if group_count > 0 and active_hours > 0
+            else 0.0
+        )
+        companies[company] = {
+            'company': company,
+            'group_count': group_count,
+            'total_pieces': total_pieces,
+            'active_hours': active_hours,
+            'work_hours': active_hours,
+            'pieces_per_active_hour': pieces_per_active_hour,
+            'pieces_per_hour_per_group': pieces_per_hour_per_group,
+            'hourly_pieces': hourly_arr,
+        }
+
+    rows = sorted(
+        companies.values(),
+        key=lambda x: (-(x.get('total_pieces') or 0), x['company']),
+    )
+    tot_pieces = sum(r['total_pieces'] for r in rows)
+    tot_active = sum(r['active_hours'] for r in rows)
+    tot_groups = sum(r['group_count'] for r in rows)
+    totals = {
+        'group_count': tot_groups,
+        'total_pieces': tot_pieces,
+        'active_hours': tot_active,
+        'work_hours': tot_active,
+        'pieces_per_active_hour': (
+            round(tot_pieces / tot_active, 1) if tot_active > 0 else 0.0
+        ),
+        'pieces_per_hour_per_group': (
+            round(
+                sum(
+                    (r['pieces_per_hour_per_group'] or 0) * (r['group_count'] or 0)
+                    for r in rows
+                )
+                / tot_groups,
+                1,
+            )
+            if tot_groups > 0
+            else 0.0
+        ),
+    }
+    return {'rows': rows, 'totals': totals, 'window_slots': labels}
+
+
+def _build_cno_labor_sorter_hourly_series(
+    anchor_date, window_mode: str = 'calendar', count_mode: str = 'raw'
+):
+    """劳务公司 Sorter 分时产能（统一计件）；与窄带同源 cno_labor_sorter_hourly。"""
+    if isinstance(anchor_date, datetime):
+        anchor_date = anchor_date.date()
+    next_cal = anchor_date + timedelta(days=1)
+    anchor_str = anchor_date.strftime('%Y-%m-%d')
+    next_str = next_cal.strftime('%Y-%m-%d')
+    cm = _parse_cno_narrowbelt_count_mode(count_mode)
+
+    if window_mode == 'business':
+        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
+    elif window_mode == 'seventeen':
+        labels = [f"{((17 + i) % 24):02d}:00" for i in range(24)]
+    else:
+        labels = [f"{i:02d}:00" for i in range(24)]
+    slot_to_idx = {s: i for i, s in enumerate(labels)}
+    series = {}
+    dedup_column_cells = 0
+    dedup_fallback_cells = 0
+
+    clause, binds = _record_date_slot_window_sql_binds(window_mode, anchor_date)
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            convert_query_placeholders(
+                f"""
+                SELECT record_date, time_slot, company_code, pay_type, pieces, pieces_deduped
+                FROM cno_labor_sorter_hourly
+                WHERE {clause}
+                ORDER BY record_date, time_slot, company_code, pay_type
+                """
+            ),
+            binds,
+        )
+        for row in cursor.fetchall():
+            rd = _db_row_get(row, 'record_date', '') or _db_row_get(row, 0, '')
+            if hasattr(rd, 'strftime'):
+                rd = rd.strftime('%Y-%m-%d')
+            rd = str(rd)[:10]
+            slot = _norm_labor_time_slot(
+                _db_row_get(row, 'time_slot', '') or _db_row_get(row, 1, '')
+            )
+            company = str(
+                _db_row_get(row, 'company_code', '') or _db_row_get(row, 2, '')
+            ).strip()
+            pay_type = str(
+                _db_row_get(row, 'pay_type', '') or _db_row_get(row, 3, '')
+            ).strip().lower()
+            if pay_type not in ('piece', 'hourly'):
+                continue
+            try:
+                n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 4, 0) or 0)
+            except (TypeError, ValueError):
+                n_raw = 0
+            pd = _db_row_get(row, 'pieces_deduped', None)
+            if pd is None:
+                pd = _db_row_get(row, 5, None)
+            try:
+                n_dedup = int(pd) if pd is not None and pd != '' else None
+            except (TypeError, ValueError):
+                n_dedup = None
+            n, used_dedup_fallback = _labor_pick_piece_count(cm, n_raw, n_dedup)
+            if not company or not slot:
+                continue
+            if not _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
+                continue
+            idx = slot_to_idx.get(slot)
+            if idx is None:
+                continue
+            if company not in series:
+                series[company] = [0] * 24
+            series[company][idx] = int(series[company][idx] or 0) + int(n or 0)
+            if cm == 'deduped':
+                if used_dedup_fallback:
+                    dedup_fallback_cells += 1
+                else:
+                    dedup_column_cells += 1
+    finally:
+        conn.close()
+
+    companies = sorted(series.keys())
+
+    return {
+        'timezone': 'server_local',
+        'stats_window': window_mode,
+        'count_mode': cm,
+        'dedup_column_cells': dedup_column_cells if cm == 'deduped' else 0,
+        'dedup_fallback_cells': dedup_fallback_cells if cm == 'deduped' else 0,
+        'date': anchor_str,
+        'labels': labels,
+        'companies': companies,
+        'series': series,
+    }
+
+
+@app.route('/api/statistics/cno_labor_sorter_hourly', methods=['GET'])
+def api_statistics_cno_labor_sorter_hourly():
+    """CNO 劳务公司 Sorter 分时产能（统一计件）；与窄带相同 stats_window、count_mode。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    raw = request.args.get('date')
+    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    if raw:
+        try:
+            anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
+        except ValueError:
+            anchor = _default_stats_request_date(wm)
+    else:
+        anchor = _default_stats_request_date(wm)
+
+    cm = _parse_cno_narrowbelt_count_mode(request.args.get('count_mode'))
+    try:
+        data = _build_cno_labor_sorter_hourly_series(anchor, wm, cm)
+        data['group_summary'] = _build_cno_labor_sorter_group_summary(anchor, wm, cm)
+        data['sync_plan'] = _build_cno_operlog_sync_plan(anchor, wm)
+        resp = jsonify(data)
+        resp.headers['Cache-Control'] = 'no-store, max-age=0'
+        return resp
+    except Exception as e:
+        labels = (
+            [f"{((17 + i) % 24):02d}:00" for i in range(24)] if wm == 'seventeen'
+            else ([f"{((5 + i) % 24):02d}:00" for i in range(24)] if wm == 'business'
+                  else [f"{i:02d}:00" for i in range(24)]))
+        return jsonify({
+            'error': str(e),
+            'date': anchor.strftime('%Y-%m-%d'),
+            'count_mode': cm,
+            'labels': labels,
+            'companies': [],
+            'series': {},
+        }), 500
+
+
+def _la_calendar_dates_for_stats_sync(anchor_date, window_mode: str):
+    """统计窗口所需的 LA 日历日列表（business/seventeen 含锚点日+次日）。"""
+    if isinstance(anchor_date, str):
+        anchor_date = datetime.strptime(str(anchor_date)[:10], '%Y-%m-%d').date()
+    dates = [anchor_date.strftime('%Y-%m-%d')]
+    if window_mode in ('business', 'seventeen'):
+        nxt = (anchor_date + timedelta(days=1)).strftime('%Y-%m-%d')
+        if nxt not in dates:
+            dates.append(nxt)
+    return dates
+
+
+def _la_calendar_day_hour_slots_to_sync(record_date_str: str) -> int:
+    """某 LA 日历日 sync_la_calendar_day_hours 会尝试的整点小时数。"""
+    record_date_str = (record_date_str or '').strip()[:10]
+    d = datetime.strptime(record_date_str, '%Y-%m-%d').date()
+    now = datetime.now(LA_TZ)
+    if d > now.date():
+        return 0
+    if d < now.date():
+        return 24
+    day_start = LA_TZ.localize(datetime(d.year, d.month, d.day, 0, 0, 0))
+    n = 0
+    for h in range(24):
+        slot = day_start + timedelta(hours=h)
+        if slot.strftime('%Y-%m-%d') != record_date_str:
+            break
+        if slot > now:
+            break
+        n += 1
+    return n
+
+
+def _build_cno_operlog_sync_plan(anchor_date, window_mode: str = 'calendar'):
+    """说明手动同步将拉取多少 LA 日历日 / 整点时段（与 sync_la_calendar_day_hours 一致）。"""
+    if isinstance(anchor_date, str):
+        anchor_date = datetime.strptime(str(anchor_date)[:10], '%Y-%m-%d').date()
+    anchor_str = anchor_date.strftime('%Y-%m-%d')
+    sync_dates = _la_calendar_dates_for_stats_sync(anchor_date, window_mode)
+    hours_by_date = {
+        d: _la_calendar_day_hour_slots_to_sync(d) for d in sync_dates
+    }
+    total_hours = sum(hours_by_date.values())
+    today_la = datetime.now(LA_TZ).strftime('%Y-%m-%d')
+
+    wm_labels = {
+        'calendar': '自然日 0–24h',
+        'business': '5:00–次日 5:00',
+        'seventeen': '17:00–次日 17:00',
+    }
+    date_parts = []
+    for d in sync_dates:
+        ht = hours_by_date.get(d, 0)
+        suffix = '今日至今' if d == today_la else ('满 24h' if ht >= 24 else f'{ht}h')
+        date_parts.append(f'{d}（{suffix}）')
+
+    day_count = len(sync_dates)
+    return {
+        'anchor_date': anchor_str,
+        'stats_window': window_mode,
+        'stats_window_label': wm_labels.get(window_mode, window_mode),
+        'sync_dates': sync_dates,
+        'day_count': day_count,
+        'hours_estimate': total_hours,
+        'hours_by_date': hours_by_date,
+        'includes_today_partial': today_la in sync_dates,
+        'summary': f'{day_count} 个 LA 日历日、约 {total_hours} 个整点时段',
+        'detail': '、'.join(date_parts),
+    }
+
+
+def _start_cno_operlog_hourly_sync_background(
+    date_str: str,
+    log_prefix: str = 'CnoOperlogStatsSync',
+    extra_dates=None,
+):
+    """后台拉取 LA 日历日 operatelog 分时（窄带 + 劳务 Sorter 同批写入）。"""
+    date_str = (date_str or '').strip()[:10]
+    if not date_str:
+        date_str = datetime.now(LA_TZ).strftime('%Y-%m-%d')
+    dates = [date_str]
+    for d in extra_dates or []:
+        d = (d or '').strip()[:10]
+        if d and d not in dates:
+            dates.append(d)
+
+    def _worker():
+        try:
+            import importlib
+            import sync_cno_narrowbelt_hourly as _nb
+
+            importlib.reload(_nb)
+            for d in dates:
+                result = _nb.sync_la_calendar_day_hours(d)
+                print(
+                    f"[{log_prefix}] date={d} success={result.get('success')} "
+                    f"hours={result.get('hours_attempted')} "
+                    f"errs={len(result.get('errors') or [])}"
+                )
+                errs = result.get('errors') or []
+                if errs:
+                    print(f"[{log_prefix}] first errors: {errs[:5]}")
+        except Exception as e:
+            print(f"[{log_prefix}] FAILED dates={dates}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return dates
+
+
+@app.route('/api/statistics/cno_labor_sorter_hourly/sync', methods=['POST'])
+def api_statistics_cno_labor_sorter_hourly_sync():
+    """统计页手动同步：拉取所选 LA 日历日 operatelog 分时（窄带 + 劳务 Sorter）。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录', 'success': False}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限', 'success': False}), 403
+
+    data = request.get_json(silent=True) or {}
+    date_str = (data.get('date') or request.args.get('date') or '').strip()[:10]
+    wm = _parse_stats_window_param(
+        data.get('stats_window') or request.args.get('stats_window')
+    )
+    if not date_str:
+        date_str = _default_stats_request_date(wm).strftime('%Y-%m-%d')
+    try:
+        anchor = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        anchor = _default_stats_request_date(wm)
+        date_str = anchor.strftime('%Y-%m-%d')
+
+    plan = _build_cno_operlog_sync_plan(anchor, wm)
+    sync_dates = plan['sync_dates']
+    _start_cno_operlog_hourly_sync_background(
+        sync_dates[0],
+        extra_dates=sync_dates[1:],
+    )
+    return jsonify({
+        'success': True,
+        'async': True,
+        'date': date_str,
+        'sync_dates': sync_dates,
+        'sync_plan': plan,
+        'message': (
+            f'已提交后台同步：{plan["summary"]}（{plan["detail"]}）。'
+            f'含窄带与劳务 Sorter；数据量大时约需数分钟，页面将自动刷新图表。'
+        ),
+    })
+
+
+@app.route('/api/statistics/cno_labor_sorter_hourly/sync_plan', methods=['GET'])
+def api_statistics_cno_labor_sorter_hourly_sync_plan():
+    """返回当前所选日期/统计口径下，手动同步将覆盖的 LA 日历日与时段数。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    raw = request.args.get('date')
+    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    if raw:
+        try:
+            anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
+        except ValueError:
+            anchor = _default_stats_request_date(wm)
+    else:
+        anchor = _default_stats_request_date(wm)
+    return jsonify({'success': True, 'sync_plan': _build_cno_operlog_sync_plan(anchor, wm)})
+
+
+@app.route('/api/statistics/cno_labor_sorter_hourly/export', methods=['GET'])
+def api_statistics_cno_labor_sorter_hourly_export():
+    """导出劳务 Sorter 分时 CSV；口径与图表一致。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    raw = request.args.get('date')
+    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    if raw:
+        try:
+            anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
+        except ValueError:
+            anchor = _default_stats_request_date(wm)
+    else:
+        anchor = _default_stats_request_date(wm)
+
+    cm = _parse_cno_narrowbelt_count_mode(request.args.get('count_mode'))
+    try:
+        data = _build_cno_labor_sorter_hourly_series(anchor, wm, cm)
+        data['group_summary'] = _build_cno_labor_sorter_group_summary(anchor, wm, cm)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([
+        'operating_day_anchor_la',
+        'stats_window',
+        'count_mode',
+        'time_slot_la',
+        'company_code',
+        'pay_type',
+        'pieces',
+    ])
+    for i, lab in enumerate(data['labels']):
+        for company in data.get('companies') or []:
+            arr = (data.get('series') or {}).get(company) or []
+            val = arr[i] if i < len(arr) else 0
+            w.writerow([
+                data['date'],
+                data.get('stats_window', wm),
+                data.get('count_mode', cm),
+                lab,
+                company,
+                'piece',
+                val,
+            ])
+    w.writerow([])
+    w.writerow([
+        'company_code',
+        'piece_groups',
+        'work_hours_active',
+        'total_pieces',
+        'pieces_per_active_hour',
+        'pieces_per_hour_per_group',
+    ])
+    gs = data.get('group_summary') or {}
+    for row in gs.get('rows') or []:
+        w.writerow([
+            row.get('company'),
+            row.get('group_count'),
+            row.get('work_hours'),
+            row.get('total_pieces'),
+            row.get('pieces_per_active_hour'),
+            row.get('pieces_per_hour_per_group'),
+        ])
+    tot = gs.get('totals') or {}
+    if tot:
+        w.writerow([
+            'TOTAL',
+            tot.get('group_count'),
+            tot.get('work_hours'),
+            tot.get('total_pieces'),
+            tot.get('pieces_per_active_hour'),
+            tot.get('pieces_per_hour_per_group'),
+        ])
+
+    fn = f"cno_labor_sorter_hourly_{data['date']}_{data.get('count_mode', 'raw')}.csv"
+    return Response(
+        buf.getvalue().encode('utf-8-sig'),
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename={fn}'},
+    )
 
 
 @app.route('/api/statistics/cno_narrowbelt_hourly', methods=['GET'])
@@ -11228,29 +11888,7 @@ def admin_gofo_cno_narrowbelt_sync_day():
     if not date_str:
         date_str = datetime.now(LA_TZ).strftime('%Y-%m-%d')
 
-    def _background_narrowbelt_sync():
-        try:
-            import importlib
-
-            import sync_cno_narrowbelt_hourly as _nb
-
-            importlib.reload(_nb)
-            result = _nb.sync_la_calendar_day_hours(date_str)
-            print(
-                f"[CnoNarrowbeltAdminSync] date={date_str} "
-                f"success={result.get('success')} "
-                f"hours={result.get('hours_attempted')} "
-                f"errs={len(result.get('errors') or [])}"
-            )
-            errs = result.get('errors') or []
-            if errs:
-                print(f"[CnoNarrowbeltAdminSync] first errors: {errs[:5]}")
-        except Exception as e:
-            print(f"[CnoNarrowbeltAdminSync] FAILED date={date_str}: {e}")
-            import traceback
-            traceback.print_exc()
-
-    threading.Thread(target=_background_narrowbelt_sync, daemon=True).start()
+    _start_cno_operlog_hourly_sync_background(date_str, log_prefix='CnoNarrowbeltAdminSync')
     return jsonify({
         'success': True,
         'async': True,
@@ -12203,6 +12841,42 @@ def get_weekly_labor_summary():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def _normalize_comparison_direction(dest):
+    """运单对比：将飞书目的地规范为可与 CNO 集包流向比对的代码。"""
+    if dest is None or not str(dest).strip():
+        return 'OTHER'
+    r = str(dest).upper().strip()
+    if r.endswith('.H'):
+        r = r[:-2]
+    if r.endswith('.G'):
+        r = r[:-2]
+    if 'LAS' in r:
+        return 'LAS'
+    if 'PHX' in r:
+        return 'PHX'
+    if 'LAX' in r:
+        return 'LAX'
+    if 'SEA' in r:
+        return 'SEA'
+    if 'MCO' in r:
+        return 'MCO'
+    return r or 'OTHER'
+
+
+def _feishu_raw_tickets_total(cursor, start_date, end_date):
+    """与「数据采集与核算 → 飞书运单数据源」相同：feishu_raw_data.tickets_count 区间合计。"""
+    cursor.execute(
+        convert_query_placeholders("""
+            SELECT COALESCE(SUM(tickets_count), 0) AS total
+            FROM feishu_raw_data
+            WHERE record_date >= ? AND record_date <= ?
+        """),
+        (start_date, end_date),
+    )
+    row = cursor.fetchone()
+    return int((row['total'] if row else 0) or 0)
+
+
 @app.route('/api/admin/feishu/data', methods=['GET'])
 def get_feishu_data():
     if 'user_id' not in session: return jsonify({'error': '未登录', 'success': False}), 401
@@ -12442,29 +13116,12 @@ def get_waybill_comparison():
     if not start_date or not end_date:
         conn.close()
         return jsonify({'success': False, 'error': '缺失日期参数'}), 400
-        
-    def normalize_route(route):
-        if not route:
-            return ""
-        r = str(route).upper().strip()
-        if r.endswith('.H'):
-            r = r[:-2]
-        if r.endswith('.G'):
-            r = r[:-2]
-        if 'LAS' in r:
-            return 'LAS'
-        if 'PHX' in r:
-            return 'PHX'
-        if 'LAX' in r:
-            return 'LAX'
-        if 'SEA' in r:
-            return 'SEA'
-        if 'MCO' in r:
-            return 'MCO'
-        return r
 
     try:
-        # 1. Fetch Feishu tickets
+        # 装载执行监控 KPI：与飞书运单数据源页同一表、同一日期区间的 tickets_count 合计
+        total_feishu_tickets = _feishu_raw_tickets_total(cursor, start_date, end_date)
+
+        # 1. 飞书：与 /api/admin/feishu/data 相同聚合，再规范化流向以便与 Gofo 对比
         f_query = """
             SELECT record_date, destination, SUM(tickets_count) as total_tickets
             FROM feishu_raw_data
@@ -12474,20 +13131,16 @@ def get_waybill_comparison():
         cursor.execute(convert_query_placeholders(f_query), (start_date, end_date))
         f_rows = cursor.fetchall()
         
-        # Aggregate by normalized route in Python
-        feishu_data = {} # { (date, route): tickets }
+        feishu_data = {}  # { (date, route): tickets }
         for row in f_rows:
             r_date = str(row['record_date']).split(' ')[0][:10]
             dest = row['destination']
             t_cnt = row['total_tickets'] or 0
-            
-            norm_dest = normalize_route(dest)
-            if not norm_dest: continue
-            
+            norm_dest = _normalize_comparison_direction(dest)
             key = (r_date, norm_dest)
             feishu_data[key] = feishu_data.get(key, 0) + t_cnt
             
-        # 2. Fetch Gofo waybills
+        # 2. CNO 集包量
         g_query = """
             SELECT record_date, destin_name, SUM(waybill_cnt) as total_waybills
             FROM gofo_center_collect_stats
@@ -12496,16 +13149,24 @@ def get_waybill_comparison():
         """
         cursor.execute(convert_query_placeholders(g_query), (start_date, end_date))
         g_rows = cursor.fetchall()
+
+        cursor.execute(
+            convert_query_placeholders("""
+                SELECT COALESCE(SUM(waybill_cnt), 0) AS total
+                FROM gofo_center_collect_stats
+                WHERE record_date >= ? AND record_date <= ?
+            """),
+            (start_date, end_date),
+        )
+        g_total_row = cursor.fetchone()
+        total_gofo_tickets = int((g_total_row['total'] if g_total_row else 0) or 0)
         
-        gofo_data = {} # { (date, route): waybills }
+        gofo_data = {}  # { (date, route): waybills }
         for row in g_rows:
             r_date = str(row['record_date']).split(' ')[0][:10]
             dest = row['destin_name']
             w_cnt = row['total_waybills'] or 0
-            
-            norm_dest = normalize_route(dest)
-            if not norm_dest: continue
-            
+            norm_dest = _normalize_comparison_direction(dest)
             key = (r_date, norm_dest)
             gofo_data[key] = gofo_data.get(key, 0) + w_cnt
             
@@ -12513,8 +13174,6 @@ def get_waybill_comparison():
         all_keys = sorted(list(set(feishu_data.keys()) | set(gofo_data.keys())), key=lambda x: (x[0], x[1]), reverse=True)
         
         records = []
-        tot_feishu = 0
-        tot_gofo = 0
         tot_abs_diff = 0
         
         for key in all_keys:
@@ -12540,20 +13199,22 @@ def get_waybill_comparison():
                 'abs_diff': abs_diff,
                 'diff_pct': diff_pct
             })
-            
-            tot_feishu += f_val
-            tot_gofo += g_val
             tot_abs_diff += abs_diff
             
-        net_diff = tot_feishu - tot_gofo
-        tot_diff_pct = round((net_diff / tot_feishu * 100), 2) if tot_feishu > 0 else (0.0 if tot_gofo == 0 else -100.0)
+        net_diff = total_feishu_tickets - total_gofo_tickets
+        tot_diff_pct = (
+            round((net_diff / total_feishu_tickets * 100), 2)
+            if total_feishu_tickets > 0
+            else (0.0 if total_gofo_tickets == 0 else -100.0)
+        )
         
         summary = {
-            'total_feishu_tickets': tot_feishu,
-            'total_gofo_tickets': tot_gofo,
+            'total_feishu_tickets': total_feishu_tickets,
+            'total_gofo_tickets': total_gofo_tickets,
             'net_diff': net_diff,
             'total_abs_diff': tot_abs_diff,
-            'total_diff_pct': tot_diff_pct
+            'total_diff_pct': tot_diff_pct,
+            'feishu_data_source': 'feishu_raw_data',
         }
         
         return jsonify({

@@ -719,6 +719,48 @@
             </div>
         </div>
 
+        <!-- CNO 劳务公司 Sorter 分时（计件 / 计时） -->
+        <div class="stats-section">
+            <div
+                style="display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                <div style="flex:1; min-width:200px;">
+                    <h3 style="margin:0;" data-lang="cno_labor_sorter_hourly_chart">CNO 劳务公司分时产能</h3>
+                    <p style="margin:6px 0 0 0; font-size:12px; color:var(--text-muted,#888); line-height:1.45;"
+                        data-lang="cno_labor_sorter_hourly_sub">数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；仅统计「劳务公司 Sorter 账号」扫描件数，统一计件组。计数口径与窄带图右上角一致。</p>
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                    <button type="button" id="cnoLaborSorterSyncBtn" class="nav-btn"
+                        style="padding:6px 14px; font-size:13px; cursor:pointer; background:#fd7e14; color:#fff; border:none; border-radius:4px; min-width:108px;"
+                        title="">
+                        <span id="cnoLaborSorterSyncBtnLabel" data-lang="cno_labor_sorter_sync_btn">手动同步</span>
+                    </button>
+                    <button type="button" id="cnoLaborSorterChartExportBtn" class="nav-btn"
+                        style="padding:6px 14px; font-size:13px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
+                        data-lang="export_excel">导出表格</button>
+                    <button type="button" id="cnoLaborSorterExportCsvBtn" class="nav-btn"
+                        style="padding:6px 14px; font-size:13px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
+                        <span data-lang="cno_labor_sorter_export_csv">导出 CSV</span>
+                    </button>
+                </div>
+            </div>
+            <div id="cnoLaborSorterSyncScope"
+                style="font-size:12px; color:var(--text-muted,#666); margin:0 0 6px 0; line-height:1.5; padding:8px 10px; background:var(--table-stripe,#f8f9fa); border-radius:6px; border:1px solid var(--border-color,#e9ecef);">
+            </div>
+            <div id="cnoLaborSorterSyncStatus" style="font-size:12px; min-height:18px; margin:0 0 8px 0; line-height:1.45;"></div>
+            <div id="cnoLaborSorterDedupHint" style="display:none; margin:0 0 10px 0;"></div>
+            <div class="chart-container" style="min-height: 360px;">
+                <canvas id="cnoLaborSorterHourlyCanvas"></canvas>
+            </div>
+            <div id="cnoLaborSorterGroupStatsWrap" style="margin-top: 12px; display: none;">
+                <div style="font-size:13px; font-weight:600; margin-bottom:8px; color:var(--text-color,#333);"
+                    data-lang="cno_labor_sorter_group_caption">各劳务公司汇总：计件组数、工作时长、合计件数、每小时产能、每小时每组产能；上图曲线为分时每小时件数。</div>
+                <div style="overflow-x: auto;">
+                    <table id="cnoLaborSorterGroupStatsTable"
+                        style="width: 100%; max-width: 960px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums;"></table>
+                </div>
+            </div>
+        </div>
+
         <!-- Daily packing: manual vs device (stacked) -->
         <div class="stats-section">
             <div
@@ -1134,6 +1176,34 @@
                 cno_narrowbelt_stats_col_total: "合计(件)",
                 cno_narrowbelt_stats_col_active_h: "有产时段(h)",
                 cno_narrowbelt_stats_col_mean_active: "件/h（有产）",
+                cno_labor_sorter_hourly_chart: "CNO 劳务公司分时产能",
+                cno_labor_sorter_hourly_sub: "数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；仅统计「劳务公司 Sorter 账号」扫描件数，统一计件组。计数口径与窄带图右上角一致。",
+                cno_labor_sorter_hourly_title: "劳务公司 Sorter 分时件数（每小时产能）",
+                load_labor_sorter_error: "加载劳务公司分时数据出错:",
+                render_labor_sorter_error: "渲染劳务公司分时图表出错:",
+                cno_labor_sorter_empty: "暂无劳务 Sorter 数据，请点击「手动同步」或选择有数据的日期。",
+                cno_labor_sorter_sync_btn: "手动同步",
+                cno_labor_sorter_sync_btn_running: "同步中…",
+                cno_labor_sorter_sync_ok: "已提交后台同步，请稍候自动刷新图表（约 1–3 分钟）。",
+                cno_labor_sorter_sync_fail: "提交同步失败:",
+                cno_labor_sync_scope_loading: "正在计算同步范围…",
+                cno_labor_sync_scope_hint: "点击「手动同步」将从 Gofo 拉取 Operalog（scan 217），写入窄带分时与劳务 Sorter 分时。",
+                cno_labor_sync_scope_fmt: "将同步 {days} 个洛杉矶日历日：{detail}，合计约 {hours} 个整点时段 · 统计锚点 {anchor} · {window}",
+                cno_labor_sync_scope_one_day: "将同步 1 个洛杉矶日历日：{detail}，约 {hours} 个整点时段 · 统计锚点 {anchor} · {window}",
+                cno_labor_sync_submitting: "正在提交同步任务…",
+                cno_labor_sync_running: "后台拉取中（{summary}），请勿重复点击…",
+                cno_labor_sync_refreshing: "自动刷新图表",
+                cno_labor_sync_done: "同步任务已提交；若数据未出现可稍后再点「手动同步」或切换日期后重试。",
+                cno_labor_sorter_export_csv: "导出 CSV（劳务分时）",
+                cno_labor_sorter_group_caption: "各劳务公司汇总：计件组数、工作时长、合计件数、每小时产能、每小时每组产能（=合计÷组数÷工作时长）；上图曲线为分时每小时件数。",
+                cno_labor_sorter_group_col_company: "劳务公司",
+                cno_labor_sorter_group_col_piece_g: "计件组",
+                cno_labor_sorter_group_col_work_h: "工作时长(h)",
+                cno_labor_sorter_group_col_total_pcs: "合计件数",
+                cno_labor_sorter_group_col_pph: "每小时产能(件/h)",
+                cno_labor_sorter_group_col_pph_group: "每小时每组产能",
+                cno_labor_sorter_group_total: "合计",
+                cno_labor_sorter_group_empty: "暂无组数数据，请先「手动同步」当前运营日。",
                 pieces: "件数",
                 time_slot: "时间段",
                 pickup_forecast_title: "揽收预估数据",
@@ -1346,6 +1416,34 @@
                 cno_narrowbelt_stats_col_total: "Total (pcs)",
                 cno_narrowbelt_stats_col_active_h: "Active slots (h)",
                 cno_narrowbelt_stats_col_mean_active: "pcs/h (active)",
+                cno_labor_sorter_hourly_chart: "CNO labor company hourly output",
+                cno_labor_sorter_hourly_sub: "Same source as narrow-belt chart (Gofo operatelog scan 217). Labor Sorter operators only; all piece-rate groups. Count mode matches narrow-belt toggle.",
+                cno_labor_sorter_hourly_title: "Labor Sorter hourly output (pcs per hour)",
+                load_labor_sorter_error: "Error loading labor Sorter hourly data:",
+                render_labor_sorter_error: "Error rendering labor Sorter chart:",
+                cno_labor_sorter_empty: "No labor Sorter data. Click Sync now or pick another date.",
+                cno_labor_sorter_sync_btn: "Sync now",
+                cno_labor_sorter_sync_btn_running: "Syncing…",
+                cno_labor_sorter_sync_ok: "Sync submitted; chart will auto-refresh in 1–3 minutes.",
+                cno_labor_sorter_sync_fail: "Sync submit failed:",
+                cno_labor_sync_scope_loading: "Calculating sync scope…",
+                cno_labor_sync_scope_hint: "Sync pulls Gofo operatelog (scan 217) for narrow-belt and labor Sorter hourly tables.",
+                cno_labor_sync_scope_fmt: "Will sync {days} LA calendar day(s): {detail}, ~{hours} hour slot(s) · anchor {anchor} · {window}",
+                cno_labor_sync_scope_one_day: "Will sync 1 LA calendar day: {detail}, ~{hours} hour slot(s) · anchor {anchor} · {window}",
+                cno_labor_sync_submitting: "Submitting sync…",
+                cno_labor_sync_running: "Background fetch ({summary}); do not click again…",
+                cno_labor_sync_refreshing: "Refreshing charts",
+                cno_labor_sync_done: "Sync submitted. Retry later if the chart stays empty.",
+                cno_labor_sorter_export_csv: "Export CSV (labor hourly)",
+                cno_labor_sorter_group_caption: "Per company: groups, active work hours, total pieces, mean pcs/h over active hours; chart shows hourly volume.",
+                cno_labor_sorter_group_col_company: "Company",
+                cno_labor_sorter_group_col_piece_g: "Piece groups",
+                cno_labor_sorter_group_col_work_h: "Active hours (h)",
+                cno_labor_sorter_group_col_total_pcs: "Total pcs",
+                cno_labor_sorter_group_col_pph: "pcs/h (active)",
+                cno_labor_sorter_group_col_pph_group: "pcs/h per group",
+                cno_labor_sorter_group_total: "Total",
+                cno_labor_sorter_group_empty: "No group data. Run Sync now for this operating day.",
                 pieces: "Pieces",
                 time_slot: "Time Slot",
                 pickup_forecast_title: "Pickup Forecast",
@@ -1553,6 +1651,34 @@
                 cno_narrowbelt_stats_col_total: "Total (pzas)",
                 cno_narrowbelt_stats_col_active_h: "Franjas activas (h)",
                 cno_narrowbelt_stats_col_mean_active: "pzas/h (activas)",
+                cno_labor_sorter_hourly_chart: "Capacidad horaria empresas laborales CNO",
+                cno_labor_sorter_hourly_sub: "Misma fuente que el gráfico estrecho (operatelog Gofo 217). Solo operadores Sorter laborales; todos grupos a pieza.",
+                cno_labor_sorter_hourly_title: "Sorter laboral: piezas por hora",
+                load_labor_sorter_error: "Error al cargar datos horarios Sorter laboral:",
+                render_labor_sorter_error: "Error al renderizar gráfico Sorter laboral:",
+                cno_labor_sorter_empty: "Sin datos; pulse Sincronizar o elija otra fecha.",
+                cno_labor_sorter_sync_btn: "Sincronizar",
+                cno_labor_sorter_sync_btn_running: "Sincronizando…",
+                cno_labor_sorter_sync_ok: "Sincronización en segundo plano; el gráfico se actualizará en 1–3 min.",
+                cno_labor_sorter_sync_fail: "Error al enviar sincronización:",
+                cno_labor_sync_scope_loading: "Calculando alcance…",
+                cno_labor_sync_scope_hint: "Sincroniza operatelog Gofo (217) para estrecho y Sorter laboral.",
+                cno_labor_sync_scope_fmt: "Sincronizará {days} día(s) LA: {detail}, ~{hours} franja(s) · ancla {anchor} · {window}",
+                cno_labor_sync_scope_one_day: "Sincronizará 1 día LA: {detail}, ~{hours} franja(s) · ancla {anchor} · {window}",
+                cno_labor_sync_submitting: "Enviando sincronización…",
+                cno_labor_sync_running: "Descarga en segundo plano ({summary}); no pulse de nuevo…",
+                cno_labor_sync_refreshing: "Actualizando gráficos",
+                cno_labor_sync_done: "Sincronización enviada. Reintente si no hay datos.",
+                cno_labor_sorter_export_csv: "Exportar CSV (labor horario)",
+                cno_labor_sorter_group_caption: "Por empresa: grupos, horas activas, piezas, pzas/h en horas activas; gráfico = piezas por hora.",
+                cno_labor_sorter_group_col_company: "Empresa",
+                cno_labor_sorter_group_col_piece_g: "Grupos pieza",
+                cno_labor_sorter_group_col_work_h: "Horas activas (h)",
+                cno_labor_sorter_group_col_total_pcs: "Total pzas",
+                cno_labor_sorter_group_col_pph: "pzas/h (activas)",
+                cno_labor_sorter_group_col_pph_group: "pzas/h por grupo",
+                cno_labor_sorter_group_total: "Total",
+                cno_labor_sorter_group_empty: "Sin datos de grupos; sincronice el día operativo.",
                 pieces: "Piezas",
                 time_slot: "Franja Horaria",
                 pickup_forecast_title: "Previsión de Recogida",
@@ -1709,6 +1835,12 @@
             syncDailyPackingCountModeUi();
             if (typeof loadCnoNarrowbeltHourlyData === 'function') {
                 loadCnoNarrowbeltHourlyData();
+            }
+            if (typeof loadCnoLaborSorterHourlyData === 'function') {
+                loadCnoLaborSorterHourlyData();
+            }
+            if (_cnoLaborSorterLastSyncPlan && typeof renderCnoLaborSorterSyncScope === 'function') {
+                renderCnoLaborSorterSyncScope(_cnoLaborSorterLastSyncPlan);
             }
             if (typeof loadDailyPackingSplitData === 'function') {
                 loadDailyPackingSplitData();
@@ -1893,6 +2025,9 @@
             if (floatEl) floatEl.value = anchor;
             if (typeof updateFloatingStatsNavState === 'function') {
                 updateFloatingStatsNavState();
+            }
+            if (typeof refreshCnoLaborSorterSyncScope === 'function') {
+                refreshCnoLaborSorterSyncScope();
             }
         }
 
@@ -2331,6 +2466,7 @@
                     if (getCnoNarrowbeltCountMode() === 'raw') return;
                     setCnoNarrowbeltCountMode('raw');
                     loadCnoNarrowbeltHourlyData();
+                    loadCnoLaborSorterHourlyData();
                 });
             }
             if (cnoNarrowbeltDedBtn) {
@@ -2338,6 +2474,7 @@
                     if (getCnoNarrowbeltCountMode() === 'deduped') return;
                     setCnoNarrowbeltCountMode('deduped');
                     loadCnoNarrowbeltHourlyData();
+                    loadCnoLaborSorterHourlyData();
                 });
             }
             const dailyPackingBoardBtn = document.getElementById('dailyPackingCountBoardBtn');
@@ -2464,8 +2601,16 @@
             if (manualSyncBtnEl) manualSyncBtnEl.addEventListener('click', manualGofoSync);
             const cnoNbExp = document.getElementById('cnoNarrowbeltExportCsvBtn');
             if (cnoNbExp) cnoNbExp.addEventListener('click', exportCnoNarrowbeltHourlyCsv);
+            const cnoLaborSyncBtn = document.getElementById('cnoLaborSorterSyncBtn');
+            if (cnoLaborSyncBtn) cnoLaborSyncBtn.addEventListener('click', syncCnoLaborSorterHourly);
+            if (typeof refreshCnoLaborSorterSyncScope === 'function') refreshCnoLaborSorterSyncScope();
+            const cnoLaborCsvExp = document.getElementById('cnoLaborSorterExportCsvBtn');
+            if (cnoLaborCsvExp) cnoLaborCsvExp.addEventListener('click', exportCnoLaborSorterHourlyCsv);
             bindStatsChartExportBtn('cnoNarrowbeltChartExportBtn', function () { return window.cnoNarrowbeltHourlyChartInstance; }, function () {
                 return 'cno_narrowbelt_hourly_chart_' + getCnoNarrowbeltCountMode();
+            });
+            bindStatsChartExportBtn('cnoLaborSorterChartExportBtn', function () { return window.cnoLaborSorterHourlyChartInstance; }, function () {
+                return 'cno_labor_sorter_hourly_chart_' + getCnoNarrowbeltCountMode();
             });
             bindStatsChartExportBtn('waybillTrendChartExportBtn', function () { return window.waybillTrendChartInstance; }, 'waybill_trend_daily');
             bindStatsChartExportBtn('weeklyWaybillTrendChartExportBtn', function () { return window.weeklyWaybillTrendChartInstance; }, 'waybill_trend_weekly_stacked');
@@ -3166,6 +3311,210 @@
             // Load pallet hourly data
             loadPalletHourlyData();
             loadCnoNarrowbeltHourlyData();
+            loadCnoLaborSorterHourlyData();
+        }
+
+        let _cnoLaborSorterSyncReloadTimers = [];
+        let _cnoLaborSorterSyncInFlight = false;
+        let _cnoLaborSorterLastSyncPlan = null;
+        const _cnoLaborSorterSyncReloadDelays = [20000, 50000, 100000];
+
+        function _clearCnoLaborSorterSyncReloadTimers() {
+            _cnoLaborSorterSyncReloadTimers.forEach(function (id) { clearTimeout(id); });
+            _cnoLaborSorterSyncReloadTimers = [];
+        }
+
+        function getCnoLaborSyncAnchorDateStr() {
+            let dateStr = currentDate;
+            if (!dateStr) {
+                const el = document.getElementById('selectedDate');
+                dateStr = el && el.value ? el.value : '';
+            }
+            if (!dateStr) dateStr = getDefaultStatsAnchorYmd();
+            return dateStr;
+        }
+
+        function _fmtCnoLaborSyncPlanText(plan, t) {
+            if (!plan) return t.cno_labor_sync_scope_hint || '';
+            const days = Number(plan.day_count) || (plan.sync_dates && plan.sync_dates.length) || 1;
+            const hours = Number(plan.hours_estimate) || 0;
+            const detail = plan.detail || (plan.sync_dates || []).join('、');
+            const anchor = plan.anchor_date || '';
+            const windowLab = plan.stats_window_label || plan.stats_window || '';
+            const vars = { days: days, detail: detail, hours: hours, anchor: anchor, window: windowLab };
+            let tpl = (days <= 1)
+                ? (t.cno_labor_sync_scope_one_day || t.cno_labor_sync_scope_fmt || '')
+                : (t.cno_labor_sync_scope_fmt || '');
+            return tpl.replace(/\{(\w+)\}/g, function (_, k) {
+                return vars[k] !== undefined ? String(vars[k]) : '';
+            });
+        }
+
+        function setCnoLaborSorterSyncStatus(text, tone) {
+            const el = document.getElementById('cnoLaborSorterSyncStatus');
+            if (!el) return;
+            el.textContent = text || '';
+            if (tone === 'success') el.style.color = '#198754';
+            else if (tone === 'error') el.style.color = '#dc3545';
+            else if (tone === 'warn') el.style.color = '#856404';
+            else el.style.color = '#6c757d';
+        }
+
+        function setCnoLaborSorterSyncBtnUi(running) {
+            const btn = document.getElementById('cnoLaborSorterSyncBtn');
+            const label = document.getElementById('cnoLaborSorterSyncBtnLabel');
+            const t = translations[currentLang] || {};
+            if (btn) {
+                btn.disabled = !!running;
+                btn.style.opacity = running ? '0.75' : '1';
+                btn.style.cursor = running ? 'wait' : 'pointer';
+            }
+            if (label) {
+                label.textContent = running
+                    ? (t.cno_labor_sorter_sync_btn_running || '同步中…')
+                    : (t.cno_labor_sorter_sync_btn || '手动同步');
+            }
+        }
+
+        function renderCnoLaborSorterSyncScope(plan) {
+            const scopeEl = document.getElementById('cnoLaborSorterSyncScope');
+            const btn = document.getElementById('cnoLaborSorterSyncBtn');
+            const t = translations[currentLang] || {};
+            if (!scopeEl) return;
+            if (plan) _cnoLaborSorterLastSyncPlan = plan;
+            const activePlan = plan || _cnoLaborSorterLastSyncPlan;
+            if (activePlan) {
+                scopeEl.textContent = _fmtCnoLaborSyncPlanText(activePlan, t);
+                if (btn) btn.title = scopeEl.textContent;
+            } else {
+                scopeEl.textContent = t.cno_labor_sync_scope_hint || '';
+            }
+        }
+
+        function refreshCnoLaborSorterSyncScope() {
+            const t = translations[currentLang] || {};
+            renderCnoLaborSorterSyncScope(null);
+            setCnoLaborSorterSyncStatus('', '');
+            const dateStr = getCnoLaborSyncAnchorDateStr();
+            const url = withStatsWindowParams('/api/statistics/cno_labor_sorter_hourly/sync_plan', { date: dateStr });
+            fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+                .then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(function (res) {
+                    if (res.sync_plan) renderCnoLaborSorterSyncScope(res.sync_plan);
+                })
+                .catch(function () {
+                    const scopeEl = document.getElementById('cnoLaborSorterSyncScope');
+                    if (scopeEl) scopeEl.textContent = t.cno_labor_sync_scope_hint || '';
+                });
+        }
+
+        function _scheduleCnoLaborSorterSyncReloads(plan) {
+            const t = translations[currentLang] || {};
+            const summary = (plan && plan.summary) ? plan.summary : '';
+            _cnoLaborSorterSyncReloadDelays.forEach(function (ms, i) {
+                const tid = setTimeout(function () {
+                    setCnoLaborSorterSyncStatus(
+                        (t.cno_labor_sync_refreshing || '自动刷新图表')
+                        + ' (' + (i + 1) + '/' + _cnoLaborSorterSyncReloadDelays.length + ')…',
+                        'info'
+                    );
+                    loadCnoNarrowbeltHourlyData();
+                    loadCnoLaborSorterHourlyData();
+                    if (i === _cnoLaborSorterSyncReloadDelays.length - 1) {
+                        _cnoLaborSorterSyncInFlight = false;
+                        setCnoLaborSorterSyncBtnUi(false);
+                        setCnoLaborSorterSyncStatus(
+                            t.cno_labor_sync_done || '同步已提交，若仍无数据请稍后再试。',
+                            'success'
+                        );
+                    }
+                }, ms);
+                _cnoLaborSorterSyncReloadTimers.push(tid);
+            });
+            setCnoLaborSorterSyncStatus(
+                (t.cno_labor_sync_running || '后台拉取中…').replace('{summary}', summary),
+                'warn'
+            );
+        }
+
+        function syncCnoLaborSorterHourly() {
+            const t = translations[currentLang] || {};
+            if (_cnoLaborSorterSyncInFlight) return;
+            const dateStr = getCnoLaborSyncAnchorDateStr();
+            _cnoLaborSorterSyncInFlight = true;
+            _clearCnoLaborSorterSyncReloadTimers();
+            setCnoLaborSorterSyncBtnUi(true);
+            setCnoLaborSorterSyncStatus(t.cno_labor_sync_submitting || '正在提交…', 'info');
+            fetch('/api/statistics/cno_labor_sorter_hourly/sync', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: dateStr, stats_window: statsWindowMode })
+            })
+                .then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(function (res) {
+                    if (!res.success) {
+                        throw new Error(res.error || res.message || 'sync failed');
+                    }
+                    if (res.sync_plan) renderCnoLaborSorterSyncScope(res.sync_plan);
+                    showMessage(res.message || (t.cno_labor_sorter_sync_ok || '已提交同步'), 'success');
+                    _scheduleCnoLaborSorterSyncReloads(res.sync_plan);
+                })
+                .catch(function (err) {
+                    console.error('cno labor sorter sync:', err);
+                    _cnoLaborSorterSyncInFlight = false;
+                    setCnoLaborSorterSyncBtnUi(false);
+                    setCnoLaborSorterSyncStatus(
+                        (t.cno_labor_sorter_sync_fail || '提交同步失败:') + ' ' + err.message,
+                        'error'
+                    );
+                    showMessage(
+                        (t.cno_labor_sorter_sync_fail || '提交同步失败:') + ' ' + err.message,
+                        'error'
+                    );
+                });
+        }
+
+        function exportCnoLaborSorterHourlyCsv() {
+            const qp = Object.assign(
+                currentDate ? { date: currentDate } : {},
+                { count_mode: getCnoNarrowbeltCountMode() }
+            );
+            const url = withStatsWindowParams('/api/statistics/cno_labor_sorter_hourly/export', qp);
+            window.location.href = url;
+        }
+
+        function loadCnoLaborSorterHourlyData() {
+            const qp = Object.assign(
+                currentDate ? { date: currentDate } : {},
+                { count_mode: getCnoNarrowbeltCountMode() }
+            );
+            const url = withStatsWindowParams('/api/statistics/cno_labor_sorter_hourly', qp);
+            fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+                .then(response => {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    if (data.sync_plan) renderCnoLaborSorterSyncScope(data.sync_plan);
+                    renderCnoLaborSorterHourlyChart(data);
+                })
+                .catch(error => {
+                    console.error('Error loading CNO labor sorter hourly:', error);
+                    clearCnoLaborSorterGroupStatsTable();
+                    renderCnoLaborSorterHourlyChart({ labels: [], companies: [], series: {}, group_summary: { rows: [], totals: {} } });
+                    showMessage(
+                        (translations[currentLang].load_labor_sorter_error || '加载劳务公司分时数据出错:') + ' ' + error.message,
+                        'error'
+                    );
+                });
         }
 
         function loadCnoNarrowbeltHourlyData() {
@@ -4051,6 +4400,212 @@
                 clearCnoNarrowbeltHourlyStatsTable();
                 showMessage(
                     (translations[currentLang].render_narrowbelt_error || '渲染窄带分拣图表出错:') + ' ' + error.message,
+                    'error'
+                );
+            }
+        }
+
+        const _cnoLaborSorterPalette = [
+            'rgba(54, 162, 235, 1)',
+            'rgba(255, 99, 132, 1)',
+            'rgba(75, 192, 192, 1)',
+            'rgba(255, 159, 64, 1)',
+            'rgba(153, 102, 255, 1)',
+            'rgba(255, 206, 86, 1)',
+            'rgba(201, 203, 207, 1)',
+            'rgba(231, 76, 60, 1)',
+            'rgba(46, 204, 113, 1)',
+            'rgba(52, 152, 219, 1)'
+        ];
+
+        function clearCnoLaborSorterGroupStatsTable() {
+            const wrap = document.getElementById('cnoLaborSorterGroupStatsWrap');
+            const tbl = document.getElementById('cnoLaborSorterGroupStatsTable');
+            if (tbl) tbl.innerHTML = '';
+            if (wrap) wrap.style.display = 'none';
+        }
+
+        function renderCnoLaborSorterGroupStatsTable(payload) {
+            const wrap = document.getElementById('cnoLaborSorterGroupStatsWrap');
+            const tbl = document.getElementById('cnoLaborSorterGroupStatsTable');
+            if (!wrap || !tbl) return;
+            const t = translations[currentLang] || {};
+            const gs = (payload && payload.group_summary) ? payload.group_summary : {};
+            const rows = gs.rows || [];
+            const totals = gs.totals || {};
+
+            const border = '1px solid var(--border-color, #e5e7eb)';
+            const thBase = 'text-align:left;padding:8px 10px;font-weight:600;background:var(--table-stripe, #f8f9fa);border-bottom:2px solid var(--border-color,#dee2e6);';
+            const tdL = 'padding:8px 10px;border-top:' + border + ';';
+            const tdR = tdL + 'text-align:right;';
+
+            if (!rows.length) {
+                tbl.innerHTML = '<tbody><tr><td style="' + tdL + 'color:#888;">'
+                    + (t.cno_labor_sorter_group_empty || '暂无组数数据') + '</td></tr></tbody>';
+                wrap.style.display = 'block';
+                return;
+            }
+
+            let html = '<thead><tr>';
+            html += '<th style="' + thBase + '">' + (t.cno_labor_sorter_group_col_company || '劳务公司') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_piece_g || '计件组') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_work_h || '工作时长(h)') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_total_pcs || '合计件数') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_pph || '每小时产能(件/h)') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_pph_group || '每小时每组产能') + '</th>';
+            html += '</tr></thead><tbody>';
+
+            rows.forEach(function (r) {
+                html += '<tr>';
+                html += '<td style="' + tdL + '"><b>' + (r.company || '') + '</b></td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.group_count) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.work_hours != null ? r.work_hours : r.active_hours) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.total_pieces) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(r.pieces_per_active_hour) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(r.pieces_per_hour_per_group) + '</td>';
+                html += '</tr>';
+            });
+
+            if (totals && (totals.group_count || 0) > 0) {
+                html += '<tr style="font-weight:700;background:var(--table-stripe,#f8f9fa);">';
+                html += '<td style="' + tdL + '">' + (t.cno_labor_sorter_group_total || '合计') + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.group_count) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.work_hours != null ? totals.work_hours : totals.active_hours) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.total_pieces) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(totals.pieces_per_active_hour) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(totals.pieces_per_hour_per_group) + '</td>';
+                html += '</tr>';
+            }
+            html += '</tbody>';
+            tbl.innerHTML = html;
+            wrap.style.display = 'block';
+        }
+
+        function renderCnoLaborSorterHourlyChart(payload) {
+            try {
+                const hintEl = document.getElementById('cnoLaborSorterDedupHint');
+                const t = translations[currentLang] || {};
+                if (hintEl) {
+                    hintEl.style.display = 'none';
+                    hintEl.textContent = '';
+                    if (payload && payload.count_mode === 'deduped') {
+                        const fc = Number(payload.dedup_fallback_cells) || 0;
+                        const dc = Number(payload.dedup_column_cells) || 0;
+                        if (fc > 0) {
+                            hintEl.style.display = 'block';
+                            hintEl.style.fontSize = '13px';
+                            hintEl.style.color = '#856404';
+                            hintEl.style.background = '#fff3cd';
+                            hintEl.style.padding = '10px 12px';
+                            hintEl.style.borderRadius = '6px';
+                            hintEl.style.lineHeight = '1.45';
+                            hintEl.textContent = fc > 0 && dc === 0
+                                ? (t.cno_narrowbelt_dedup_fallback_hint || '')
+                                : (t.cno_narrowbelt_dedup_partial_hint || '');
+                        }
+                    }
+                }
+                const labels = (payload && payload.labels) ? payload.labels : [];
+                const companies = (payload && payload.companies) ? payload.companies : [];
+                const series = (payload && payload.series) ? payload.series : {};
+                const datasets = [];
+                companies.forEach((company, ci) => {
+                    const baseColor = _cnoLaborSorterPalette[ci % _cnoLaborSorterPalette.length];
+                    const compSeries = series[company];
+                    let hourlyData = [];
+                    let pieceData = [];
+                    if (Array.isArray(compSeries)) {
+                        pieceData = compSeries.slice();
+                    } else if (compSeries && typeof compSeries === 'object') {
+                        pieceData = (compSeries.piece || []).slice();
+                        hourlyData = (compSeries.hourly || []).slice();
+                    }
+                    const merged = pieceData.map(function (v, i) {
+                        return (Number(v) || 0) + (Number(hourlyData[i]) || 0);
+                    });
+                    if (merged.some(function (v) { return Number(v) > 0; })) {
+                        datasets.push({
+                            label: String(company),
+                            data: merged,
+                            borderColor: baseColor,
+                            backgroundColor: baseColor.replace('1)', '0.12)'),
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointHoverRadius: 4,
+                            datalabels: { display: false }
+                        });
+                    }
+                });
+                const flat = datasets.flatMap(d => d.data || []);
+                const maxV = flat.length ? Math.max(0, ...flat.map(v => Number(v) || 0)) : 0;
+                const yAxisMax = maxV > 0 ? Math.ceil(maxV / 100) * 100 + 100 : 500;
+                const isMobile = window.innerWidth < 768;
+                renderCnoLaborSorterGroupStatsTable(payload);
+                const canvasEl = document.getElementById('cnoLaborSorterHourlyCanvas');
+                if (!canvasEl) return;
+                const chartCtx = canvasEl.getContext('2d');
+                if (window.cnoLaborSorterHourlyChartInstance) {
+                    if (typeof window.cnoLaborSorterHourlyChartInstance.destroy === 'function') {
+                        window.cnoLaborSorterHourlyChartInstance.destroy();
+                    }
+                    window.cnoLaborSorterHourlyChartInstance = null;
+                }
+                const dateTxt = (payload && payload.date) ? payload.date : '';
+                const titleBase = t.cno_labor_sorter_hourly_title || '劳务公司 Sorter 分时件数（每小时）';
+                const cm = (payload && payload.count_mode) === 'deduped' ? 'deduped' : 'raw';
+                const modeLab = cm === 'deduped'
+                    ? (t.cno_narrowbelt_count_deduped || '去重')
+                    : (t.cno_narrowbelt_count_raw || '逐条');
+                let titleText = dateTxt ? `${titleBase} (${dateTxt}) · ${modeLab}` : `${titleBase} · ${modeLab}`;
+                if (!datasets.length) {
+                    titleText += ' — ' + (t.cno_labor_sorter_empty || '暂无数据');
+                }
+                window.cnoLaborSorterHourlyChartInstance = new Chart(chartCtx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { font: { size: isMobile ? 9 : 11 }, boxWidth: 14 }
+                            },
+                            title: {
+                                display: true,
+                                text: titleText,
+                                font: { size: isMobile ? 14 : 16 }
+                            },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: yAxisMax > 0 ? yAxisMax : undefined,
+                                title: { display: true, text: t.pieces || '件数' }
+                            },
+                            x: {
+                                title: {
+                                    display: !isMobile,
+                                    text: (t.time_slot || '时间段') + ' (LA)'
+                                },
+                                ticks: {
+                                    font: { size: isMobile ? 9 : 11 },
+                                    maxRotation: 45,
+                                    minRotation: isMobile ? 45 : 0
+                                }
+                            }
+                        },
+                        interaction: { intersect: false, mode: 'index' }
+                    }
+                });
+            } catch (error) {
+                console.error('Error rendering labor sorter chart:', error);
+                clearCnoLaborSorterGroupStatsTable();
+                showMessage(
+                    (translations[currentLang].render_labor_sorter_error || '渲染劳务公司分时图表出错:') + ' ' + error.message,
                     'error'
                 );
             }

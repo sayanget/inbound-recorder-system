@@ -317,6 +317,15 @@ def sync_one_la_window(start_la: datetime, end_la: datetime) -> Dict[str, Any]:
     rows = fetch_operatelog_window(begin_str, end_str)
     counts_raw, counts_dedup = counts_by_production_line_both(rows)
     _persist_rows(record_date, time_slot, counts_raw, counts_dedup, synced_at)
+    labor_meta = {}
+    try:
+        import sync_cno_labor_sorter_hourly as _labor
+
+        labor_meta = _labor.persist_hour_slot_from_rows(
+            record_date, time_slot, rows, synced_at
+        )
+    except Exception as e:
+        logger.warning("cno_labor_sorter persist failed: %s", e)
     return {
         "success": True,
         "record_date": record_date,
@@ -324,6 +333,7 @@ def sync_one_la_window(start_la: datetime, end_la: datetime) -> Dict[str, Any]:
         "counts": counts_raw,
         "counts_deduped": counts_dedup,
         "raw_rows": len(rows),
+        "labor_sorter": labor_meta,
     }
 
 
