@@ -902,7 +902,7 @@ def init_db():
         except Exception:
             pass
 
-        # 劳务公司 Sorter（XX Sorter xx）分时产能：统一计件
+        # 劳务公司 Sorter（XX Sorter xx）分时产能：GF 分计时/计件，其余计件
         sql = convert_sql("""CREATE TABLE IF NOT EXISTS cno_labor_sorter_hourly (
             record_date TEXT NOT NULL,
             time_slot TEXT NOT NULL,
@@ -2492,7 +2492,7 @@ def _labor_pick_piece_count(cm, n_raw, n_dedup):
 def _build_cno_labor_sorter_group_summary(
     anchor_date, window_mode: str = 'calendar', count_mode: str = 'raw'
 ):
-    """按公司汇总：计件组数、合计件数、有产工作时长、有产时段平均产能（件/h）。"""
+    """按公司汇总：计件/计时组数、合计件数、有产工作时长、产能指标。"""
     if isinstance(anchor_date, datetime):
         anchor_date = anchor_date.date()
     next_cal = anchor_date + timedelta(days=1)
@@ -2510,7 +2510,7 @@ def _build_cno_labor_sorter_group_summary(
 
     clause, binds = _record_date_slot_window_sql_binds(window_mode, anchor_date)
 
-    # (company, account) -> pieces；company -> 24 整点件数
+    # (company, account) -> pieces；company -> {piece|hourly: 24 整点件数}
     account_agg = {}
     company_hourly = {}
     conn = get_db()
@@ -2537,6 +2537,11 @@ def _build_cno_labor_sorter_group_summary(
             company = str(
                 _db_row_get(row, 'company_code', '') or _db_row_get(row, 2, '')
             ).strip()
+            pay_type = str(
+                _db_row_get(row, 'pay_type', '') or _db_row_get(row, 3, '')
+            ).strip().lower()
+            if pay_type not in ('piece', 'hourly'):
+                continue
             if not company or not slot:
                 continue
             if not _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
@@ -2557,8 +2562,11 @@ def _build_cno_labor_sorter_group_summary(
             if idx is None:
                 continue
             if company not in company_hourly:
-                company_hourly[company] = [0] * 24
-            company_hourly[company][idx] += int(n or 0)
+                company_hourly[company] = {
+                    'piece': [0] * 24,
+                    'hourly': [0] * 24,
+                }
+            company_hourly[company][pay_type][idx] += int(n or 0)
 
         cursor.execute(
             convert_query_placeholders(
@@ -2619,19 +2627,61 @@ def _build_cno_labor_sorter_group_summary(
     all_companies = set(company_hourly.keys()) | {k[0] for k in account_agg}
     companies = {}
     for company in all_companies:
-        hourly_arr = company_hourly.get(company) or [0] * 24
-        total_pieces = int(sum(hourly_arr))
-        active_hours = sum(1 for v in hourly_arr if int(v or 0) > 0)
+        ch = company_hourly.get(company) or {
+            'piece': [0] * 24,
+            'hourly': [0] * 24,
+        }
+        piece_arr = ch.get('piece') or [0] * 24
+        hourly_arr = ch.get('hourly') or [0] * 24
+        combined = [
+            int(piece_arr[i] or 0) + int(hourly_arr[i] or 0) for i in range(24)
+        ]
+        piece_group_count = sum(
+            1
+            for (c, _a), info in account_agg.items()
+            if c == company
+            and info.get('pay_type') == 'piece'
+            and int(info.get('pieces') or 0) > 0
+        )
+        hourly_group_count = sum(
+            1
+            for (c, _a), info in account_agg.items()
+            if c == company
+            and info.get('pay_type') == 'hourly'
+            and int(info.get('pieces') or 0) > 0
+        )
+        group_count = piece_group_count + hourly_group_count
+        piece_total_pieces = int(sum(piece_arr))
+        hourly_total_pieces = int(sum(hourly_arr))
+        total_pieces = piece_total_pieces + hourly_total_pieces
+        piece_work_hours = sum(1 for v in piece_arr if int(v or 0) > 0)
+        hourly_work_hours = sum(1 for v in hourly_arr if int(v or 0) > 0)
+        active_hours = sum(1 for v in combined if int(v or 0) > 0)
+        if group_count <= 0 and total_pieces <= 0:
+            continue
+        piece_pph = (
+            round(piece_total_pieces / piece_work_hours, 1)
+            if piece_work_hours > 0
+            else 0.0
+        )
+        hourly_pph = (
+            round(hourly_total_pieces / hourly_work_hours, 1)
+            if hourly_work_hours > 0
+            else 0.0
+        )
+        piece_pph_group = (
+            round(piece_total_pieces / piece_group_count / piece_work_hours, 1)
+            if piece_group_count > 0 and piece_work_hours > 0
+            else 0.0
+        )
+        hourly_pph_group = (
+            round(hourly_total_pieces / hourly_group_count / hourly_work_hours, 1)
+            if hourly_group_count > 0 and hourly_work_hours > 0
+            else 0.0
+        )
         pieces_per_active_hour = (
             round(total_pieces / active_hours, 1) if active_hours > 0 else 0.0
         )
-        group_count = sum(
-            1
-            for (c, _a), info in account_agg.items()
-            if c == company and int(info.get('pieces') or 0) > 0
-        )
-        if group_count <= 0 and total_pieces <= 0:
-            continue
         pieces_per_hour_per_group = (
             round(total_pieces / group_count / active_hours, 1)
             if group_count > 0 and active_hours > 0
@@ -2640,12 +2690,22 @@ def _build_cno_labor_sorter_group_summary(
         companies[company] = {
             'company': company,
             'group_count': group_count,
+            'piece_group_count': piece_group_count,
+            'hourly_group_count': hourly_group_count,
+            'piece_total_pieces': piece_total_pieces,
+            'hourly_total_pieces': hourly_total_pieces,
+            'piece_work_hours': piece_work_hours,
+            'hourly_work_hours': hourly_work_hours,
             'total_pieces': total_pieces,
             'active_hours': active_hours,
             'work_hours': active_hours,
+            'piece_pieces_per_active_hour': piece_pph,
+            'hourly_pieces_per_active_hour': hourly_pph,
+            'piece_pieces_per_hour_per_group': piece_pph_group,
+            'hourly_pieces_per_hour_per_group': hourly_pph_group,
             'pieces_per_active_hour': pieces_per_active_hour,
             'pieces_per_hour_per_group': pieces_per_hour_per_group,
-            'hourly_pieces': hourly_arr,
+            'hourly_pieces': combined,
         }
 
     rows = sorted(
@@ -2655,11 +2715,59 @@ def _build_cno_labor_sorter_group_summary(
     tot_pieces = sum(r['total_pieces'] for r in rows)
     tot_active = sum(r['active_hours'] for r in rows)
     tot_groups = sum(r['group_count'] for r in rows)
+    tot_piece_groups = sum(r.get('piece_group_count') or 0 for r in rows)
+    tot_hourly_groups = sum(r.get('hourly_group_count') or 0 for r in rows)
+    tot_piece_pieces = sum(r.get('piece_total_pieces') or 0 for r in rows)
+    tot_hourly_pieces = sum(r.get('hourly_total_pieces') or 0 for r in rows)
+    tot_piece_hours = sum(r.get('piece_work_hours') or 0 for r in rows)
+    tot_hourly_hours = sum(r.get('hourly_work_hours') or 0 for r in rows)
     totals = {
         'group_count': tot_groups,
+        'piece_group_count': tot_piece_groups,
+        'hourly_group_count': tot_hourly_groups,
+        'piece_total_pieces': tot_piece_pieces,
+        'hourly_total_pieces': tot_hourly_pieces,
+        'piece_work_hours': tot_piece_hours,
+        'hourly_work_hours': tot_hourly_hours,
         'total_pieces': tot_pieces,
         'active_hours': tot_active,
         'work_hours': tot_active,
+        'piece_pieces_per_active_hour': (
+            round(tot_piece_pieces / tot_piece_hours, 1)
+            if tot_piece_hours > 0
+            else 0.0
+        ),
+        'hourly_pieces_per_active_hour': (
+            round(tot_hourly_pieces / tot_hourly_hours, 1)
+            if tot_hourly_hours > 0
+            else 0.0
+        ),
+        'piece_pieces_per_hour_per_group': (
+            round(
+                sum(
+                    (r.get('piece_pieces_per_hour_per_group') or 0)
+                    * (r.get('piece_group_count') or 0)
+                    for r in rows
+                )
+                / tot_piece_groups,
+                1,
+            )
+            if tot_piece_groups > 0
+            else 0.0
+        ),
+        'hourly_pieces_per_hour_per_group': (
+            round(
+                sum(
+                    (r.get('hourly_pieces_per_hour_per_group') or 0)
+                    * (r.get('hourly_group_count') or 0)
+                    for r in rows
+                )
+                / tot_hourly_groups,
+                1,
+            )
+            if tot_hourly_groups > 0
+            else 0.0
+        ),
         'pieces_per_active_hour': (
             round(tot_pieces / tot_active, 1) if tot_active > 0 else 0.0
         ),
@@ -2682,7 +2790,7 @@ def _build_cno_labor_sorter_group_summary(
 def _build_cno_labor_sorter_hourly_series(
     anchor_date, window_mode: str = 'calendar', count_mode: str = 'raw'
 ):
-    """劳务公司 Sorter 分时产能（统一计件）；与窄带同源 cno_labor_sorter_hourly。"""
+    """劳务公司 Sorter 分时产能（GF 分计时/计件）；series[公司]={piece:[],hourly:[]}。"""
     if isinstance(anchor_date, datetime):
         anchor_date = anchor_date.date()
     next_cal = anchor_date + timedelta(days=1)
@@ -2752,8 +2860,10 @@ def _build_cno_labor_sorter_hourly_series(
             if idx is None:
                 continue
             if company not in series:
-                series[company] = [0] * 24
-            series[company][idx] = int(series[company][idx] or 0) + int(n or 0)
+                series[company] = {'piece': [0] * 24, 'hourly': [0] * 24}
+            series[company][pay_type][idx] = (
+                int(series[company][pay_type][idx] or 0) + int(n or 0)
+            )
             if cm == 'deduped':
                 if used_dedup_fallback:
                     dedup_fallback_cells += 1
@@ -2762,7 +2872,11 @@ def _build_cno_labor_sorter_hourly_series(
     finally:
         conn.close()
 
-    companies = sorted(series.keys())
+    companies = sorted(
+        c for c, buckets in series.items()
+        if any(int(v or 0) > 0 for v in (buckets.get('piece') or []))
+        or any(int(v or 0) > 0 for v in (buckets.get('hourly') or []))
+    )
 
     return {
         'timezone': 'server_local',
@@ -2779,7 +2893,7 @@ def _build_cno_labor_sorter_hourly_series(
 
 @app.route('/api/statistics/cno_labor_sorter_hourly', methods=['GET'])
 def api_statistics_cno_labor_sorter_hourly():
-    """CNO 劳务公司 Sorter 分时产能（统一计件）；与窄带相同 stats_window、count_mode。"""
+    """CNO 劳务公司 Sorter 分时产能（GF 计时/计件）；与窄带相同 stats_window、count_mode。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
@@ -3024,45 +3138,65 @@ def api_statistics_cno_labor_sorter_hourly_export():
     ])
     for i, lab in enumerate(data['labels']):
         for company in data.get('companies') or []:
-            arr = (data.get('series') or {}).get(company) or []
-            val = arr[i] if i < len(arr) else 0
-            w.writerow([
-                data['date'],
-                data.get('stats_window', wm),
-                data.get('count_mode', cm),
-                lab,
-                company,
-                'piece',
-                val,
-            ])
+            buckets = (data.get('series') or {}).get(company) or {}
+            for pay_type in ('piece', 'hourly'):
+                if isinstance(buckets, list):
+                    arr = buckets if pay_type == 'piece' else [0] * 24
+                else:
+                    arr = buckets.get(pay_type) or [0] * 24
+                val = arr[i] if i < len(arr) else 0
+                w.writerow([
+                    data['date'],
+                    data.get('stats_window', wm),
+                    data.get('count_mode', cm),
+                    lab,
+                    company,
+                    pay_type,
+                    val,
+                ])
     w.writerow([])
     w.writerow([
         'company_code',
         'piece_groups',
-        'work_hours_active',
-        'total_pieces',
-        'pieces_per_active_hour',
-        'pieces_per_hour_per_group',
+        'piece_work_hours',
+        'piece_total_pieces',
+        'piece_pcs_per_active_hour',
+        'piece_pcs_per_hour_per_group',
+        'hourly_groups',
+        'hourly_work_hours',
+        'hourly_total_pieces',
+        'hourly_pcs_per_active_hour',
+        'hourly_pcs_per_hour_per_group',
     ])
     gs = data.get('group_summary') or {}
     for row in gs.get('rows') or []:
         w.writerow([
             row.get('company'),
-            row.get('group_count'),
-            row.get('work_hours'),
-            row.get('total_pieces'),
-            row.get('pieces_per_active_hour'),
-            row.get('pieces_per_hour_per_group'),
+            row.get('piece_group_count', row.get('group_count')),
+            row.get('piece_work_hours', 0),
+            row.get('piece_total_pieces', 0),
+            row.get('piece_pieces_per_active_hour', 0),
+            row.get('piece_pieces_per_hour_per_group', 0),
+            row.get('hourly_group_count', 0),
+            row.get('hourly_work_hours', 0),
+            row.get('hourly_total_pieces', 0),
+            row.get('hourly_pieces_per_active_hour', 0),
+            row.get('hourly_pieces_per_hour_per_group', 0),
         ])
     tot = gs.get('totals') or {}
     if tot:
         w.writerow([
             'TOTAL',
-            tot.get('group_count'),
-            tot.get('work_hours'),
-            tot.get('total_pieces'),
-            tot.get('pieces_per_active_hour'),
-            tot.get('pieces_per_hour_per_group'),
+            tot.get('piece_group_count', tot.get('group_count')),
+            tot.get('piece_work_hours', 0),
+            tot.get('piece_total_pieces', 0),
+            tot.get('piece_pieces_per_active_hour', 0),
+            tot.get('piece_pieces_per_hour_per_group', 0),
+            tot.get('hourly_group_count', 0),
+            tot.get('hourly_work_hours', 0),
+            tot.get('hourly_total_pieces', 0),
+            tot.get('hourly_pieces_per_active_hour', 0),
+            tot.get('hourly_pieces_per_hour_per_group', 0),
         ])
 
     fn = f"cno_labor_sorter_hourly_{data['date']}_{data.get('count_mode', 'raw')}.csv"
@@ -4223,9 +4357,13 @@ def get_tms_shuttle_pivot():
     win_lo, win_hi_excl = _stats_period_bounds(d_parse, wm)
     win_hi = win_hi_excl - timedelta(seconds=1)
     use_shift_axis = wm in ('business', 'seventeen')
-    if use_shift_axis:
-        date_params = (date_str,)
+    if wm == 'business':
         where_sql = "record_date = ?"
+        date_params = (date_str,)
+    elif wm == 'seventeen':
+        d_next = (d_parse + timedelta(days=1)).strftime('%Y-%m-%d')
+        where_sql = "record_date IN (?, ?)"
+        date_params = (date_str, d_next)
     else:
         d0, d1 = _tms_shuttle_pivot_candidate_record_dates(date_str)
         where_sql = "record_date IN (?, ?)"
@@ -4237,7 +4375,7 @@ def get_tms_shuttle_pivot():
         cursor.execute(convert_query_placeholders(
             f"""
             SELECT destination, actual_departure_date, actual_departure_time,
-                   actual_arrival_date, actual_arrival_time
+                   actual_arrival_date, actual_arrival_time, record_date
             FROM gofo_tms_shuttle_split
             WHERE {where_sql}
             """
@@ -4285,12 +4423,14 @@ def get_tms_shuttle_pivot():
             dep_t = r['actual_departure_time']
             arr_d = r['actual_arrival_date']
             arr_t = r['actual_arrival_time']
+            rec_date = r['record_date']
         except Exception:
             dest = r[0]
             dep_d = r[1]
             dep_t = r[2]
             arr_d = r[3] if len(r) > 3 else None
             arr_t = r[4] if len(r) > 4 else None
+            rec_date = r[5] if len(r) > 5 else None
 
         dest = (dest or '').strip() or '未知'
         dt_dep = _tms_shuttle_pivot_parse_depart_dt(dep_d, dep_t)
@@ -4307,28 +4447,39 @@ def get_tms_shuttle_pivot():
                 hh_idx = _tms_shuttle_pivot_business_hour_index(dt_use.hour, h0)
             else:
                 hh_idx = dt_use.hour
-        if hh_idx is None:
+        else:
+            if not use_shift_axis:
+                dnorm = _tms_shuttle_pivot_normalize_date_iso(dep_d) or _tms_shuttle_pivot_normalize_date_iso(arr_d)
+                if dnorm is not None:
+                    if dnorm != date_str:
+                        continue
+                else:
+                    if rec_date != date_str:
+                        continue
+
             t = dep_t if (dep_t and str(dep_t).strip()) else arr_t
             clock_h = _hour_from_clock(t) if t else None
             if clock_h is None:
                 dest_orphans[dest] = dest_orphans.get(dest, 0) + 1
                 continue
-            if not use_shift_axis:
-                dnorm = _tms_shuttle_pivot_normalize_date_iso(dep_d) or _tms_shuttle_pivot_normalize_date_iso(arr_d)
-                if dnorm != date_str:
-                    dest_orphans[dest] = dest_orphans.get(dest, 0) + 1
-                    continue
             hh_idx = _tms_shuttle_pivot_business_hour_index(clock_h, h0) if use_shift_axis else clock_h
 
         bucket = matrix.setdefault(dest, [0] * 24)
         bucket[hh_idx] += 1
 
     all_names = set(matrix.keys()) | set(dest_orphans.keys())
+    total_orphans = sum(dest_orphans.values())
+    if total_orphans > 0:
+        hours.append('无时间')
+        for name in all_names:
+            hourly = matrix.setdefault(name, [0] * 24)
+            ox = dest_orphans.get(name, 0)
+            hourly.append(ox)
+
     out_rows = []
     for name in all_names:
         hourly = matrix.get(name, [0] * 24)
-        ox = dest_orphans.get(name, 0)
-        out_rows.append({'name': name, 'hourly': hourly, 'total': sum(hourly) + ox})
+        out_rows.append({'name': name, 'hourly': hourly, 'total': sum(hourly)})
     out_rows.sort(key=lambda x: (-x['total'], x['name']))
     grand = sum(r['total'] for r in out_rows)
     return jsonify({
@@ -4643,7 +4794,7 @@ def check_duplicate():
             last_time = datetime.strptime(last_record[3], '%Y-%m-%d %H:%M:%S')
         else:
             last_time = last_record[3]
-        current_time = datetime.now()
+        current_time = datetime.now(LA_TZ).replace(tzinfo=None)
         time_diff_seconds = (current_time - last_time).total_seconds()
         time_diff_minutes = int(time_diff_seconds / 60)
         
@@ -5333,7 +5484,7 @@ def record():
         if la <= 0:
             return jsonify({"success": False, "error": "CBS/CBT 须填写大于 0 的整数托盘数"}), 400
     _apply_plate_exclusion_to_record(data)
-    new_id = _insert_inbound_record_core(data, datetime.now(), broadcast=True)
+    new_id = _insert_inbound_record_core(data, datetime.now(LA_TZ).replace(tzinfo=None), broadcast=True)
     pel_ins = data.get("plate_excluded_load", 0)
     epc_ins = data.get("excluded_pieces", 0)
     try:
@@ -5455,7 +5606,7 @@ def update_record(record_id):
         data['vehicle_type'] = _normalize_import_vehicle_type(data['vehicle_type'])
     
     # 获取当前系统时间并自动判断班次类型
-    current_time = datetime.now()
+    current_time = datetime.now(LA_TZ).replace(tzinfo=None)
     
     # 自动判断班次类型：17点之前是早班，17点之后是晚班
     if current_time.hour < 17:
@@ -5665,7 +5816,7 @@ def list_data():
     print(f"[DEBUG] 数据库连接成功: {DB_PATH}")
     
     # 获取当前日期和昨天日期
-    current_date = datetime.now().date()
+    current_date = datetime.now(LA_TZ).date()
     yesterday_date = current_date - timedelta(days=1)
     print(f"[DEBUG] 当前系统日期: {current_date}")
     print(f"[DEBUG] 昨天日期: {yesterday_date}")
@@ -5737,7 +5888,7 @@ def list_data():
 @app.route('/api/list/check_updates')
 def check_list_updates():
     try:
-        current_date = datetime.now().date()
+        current_date = datetime.now(LA_TZ).date()
         yesterday_date = current_date - timedelta(days=1)
         today_start = datetime.combine(current_date, datetime.min.time())
         today_end = datetime.combine(current_date, datetime.max.time())
@@ -7459,8 +7610,8 @@ def forecast_vs_actual():
             next_5am_la = LA_TZ.localize(datetime.combine(next_day, datetime.min.time().replace(hour=5)))
             
             # 转换到数据库使用的本地时区
-            day_start = req_5am_la.astimezone()
-            day_end = next_5am_la.astimezone()
+            day_start = req_5am_la.astimezone(LA_TZ)
+            day_end = next_5am_la.astimezone(LA_TZ)
             
             _net_pf = _sql_inbound_net_pieces_actual("")
             actual_cur = conn.cursor(); actual_cur.execute(f"""
@@ -8066,7 +8217,7 @@ def _parse_stats_window_param(raw):
 
 
 def _default_stats_request_date(window_mode):
-    now = datetime.now()
+    now = datetime.now(LA_TZ)
     d = now.date()
     if window_mode == 'business' and now.hour < 5:
         return d - timedelta(days=1)
@@ -8328,7 +8479,7 @@ def get_statistics():
                         utc_time = created_at_str
                     utc_time = pytz.utc.localize(utc_time)
                     # 转换为系统本地时间（修改这里）
-                    local_time = utc_time.astimezone()
+                    local_time = utc_time.astimezone(LA_TZ)
                     
                     # 检查是否在19:00-20:00之间（系统本地时间）
                     if local_time.hour == 19:
@@ -8439,7 +8590,7 @@ def get_statistics():
                     else:
                         utc_time = created_at_str
                     utc_time = pytz.utc.localize(utc_time)
-                    local_time = utc_time.astimezone()
+                    local_time = utc_time.astimezone(LA_TZ)
                     
                     if local_time.date() > prev_date: # 次日00:00以后
                          prev_vehicles_after_24 += 1
@@ -9358,7 +9509,7 @@ def export_csv():
                             utc_time = created_at_str # 已经是 datetime 对象
                         utc_time = pytz.utc.localize(utc_time)
                         # 转换为系统本地时间（修改这里）
-                        local_time = utc_time.astimezone()
+                        local_time = utc_time.astimezone(LA_TZ)
                         
                         # 检查是否在19:00-20:00之间（系统本地时间）
                         if local_time.hour == 19:
@@ -9613,8 +9764,8 @@ def export_recent_records():
     try:
         conn = get_db()
         
-        # 获取系统当前日期
-        today = datetime.now().date()
+        # 获取系统当前日期 (LA时间)
+        today = datetime.now(LA_TZ).date()
         
         # 计算次日日期
         next_date = today + timedelta(days=1)
@@ -11756,7 +11907,7 @@ _sync_status_cache = {
 }
 
 def update_sync_status(source, success_flag):
-    tz = pytz.timezone('Asia/Shanghai')
+    tz = LA_TZ
     now = datetime.now(tz)
     _sync_status_cache[source] = {
         'last_sync': now.strftime('%Y-%m-%d %H:%M:%S'),
@@ -11835,7 +11986,7 @@ def sync_gofo_piece_rate():
         
         # Mark sync as in-progress immediately
         _sync_status_cache['Gofo'] = {
-            'last_sync': datetime.now(pytz.timezone('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S (Processing...)'),
+            'last_sync': datetime.now(LA_TZ).strftime('%Y-%m-%d %H:%M:%S (Processing...)'),
             'success': False  # Default to false until finished
         }
         
@@ -11854,7 +12005,7 @@ def sync_gofo_piece_rate():
             except Exception as e:
                 # Update status with failure on thread exception
                 _sync_status_cache['Gofo'] = {
-                    'last_sync': datetime.now(pytz.timezone('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S (Failed)'),
+                    'last_sync': datetime.now(LA_TZ).strftime('%Y-%m-%d %H:%M:%S (Failed)'),
                     'success': False
                 }
                 print(f"[DEBUG API] GOFO Background thread ERROR: {e}")
@@ -13857,7 +14008,7 @@ def consumable_transaction():
                 entry_date = datetime.strptime(entry_date_str, '%Y-%m-%d').date()
                 target_datetime = datetime.combine(entry_date, la_now.time())
                 target_datetime_tz = LA_TZ.localize(target_datetime)
-                db_created_at = target_datetime_tz.astimezone() if hasattr(target_datetime_tz, 'astimezone') else target_datetime
+                db_created_at = target_datetime_tz.astimezone(LA_TZ) if hasattr(target_datetime_tz, 'astimezone') else target_datetime
             except ValueError:
                 conn.close()
                 return jsonify({'success': False, 'error': '无效的日期格式，需为 YYYY-MM-DD'}), 400
@@ -13924,7 +14075,7 @@ def consumable_transaction():
             entry_date = datetime.strptime(entry_date_str, '%Y-%m-%d').date()
             target_datetime = datetime.combine(entry_date, la_now.time())
             target_datetime_tz = LA_TZ.localize(target_datetime)
-            db_created_at = target_datetime_tz.astimezone() if hasattr(target_datetime_tz, 'astimezone') else target_datetime
+            db_created_at = target_datetime_tz.astimezone(LA_TZ) if hasattr(target_datetime_tz, 'astimezone') else target_datetime
         except ValueError:
             conn.close()
             return jsonify({'success': False, 'error': '无效的日期格式，需为 YYYY-MM-DD'}), 400
@@ -14050,7 +14201,7 @@ def update_consumable_transaction():
         entry_date = datetime.strptime(new_date_str, '%Y-%m-%d').date()
         # 简单取当天的当前时间，或直接午夜
         target_dt = datetime.combine(entry_date, datetime.now(LA_TZ).time())
-        db_created_at = LA_TZ.localize(target_dt).astimezone() if hasattr(LA_TZ.localize(target_dt), 'astimezone') else target_dt
+        db_created_at = LA_TZ.localize(target_dt).astimezone(LA_TZ) if hasattr(LA_TZ.localize(target_dt), 'astimezone') else target_dt
     except ValueError:
         return jsonify({'success': False, 'error': '数据格式错误'}), 400
 
@@ -14305,8 +14456,8 @@ def consumable_analytics():
 
 def auto_sync_labor_data_job():
     """Background loop that waits until exactly 12:00:00 every day and runs data syncs."""
-    print("[AutoSync] Labor data auto-sync job started. Waiting for 12:00:00 PM.")
-    tz = pytz.timezone('Asia/Shanghai')
+    print("[AutoSync] Labor data auto-sync job started. Waiting for 12:00:00 PM (LA Time).")
+    tz = LA_TZ
     
     while True:
         now = datetime.now(tz)

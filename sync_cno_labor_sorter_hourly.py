@@ -2,7 +2,7 @@
 CNO 劳务公司 Sorter 分时产能（与 sync_cno_narrowbelt_hourly 同源 operatelog scan 217）。
 
 - 仅统计操作员名匹配「{劳务公司} Sorter {账号}」（排除 CNO 直线窄带分拣机等设备名）。
-- 劳务 Sorter 统一按计件 (piece) 入库；不再区分计时账号。
+- GF 公司：Sorter 编号 10/38/39/40 为计时 (hourly)，2/4/5 为计件 (piece)；其余劳务公司均为计件。
 - 由窄带同步在同一时间窗拉取日志后调用 persist_hour_slot_from_rows，不重复请求 Gofo。
 """
 from __future__ import annotations
@@ -11,6 +11,10 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 PAY_TYPE_PIECE = "piece"
+PAY_TYPE_HOURLY = "hourly"
+
+_GF_HOURLY_ACCOUNTS = frozenset({"10", "38", "39", "40"})
+_GF_PIECE_ACCOUNTS = frozenset({"2", "4", "5"})
 
 _LABOR_SORTER_RE = re.compile(r"^(.+?)\s+Sorter\s+(\S+)\s*$", re.IGNORECASE)
 
@@ -48,8 +52,26 @@ def parse_labor_sorter_operator(name: Any) -> Optional[Tuple[str, str]]:
     return company, account
 
 
+def _norm_sorter_account(account: str) -> str:
+    s = (account or "").strip()
+    if s.isdigit():
+        return str(int(s))
+    return s
+
+
+def _is_gf_company(company: str) -> bool:
+    return (company or "").strip().upper() == "GF"
+
+
 def classify_labor_pay_type(company: str, account: str) -> str:
-    """劳务 Sorter 统一计件组（不再区分计时）。"""
+    """GF：10/38/39/40 计时，2/4/5 计件；其余公司均为计件。"""
+    if not _is_gf_company(company):
+        return PAY_TYPE_PIECE
+    acc = _norm_sorter_account(account)
+    if acc in _GF_HOURLY_ACCOUNTS:
+        return PAY_TYPE_HOURLY
+    if acc in _GF_PIECE_ACCOUNTS:
+        return PAY_TYPE_PIECE
     return PAY_TYPE_PIECE
 
 

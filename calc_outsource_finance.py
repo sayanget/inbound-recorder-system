@@ -101,8 +101,8 @@ def run_sync(link=None):
                 next_date = request_date + timedelta(days=1)
                 req_5am_la = la_tz.localize(datetime.combine(request_date, datetime.min.time().replace(hour=5)))
                 next_5am_la = la_tz.localize(datetime.combine(next_date, datetime.min.time().replace(hour=5)))
-                t_start = req_5am_la.astimezone()
-                t_end = next_5am_la.astimezone()
+                t_start = req_5am_la.astimezone(la_tz)
+                t_end = next_5am_la.astimezone(la_tz)
                 
                 cur.execute(f"""
                     SELECT SUM(CASE 
@@ -460,8 +460,8 @@ def run_sync(link=None):
                 # rdate_feishu is in YYYY-MM-DD
                 rd = datetime.strptime(rdate_feishu, '%Y-%m-%d').date()
                 nd = rd + timedelta(days=1)
-                range_start = la_tz.localize(datetime.combine(rd, datetime.min.time().replace(hour=5))).astimezone()
-                range_end = la_tz.localize(datetime.combine(nd, datetime.min.time().replace(hour=5))).astimezone()
+                range_start = la_tz.localize(datetime.combine(rd, datetime.min.time().replace(hour=5))).astimezone(la_tz)
+                range_end = la_tz.localize(datetime.combine(nd, datetime.min.time().replace(hour=5))).astimezone(la_tz)
                 
                 cur.execute(f"""
                     SELECT SUM(CASE 

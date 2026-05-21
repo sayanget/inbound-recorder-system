@@ -815,7 +815,8 @@
         }
 
         function getDefaultStatsAnchorYmd() {
-            const now = new Date();
+            // 必须用洛杉矶时间，否则北京时区浏览器会取到「未来日期」导致查不到数据
+            const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
             // Working Shift (5am anchor)
             if (statsWindowMode === 'business' && now.getHours() < 5) {
                 const prev = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);

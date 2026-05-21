@@ -726,7 +726,7 @@
                 <div style="flex:1; min-width:200px;">
                     <h3 style="margin:0;" data-lang="cno_labor_sorter_hourly_chart">CNO 劳务公司分时产能</h3>
                     <p style="margin:6px 0 0 0; font-size:12px; color:var(--text-muted,#888); line-height:1.45;"
-                        data-lang="cno_labor_sorter_hourly_sub">数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；仅统计「劳务公司 Sorter 账号」扫描件数，统一计件组。计数口径与窄带图右上角一致。</p>
+                        data-lang="cno_labor_sorter_hourly_sub">数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；仅统计「劳务公司 Sorter 账号」扫描件数。GF：Sorter 10/38/39/40 为计时组，2/4/5 为计件组；其余公司均为计件组。计数口径与窄带图右上角一致。</p>
                 </div>
                 <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
                     <button type="button" id="cnoLaborSorterSyncBtn" class="nav-btn"
@@ -753,10 +753,10 @@
             </div>
             <div id="cnoLaborSorterGroupStatsWrap" style="margin-top: 12px; display: none;">
                 <div style="font-size:13px; font-weight:600; margin-bottom:8px; color:var(--text-color,#333);"
-                    data-lang="cno_labor_sorter_group_caption">各劳务公司汇总：计件组数、工作时长、合计件数、每小时产能、每小时每组产能；上图曲线为分时每小时件数。</div>
+                    data-lang="cno_labor_sorter_group_caption">各劳务公司汇总：计件/计时分别显示组数、工作时长、合计件数及产能；上图按计件/计时分色曲线。</div>
                 <div style="overflow-x: auto;">
                     <table id="cnoLaborSorterGroupStatsTable"
-                        style="width: 100%; max-width: 960px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums;"></table>
+                        style="width: 100%; max-width: 1200px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums;"></table>
                 </div>
             </div>
         </div>
@@ -1177,7 +1177,7 @@
                 cno_narrowbelt_stats_col_active_h: "有产时段(h)",
                 cno_narrowbelt_stats_col_mean_active: "件/h（有产）",
                 cno_labor_sorter_hourly_chart: "CNO 劳务公司分时产能",
-                cno_labor_sorter_hourly_sub: "数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；仅统计「劳务公司 Sorter 账号」扫描件数，统一计件组。计数口径与窄带图右上角一致。",
+                cno_labor_sorter_hourly_sub: "数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；仅统计「劳务公司 Sorter 账号」扫描件数。GF：Sorter 10/38/39/40 为计时组，2/4/5 为计件组；其余公司均为计件组。计数口径与窄带图右上角一致。",
                 cno_labor_sorter_hourly_title: "劳务公司 Sorter 分时件数（每小时产能）",
                 load_labor_sorter_error: "加载劳务公司分时数据出错:",
                 render_labor_sorter_error: "渲染劳务公司分时图表出错:",
@@ -1195,13 +1195,20 @@
                 cno_labor_sync_refreshing: "自动刷新图表",
                 cno_labor_sync_done: "同步任务已提交；若数据未出现可稍后再点「手动同步」或切换日期后重试。",
                 cno_labor_sorter_export_csv: "导出 CSV（劳务分时）",
-                cno_labor_sorter_group_caption: "各劳务公司汇总：计件组数、工作时长、合计件数、每小时产能、每小时每组产能（=合计÷组数÷工作时长）；上图曲线为分时每小时件数。",
+                cno_labor_sorter_group_caption: "各劳务公司汇总：计件/计时分别显示组数、工作时长、合计件数及产能；上图按计件/计时分色曲线。",
                 cno_labor_sorter_group_col_company: "劳务公司",
                 cno_labor_sorter_group_col_piece_g: "计件组",
-                cno_labor_sorter_group_col_work_h: "工作时长(h)",
-                cno_labor_sorter_group_col_total_pcs: "合计件数",
-                cno_labor_sorter_group_col_pph: "每小时产能(件/h)",
-                cno_labor_sorter_group_col_pph_group: "每小时每组产能",
+                cno_labor_sorter_group_col_piece_work_h: "计件时长(h)",
+                cno_labor_sorter_group_col_piece_pcs: "计件合计",
+                cno_labor_sorter_group_col_piece_pph: "计件产能/h",
+                cno_labor_sorter_group_col_piece_pph_g: "计件每组/h",
+                cno_labor_sorter_group_col_hourly_g: "计时组",
+                cno_labor_sorter_group_col_hourly_work_h: "计时时长(h)",
+                cno_labor_sorter_group_col_hourly_pcs: "计时合计",
+                cno_labor_sorter_group_col_hourly_pph: "计时产能/h",
+                cno_labor_sorter_group_col_hourly_pph_g: "计时每组/h",
+                cno_labor_sorter_pay_piece: "计件",
+                cno_labor_sorter_pay_hourly: "计时",
                 cno_labor_sorter_group_total: "合计",
                 cno_labor_sorter_group_empty: "暂无组数数据，请先「手动同步」当前运营日。",
                 pieces: "件数",
@@ -1417,7 +1424,7 @@
                 cno_narrowbelt_stats_col_active_h: "Active slots (h)",
                 cno_narrowbelt_stats_col_mean_active: "pcs/h (active)",
                 cno_labor_sorter_hourly_chart: "CNO labor company hourly output",
-                cno_labor_sorter_hourly_sub: "Same source as narrow-belt chart (Gofo operatelog scan 217). Labor Sorter operators only; all piece-rate groups. Count mode matches narrow-belt toggle.",
+                cno_labor_sorter_hourly_sub: "Same source as narrow-belt chart (Gofo operatelog scan 217). Labor Sorter only. GF: accounts 10/38/39/40 hourly, 2/4/5 piece; other companies piece-only. Count mode matches narrow-belt toggle.",
                 cno_labor_sorter_hourly_title: "Labor Sorter hourly output (pcs per hour)",
                 load_labor_sorter_error: "Error loading labor Sorter hourly data:",
                 render_labor_sorter_error: "Error rendering labor Sorter chart:",
@@ -1435,13 +1442,20 @@
                 cno_labor_sync_refreshing: "Refreshing charts",
                 cno_labor_sync_done: "Sync submitted. Retry later if the chart stays empty.",
                 cno_labor_sorter_export_csv: "Export CSV (labor hourly)",
-                cno_labor_sorter_group_caption: "Per company: groups, active work hours, total pieces, mean pcs/h over active hours; chart shows hourly volume.",
+                cno_labor_sorter_group_caption: "Per company: piece and hourly groups, hours, totals, productivity; chart splits by pay type.",
                 cno_labor_sorter_group_col_company: "Company",
-                cno_labor_sorter_group_col_piece_g: "Piece groups",
-                cno_labor_sorter_group_col_work_h: "Active hours (h)",
-                cno_labor_sorter_group_col_total_pcs: "Total pcs",
-                cno_labor_sorter_group_col_pph: "pcs/h (active)",
-                cno_labor_sorter_group_col_pph_group: "pcs/h per group",
+                cno_labor_sorter_group_col_piece_g: "Piece grps",
+                cno_labor_sorter_group_col_piece_work_h: "Piece hrs",
+                cno_labor_sorter_group_col_piece_pcs: "Piece pcs",
+                cno_labor_sorter_group_col_piece_pph: "Piece pcs/h",
+                cno_labor_sorter_group_col_piece_pph_g: "Piece/grp/h",
+                cno_labor_sorter_group_col_hourly_g: "Hourly grps",
+                cno_labor_sorter_group_col_hourly_work_h: "Hourly hrs",
+                cno_labor_sorter_group_col_hourly_pcs: "Hourly pcs",
+                cno_labor_sorter_group_col_hourly_pph: "Hourly pcs/h",
+                cno_labor_sorter_group_col_hourly_pph_g: "Hourly/grp/h",
+                cno_labor_sorter_pay_piece: "Piece",
+                cno_labor_sorter_pay_hourly: "Hourly",
                 cno_labor_sorter_group_total: "Total",
                 cno_labor_sorter_group_empty: "No group data. Run Sync now for this operating day.",
                 pieces: "Pieces",
@@ -1652,7 +1666,7 @@
                 cno_narrowbelt_stats_col_active_h: "Franjas activas (h)",
                 cno_narrowbelt_stats_col_mean_active: "pzas/h (activas)",
                 cno_labor_sorter_hourly_chart: "Capacidad horaria empresas laborales CNO",
-                cno_labor_sorter_hourly_sub: "Misma fuente que el gráfico estrecho (operatelog Gofo 217). Solo operadores Sorter laborales; todos grupos a pieza.",
+                cno_labor_sorter_hourly_sub: "Misma fuente que el gráfico estrecho (operatelog Gofo 217). GF: 10/38/39/40 horario, 2/4/5 pieza; demás empresas solo pieza.",
                 cno_labor_sorter_hourly_title: "Sorter laboral: piezas por hora",
                 load_labor_sorter_error: "Error al cargar datos horarios Sorter laboral:",
                 render_labor_sorter_error: "Error al renderizar gráfico Sorter laboral:",
@@ -1670,13 +1684,20 @@
                 cno_labor_sync_refreshing: "Actualizando gráficos",
                 cno_labor_sync_done: "Sincronización enviada. Reintente si no hay datos.",
                 cno_labor_sorter_export_csv: "Exportar CSV (labor horario)",
-                cno_labor_sorter_group_caption: "Por empresa: grupos, horas activas, piezas, pzas/h en horas activas; gráfico = piezas por hora.",
+                cno_labor_sorter_group_caption: "Por empresa: pieza y horario con horas y piezas separadas.",
                 cno_labor_sorter_group_col_company: "Empresa",
-                cno_labor_sorter_group_col_piece_g: "Grupos pieza",
-                cno_labor_sorter_group_col_work_h: "Horas activas (h)",
-                cno_labor_sorter_group_col_total_pcs: "Total pzas",
-                cno_labor_sorter_group_col_pph: "pzas/h (activas)",
-                cno_labor_sorter_group_col_pph_group: "pzas/h por grupo",
+                cno_labor_sorter_group_col_piece_g: "Gr. pieza",
+                cno_labor_sorter_group_col_piece_work_h: "Hrs pieza",
+                cno_labor_sorter_group_col_piece_pcs: "Pzas pieza",
+                cno_labor_sorter_group_col_piece_pph: "pzas/h pieza",
+                cno_labor_sorter_group_col_piece_pph_g: "pzas/grp pieza",
+                cno_labor_sorter_group_col_hourly_g: "Gr. horario",
+                cno_labor_sorter_group_col_hourly_work_h: "Hrs horario",
+                cno_labor_sorter_group_col_hourly_pcs: "Pzas horario",
+                cno_labor_sorter_group_col_hourly_pph: "pzas/h horario",
+                cno_labor_sorter_group_col_hourly_pph_g: "pzas/grp horario",
+                cno_labor_sorter_pay_piece: "Pieza",
+                cno_labor_sorter_pay_hourly: "Horario",
                 cno_labor_sorter_group_total: "Total",
                 cno_labor_sorter_group_empty: "Sin datos de grupos; sincronice el día operativo.",
                 pieces: "Piezas",
@@ -1904,7 +1925,8 @@
         }
 
         function getDefaultStatsAnchorYmd() {
-            const now = new Date();
+            // 必须用洛杉矶时间，否则北京时区浏览器会取到「未来日期」导致查不到数据
+            const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
             if (statsWindowMode === 'business' && now.getHours() < 5) {
                 const prev = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
                 return formatLocalYmd(prev);
@@ -4446,34 +4468,56 @@
                 return;
             }
 
+            function _laborRowPieceWorkH(r) {
+                return r.piece_work_hours != null ? r.piece_work_hours : 0;
+            }
+            function _laborRowHourlyWorkH(r) {
+                return r.hourly_work_hours != null ? r.hourly_work_hours : 0;
+            }
+
             let html = '<thead><tr>';
             html += '<th style="' + thBase + '">' + (t.cno_labor_sorter_group_col_company || '劳务公司') + '</th>';
             html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_piece_g || '计件组') + '</th>';
-            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_work_h || '工作时长(h)') + '</th>';
-            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_total_pcs || '合计件数') + '</th>';
-            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_pph || '每小时产能(件/h)') + '</th>';
-            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_pph_group || '每小时每组产能') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_piece_work_h || '计件时长(h)') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_piece_pcs || '计件合计') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_piece_pph || '计件产能/h') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_piece_pph_g || '计件每组/h') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_hourly_g || '计时组') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_hourly_work_h || '计时时长(h)') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_hourly_pcs || '计时合计') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_hourly_pph || '计时产能/h') + '</th>';
+            html += '<th style="' + thBase + ';text-align:right">' + (t.cno_labor_sorter_group_col_hourly_pph_g || '计时每组/h') + '</th>';
             html += '</tr></thead><tbody>';
 
             rows.forEach(function (r) {
                 html += '<tr>';
                 html += '<td style="' + tdL + '"><b>' + (r.company || '') + '</b></td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.group_count) + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.work_hours != null ? r.work_hours : r.active_hours) + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.total_pieces) + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(r.pieces_per_active_hour) + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(r.pieces_per_hour_per_group) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.piece_group_count != null ? r.piece_group_count : r.group_count) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(_laborRowPieceWorkH(r)) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.piece_total_pieces != null ? r.piece_total_pieces : 0) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(r.piece_pieces_per_active_hour) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(r.piece_pieces_per_hour_per_group) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.hourly_group_count || 0) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(_laborRowHourlyWorkH(r)) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(r.hourly_total_pieces != null ? r.hourly_total_pieces : 0) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(r.hourly_pieces_per_active_hour) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(r.hourly_pieces_per_hour_per_group) + '</td>';
                 html += '</tr>';
             });
 
             if (totals && (totals.group_count || 0) > 0) {
                 html += '<tr style="font-weight:700;background:var(--table-stripe,#f8f9fa);">';
                 html += '<td style="' + tdL + '">' + (t.cno_labor_sorter_group_total || '合计') + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.group_count) + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.work_hours != null ? totals.work_hours : totals.active_hours) + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.total_pieces) + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(totals.pieces_per_active_hour) + '</td>';
-                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(totals.pieces_per_hour_per_group) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.piece_group_count != null ? totals.piece_group_count : totals.group_count) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.piece_work_hours != null ? totals.piece_work_hours : 0) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.piece_total_pieces != null ? totals.piece_total_pieces : 0) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(totals.piece_pieces_per_active_hour) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(totals.piece_pieces_per_hour_per_group) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.hourly_group_count || 0) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.hourly_work_hours != null ? totals.hourly_work_hours : 0) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltInt(totals.hourly_total_pieces != null ? totals.hourly_total_pieces : 0) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(totals.hourly_pieces_per_active_hour) + '</td>';
+                html += '<td style="' + tdR + '">' + _fmtNarrowbeltRate(totals.hourly_pieces_per_hour_per_group) + '</td>';
                 html += '</tr>';
             }
             html += '</tbody>';
@@ -4509,27 +4553,41 @@
                 const companies = (payload && payload.companies) ? payload.companies : [];
                 const series = (payload && payload.series) ? payload.series : {};
                 const datasets = [];
+                const payPieceLab = t.cno_labor_sorter_pay_piece || '计件';
+                const payHourlyLab = t.cno_labor_sorter_pay_hourly || '计时';
                 companies.forEach((company, ci) => {
                     const baseColor = _cnoLaborSorterPalette[ci % _cnoLaborSorterPalette.length];
                     const compSeries = series[company];
-                    let hourlyData = [];
                     let pieceData = [];
+                    let hourlyPayData = [];
                     if (Array.isArray(compSeries)) {
                         pieceData = compSeries.slice();
                     } else if (compSeries && typeof compSeries === 'object') {
                         pieceData = (compSeries.piece || []).slice();
-                        hourlyData = (compSeries.hourly || []).slice();
+                        hourlyPayData = (compSeries.hourly || []).slice();
                     }
-                    const merged = pieceData.map(function (v, i) {
-                        return (Number(v) || 0) + (Number(hourlyData[i]) || 0);
-                    });
-                    if (merged.some(function (v) { return Number(v) > 0; })) {
+                    if (pieceData.some(function (v) { return Number(v) > 0; })) {
                         datasets.push({
-                            label: String(company),
-                            data: merged,
+                            label: String(company) + ' · ' + payPieceLab,
+                            data: pieceData,
                             borderColor: baseColor,
                             backgroundColor: baseColor.replace('1)', '0.12)'),
                             borderWidth: 2,
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointHoverRadius: 4,
+                            datalabels: { display: false }
+                        });
+                    }
+                    if (hourlyPayData.some(function (v) { return Number(v) > 0; })) {
+                        datasets.push({
+                            label: String(company) + ' · ' + payHourlyLab,
+                            data: hourlyPayData,
+                            borderColor: baseColor,
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [6, 4],
                             fill: false,
                             tension: 0.3,
                             pointRadius: 2,
