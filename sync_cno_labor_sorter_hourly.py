@@ -3,6 +3,7 @@ CNO 劳务公司 Sorter 分时产能（与 sync_cno_narrowbelt_hourly 同源 ope
 
 - 仅统计操作员名匹配「{劳务公司} Sorter {账号}」（排除 CNO 直线窄带分拣机等设备名）。
 - GF 公司：Sorter 编号 10/38/39/40 为计时 (hourly)，2/4/5 为计件 (piece)；其余劳务公司均为计件。
+- DJ 公司：操作员「DJ storing 01」为计时组（非 Sorter 命名）。
 - 由窄带同步在同一时间窗拉取日志后调用 persist_hour_slot_from_rows，不重复请求 Gofo。
 """
 from __future__ import annotations
@@ -26,6 +27,11 @@ _MACHINE_MARKERS = (
     "DWS",
     "AUTOSORT",
 )
+
+# 操作员全名（小写）→ (公司, 账号标签)；计薪类型由 classify_labor_pay_type 判定
+_EXTRA_LABOR_OPERATORS = {
+    "dj storing 01": ("DJ", "storing 01"),
+}
 
 
 def parse_labor_sorter_operator(name: Any) -> Optional[Tuple[str, str]]:
@@ -52,6 +58,19 @@ def parse_labor_sorter_operator(name: Any) -> Optional[Tuple[str, str]]:
     return company, account
 
 
+def parse_labor_operator(name: Any) -> Optional[Tuple[str, str]]:
+    """解析劳务操作员：Sorter 命名 + 额外计时组（如 DJ storing 01）。"""
+    if not name or not isinstance(name, str):
+        return None
+    s = name.strip()
+    if not s:
+        return None
+    extra = _EXTRA_LABOR_OPERATORS.get(s.lower())
+    if extra:
+        return extra
+    return parse_labor_sorter_operator(name)
+
+
 def _norm_sorter_account(account: str) -> str:
     s = (account or "").strip()
     if s.isdigit():
@@ -63,8 +82,14 @@ def _is_gf_company(company: str) -> bool:
     return (company or "").strip().upper() == "GF"
 
 
+def _is_dj_company(company: str) -> bool:
+    return (company or "").strip().upper() == "DJ"
+
+
 def classify_labor_pay_type(company: str, account: str) -> str:
-    """GF：10/38/39/40 计时，2/4/5 计件；其余公司均为计件。"""
+    """GF：10/38/39/40 计时，2/4/5 计件；DJ storing 01 计时；其余均为计件。"""
+    if _is_dj_company(company) and (account or "").strip().lower() == "storing 01":
+        return PAY_TYPE_HOURLY
     if not _is_gf_company(company):
         return PAY_TYPE_PIECE
     acc = _norm_sorter_account(account)
@@ -84,7 +109,7 @@ def counts_by_labor_company_both(
     seen: set = set()
     for r in rows:
         op = r.get("createByName")
-        parsed = parse_labor_sorter_operator(op)
+        parsed = parse_labor_operator(op)
         if not parsed:
             continue
         company, account = parsed
@@ -110,7 +135,7 @@ def counts_by_labor_account_both(
     seen: set = set()
     for r in rows:
         op = r.get("createByName")
-        parsed = parse_labor_sorter_operator(op)
+        parsed = parse_labor_operator(op)
         if not parsed:
             continue
         company, account = parsed

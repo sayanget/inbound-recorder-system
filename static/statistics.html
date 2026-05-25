@@ -726,7 +726,7 @@
                 <div style="flex:1; min-width:200px;">
                     <h3 style="margin:0;" data-lang="cno_labor_sorter_hourly_chart">CNO 劳务公司分时产能</h3>
                     <p style="margin:6px 0 0 0; font-size:12px; color:var(--text-muted,#888); line-height:1.45;"
-                        data-lang="cno_labor_sorter_hourly_sub">数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；仅统计「劳务公司 Sorter 账号」扫描件数。GF：Sorter 10/38/39/40 为计时组，2/4/5 为计件组；其余公司均为计件组。计数口径与窄带图右上角一致。</p>
+                        data-lang="cno_labor_sorter_hourly_sub">数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；统计劳务分拣账号扫描件数。GF：Sorter 10/38/39/40 计时，2/4/5 计件；DJ：「DJ storing 01」计时；其余公司 Sorter 均为计件。计数口径与窄带图右上角一致。</p>
                 </div>
                 <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
                     <button type="button" id="cnoLaborSorterSyncBtn" class="nav-btn"
@@ -742,6 +742,24 @@
                         <span data-lang="cno_labor_sorter_export_csv">导出 CSV</span>
                     </button>
                 </div>
+            </div>
+            <div id="cnoLaborSorterExportRangeBar"
+                style="display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0 0 8px 0; font-size:13px;">
+                <span data-lang="cno_labor_sorter_export_range_label" style="color:var(--text-muted,#666);">时间段导出</span>
+                <label style="display:inline-flex; align-items:center; gap:4px;">
+                    <span data-lang="cno_labor_sorter_export_range_from">起始</span>
+                    <input type="date" id="cnoLaborSorterExportStart" style="padding:4px 8px; font-size:13px;" />
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:4px;">
+                    <span data-lang="cno_labor_sorter_export_range_to">截止</span>
+                    <input type="date" id="cnoLaborSorterExportEnd" style="padding:4px 8px; font-size:13px;" />
+                </label>
+                <button type="button" id="cnoLaborSorterExportRangeBtn" class="nav-btn"
+                    style="padding:6px 14px; font-size:13px; cursor:pointer; background:#6f42c1; color:#fff; border:none; border-radius:4px;">
+                    <span data-lang="cno_labor_sorter_export_range_btn">导出时间段 CSV</span>
+                </button>
+                <span data-lang="cno_labor_sorter_export_range_hint"
+                    style="font-size:11px; color:var(--text-muted,#888);">含分时、日汇总、账号时段明细；最多 62 天</span>
             </div>
             <div id="cnoLaborSorterSyncScope"
                 style="font-size:12px; color:var(--text-muted,#666); margin:0 0 6px 0; line-height:1.5; padding:8px 10px; background:var(--table-stripe,#f8f9fa); border-radius:6px; border:1px solid var(--border-color,#e9ecef);">
@@ -777,15 +795,23 @@
                 <button type="button" id="dailyPackingBoardSyncBtn" class="nav-btn"
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
                     data-lang="daily_packing_board_sync_btn">同步看板</button>
-                <button type="button" id="dailyPackingOperlogSyncBtn" class="nav-btn"
-                    style="display:none; padding:5px 12px; font-size:12px; cursor:pointer; background:#6c757d; color:#fff; border:none; border-radius:4px;"
-                    data-lang="daily_packing_operlog_sync_btn">同步日志</button>
                 <button type="button" id="dailyPackingSplitChartExportBtn" class="nav-btn"
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
                 </div>
             </div>
             <div id="dailyPackingCountHint" style="display:none; margin:0 0 10px 0;"></div>
+            <div id="dailyPackingOperlogSyncBar"
+                style="display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0 0 8px 0; padding:8px 10px; font-size:13px; background:var(--table-stripe,#f8f9fa); border:1px solid var(--border-color,#e9ecef); border-radius:6px;">
+                <span data-lang="daily_packing_operlog_sync_label" style="color:var(--text-muted,#666);">按运营日同步 operatelog（逐条，不去重）</span>
+                <span id="dailyPackingOperlogSyncWindowHint" style="font-size:12px;color:var(--text-muted,#888);"></span>
+                <input type="date" id="dailyPackingOperlogSyncDate"
+                    style="padding:4px 8px; border:1px solid var(--border-color,#ccc); border-radius:4px; font-size:13px;" />
+                <button type="button" id="dailyPackingOperlogSyncOneDayBtn" class="nav-btn"
+                    style="padding:5px 14px; font-size:12px; cursor:pointer; background:#6c757d; color:#fff; border:none; border-radius:4px;"
+                    data-lang="daily_packing_operlog_sync_one_btn">同步该日</button>
+            </div>
+            <div id="dailyPackingOperlogSyncStatus" style="font-size:12px; min-height:18px; margin:0 0 8px 0; line-height:1.45;"></div>
             <div id="dailyPackingChartsRangeBar"
                 style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 10px 0; font-size:13px;">
                 <span data-lang="daily_packing_range_label" style="color:var(--text-muted, #555); max-width:420px; line-height:1.35;"></span>
@@ -1177,7 +1203,7 @@
                 cno_narrowbelt_stats_col_active_h: "有产时段(h)",
                 cno_narrowbelt_stats_col_mean_active: "件/h（有产）",
                 cno_labor_sorter_hourly_chart: "CNO 劳务公司分时产能",
-                cno_labor_sorter_hourly_sub: "数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；仅统计「劳务公司 Sorter 账号」扫描件数。GF：Sorter 10/38/39/40 为计时组，2/4/5 为计件组；其余公司均为计件组。计数口径与窄带图右上角一致。",
+                cno_labor_sorter_hourly_sub: "数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；统计劳务分拣账号扫描件数。GF：Sorter 10/38/39/40 计时，2/4/5 计件；DJ：「DJ storing 01」计时；其余公司 Sorter 均为计件。计数口径与窄带图右上角一致。",
                 cno_labor_sorter_hourly_title: "劳务公司 Sorter 分时件数（每小时产能）",
                 load_labor_sorter_error: "加载劳务公司分时数据出错:",
                 render_labor_sorter_error: "渲染劳务公司分时图表出错:",
@@ -1194,7 +1220,14 @@
                 cno_labor_sync_running: "后台拉取中（{summary}），请勿重复点击…",
                 cno_labor_sync_refreshing: "自动刷新图表",
                 cno_labor_sync_done: "同步任务已提交；若数据未出现可稍后再点「手动同步」或切换日期后重试。",
-                cno_labor_sorter_export_csv: "导出 CSV（劳务分时）",
+                cno_labor_sorter_export_csv: "导出 CSV（当日）",
+                cno_labor_sorter_export_range_label: "时间段导出",
+                cno_labor_sorter_export_range_from: "起始",
+                cno_labor_sorter_export_range_to: "截止",
+                cno_labor_sorter_export_range_btn: "导出时间段 CSV",
+                cno_labor_sorter_export_range_hint: "含分时、日汇总、账号时段明细；最多 62 天",
+                cno_labor_sorter_export_range_invalid: "请选择有效的起止日期",
+                cno_labor_sorter_export_range_order: "结束日期不能早于开始日期",
                 cno_labor_sorter_group_caption: "各劳务公司汇总：计件/计时分别显示组数、工作时长、合计件数及产能；上图按计件/计时分色曲线。",
                 cno_labor_sorter_group_col_company: "劳务公司",
                 cno_labor_sorter_group_col_piece_g: "计件组",
@@ -1255,12 +1288,21 @@
                 daily_packing_count_board: "看板（Gofo）",
                 daily_packing_count_raw: "逐条（日志）",
                 daily_packing_operlog_sync_hint: "部分日期操作日志同步失败，已回退为看板分拣数据；请稍后重试或联系管理员补同步。",
-                daily_packing_operlog_cache_hint: "部分日期尚无 operlog 缓存，该日显示为 0；点击「同步日志」拉取逐条数据（较慢，仅当前区间）。",
+                daily_packing_operlog_cache_hint: "部分日期尚无 operlog 缓存，该日显示为 0；请在下方选择运营日后点「同步该日」（逐条，仅单日）。",
                 daily_packing_incomplete_hours_hint: "部分日期小时槽不足 24 条，看板同步可能未齐全，可在管理端对区间执行 Gofo 分拣回填。",
-                daily_packing_operlog_raw_hint: "逐条：操作日志 scan 217；人工含 AAS/UNS 等分拣台，设备主要为 CNO 窄带/DWS 等（与看板 Artificial/Device 对齐）。需先「同步日志」。",
+                daily_packing_operlog_raw_hint: "逐条：操作日志 scan 217，不去重；请先对目标运营日执行「同步该日」。",
                 daily_packing_board_sync_btn: "同步看板",
                 daily_packing_board_cache_hint: "部分日期未缓存 Gofo 看板日汇总，当前为小时累加值，与看板人工/设备可能不一致；请点击「同步看板」。",
-                daily_packing_operlog_sync_btn: "同步日志",
+                daily_packing_operlog_sync_label: "按运营日同步 operatelog（逐条，不去重）",
+                daily_packing_operlog_sync_one_btn: "同步该日",
+                daily_packing_operlog_sync_one_running: "正在拉取该日 operatelog…",
+                daily_packing_operlog_sync_one_ok: "同步完成",
+                daily_packing_operlog_sync_one_fail: "同步失败:",
+                daily_packing_operlog_sync_need_date: "请选择运营日",
+                daily_packing_operlog_sync_window_hint: "当前统计窗口：",
+                daily_packing_operlog_sync_zero_warn: "同步完成但该窗口内无 scan 217 记录，请核对运营日与统计窗口。",
+                daily_packing_operlog_unsynced_hint: "以下运营日尚未逐条同步（显示为 0）：",
+                daily_packing_count_mismatch_hint: "「去重（看板）」与「逐条（日志）」数字不同属正常，勿混用对比。",
                 daily_packing_chart_loading: "加载中…",
                 daily_packing_split_hint: "按顶部所选统计口径（本地）统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
                 daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
@@ -1424,7 +1466,7 @@
                 cno_narrowbelt_stats_col_active_h: "Active slots (h)",
                 cno_narrowbelt_stats_col_mean_active: "pcs/h (active)",
                 cno_labor_sorter_hourly_chart: "CNO labor company hourly output",
-                cno_labor_sorter_hourly_sub: "Same source as narrow-belt chart (Gofo operatelog scan 217). Labor Sorter only. GF: accounts 10/38/39/40 hourly, 2/4/5 piece; other companies piece-only. Count mode matches narrow-belt toggle.",
+                cno_labor_sorter_hourly_sub: "Same source as narrow-belt chart (Gofo operatelog scan 217). GF: 10/38/39/40 hourly, 2/4/5 piece; DJ: \"DJ storing 01\" hourly; other Sorters piece-only.",
                 cno_labor_sorter_hourly_title: "Labor Sorter hourly output (pcs per hour)",
                 load_labor_sorter_error: "Error loading labor Sorter hourly data:",
                 render_labor_sorter_error: "Error rendering labor Sorter chart:",
@@ -1441,7 +1483,14 @@
                 cno_labor_sync_running: "Background fetch ({summary}); do not click again…",
                 cno_labor_sync_refreshing: "Refreshing charts",
                 cno_labor_sync_done: "Sync submitted. Retry later if the chart stays empty.",
-                cno_labor_sorter_export_csv: "Export CSV (labor hourly)",
+                cno_labor_sorter_export_csv: "Export CSV (single day)",
+                cno_labor_sorter_export_range_label: "Date range export",
+                cno_labor_sorter_export_range_from: "From",
+                cno_labor_sorter_export_range_to: "To",
+                cno_labor_sorter_export_range_btn: "Export range CSV",
+                cno_labor_sorter_export_range_hint: "Hourly, daily summary, account slots; max 62 days",
+                cno_labor_sorter_export_range_invalid: "Select valid start and end dates",
+                cno_labor_sorter_export_range_order: "End date must be on or after start date",
                 cno_labor_sorter_group_caption: "Per company: piece and hourly groups, hours, totals, productivity; chart splits by pay type.",
                 cno_labor_sorter_group_col_company: "Company",
                 cno_labor_sorter_group_col_piece_g: "Piece grps",
@@ -1502,12 +1551,21 @@
                 daily_packing_count_board: "Board (deduped)",
                 daily_packing_count_raw: "Per log line",
                 daily_packing_operlog_sync_hint: "Operlog sync failed for some days; fell back to board sorting data. Retry later or ask admin to backfill.",
-                daily_packing_operlog_cache_hint: "Some days have no operlog cache (shown as 0). Click Sync operlog (slow, current range).",
+                daily_packing_operlog_cache_hint: "Some days have no operlog cache (shown as 0). Pick an anchor date below and click Sync day (raw, one day only).",
                 daily_packing_incomplete_hours_hint: "Some days have fewer than 24 hourly slots; run Gofo sorting backfill for the range.",
-                daily_packing_operlog_raw_hint: "Per log: operatelog scan 217, manual/device by operator name rules; may differ from board deduped counts.",
+                daily_packing_operlog_raw_hint: "Per log: operatelog scan 217, no dedup; sync the target anchor day first.",
                 daily_packing_board_sync_btn: "Sync board",
                 daily_packing_board_cache_hint: "Some days lack Gofo board daily totals (showing hourly sums). Click Sync board.",
-                daily_packing_operlog_sync_btn: "Sync operlog",
+                daily_packing_operlog_sync_label: "Sync operlog for one anchor day (raw, no dedup)",
+                daily_packing_operlog_sync_one_btn: "Sync day",
+                daily_packing_operlog_sync_one_running: "Fetching operlog for that day…",
+                daily_packing_operlog_sync_one_ok: "Sync done",
+                daily_packing_operlog_sync_one_fail: "Sync failed:",
+                daily_packing_operlog_sync_need_date: "Pick anchor date",
+                daily_packing_operlog_sync_window_hint: "Stats window: ",
+                daily_packing_operlog_sync_zero_warn: "Sync done but no scan 217 rows in this window; check anchor date and stats window.",
+                daily_packing_operlog_unsynced_hint: "Anchor days not synced yet (shown as 0): ",
+                daily_packing_count_mismatch_hint: "Board (deduped) vs per-log counts differ by design; do not compare across modes.",
                 daily_packing_chart_loading: "Loading…",
                 daily_packing_split_hint: "Uses the selected stats window (local), last 14 days; bar height = daily total (manual+device); segment labels show share.",
                 daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
@@ -1666,7 +1724,7 @@
                 cno_narrowbelt_stats_col_active_h: "Franjas activas (h)",
                 cno_narrowbelt_stats_col_mean_active: "pzas/h (activas)",
                 cno_labor_sorter_hourly_chart: "Capacidad horaria empresas laborales CNO",
-                cno_labor_sorter_hourly_sub: "Misma fuente que el gráfico estrecho (operatelog Gofo 217). GF: 10/38/39/40 horario, 2/4/5 pieza; demás empresas solo pieza.",
+                cno_labor_sorter_hourly_sub: "Misma fuente (operatelog Gofo 217). GF: 10/38/39/40 horario, 2/4/5 pieza; DJ: \"DJ storing 01\" horario; demás Sorter pieza.",
                 cno_labor_sorter_hourly_title: "Sorter laboral: piezas por hora",
                 load_labor_sorter_error: "Error al cargar datos horarios Sorter laboral:",
                 render_labor_sorter_error: "Error al renderizar gráfico Sorter laboral:",
@@ -1683,7 +1741,14 @@
                 cno_labor_sync_running: "Descarga en segundo plano ({summary}); no pulse de nuevo…",
                 cno_labor_sync_refreshing: "Actualizando gráficos",
                 cno_labor_sync_done: "Sincronización enviada. Reintente si no hay datos.",
-                cno_labor_sorter_export_csv: "Exportar CSV (labor horario)",
+                cno_labor_sorter_export_csv: "Exportar CSV (día)",
+                cno_labor_sorter_export_range_label: "Exportar rango",
+                cno_labor_sorter_export_range_from: "Desde",
+                cno_labor_sorter_export_range_to: "Hasta",
+                cno_labor_sorter_export_range_btn: "CSV por rango",
+                cno_labor_sorter_export_range_hint: "Horario, resumen diario, cuentas; máx. 62 días",
+                cno_labor_sorter_export_range_invalid: "Seleccione fechas válidas",
+                cno_labor_sorter_export_range_order: "La fecha fin no puede ser anterior al inicio",
                 cno_labor_sorter_group_caption: "Por empresa: pieza y horario con horas y piezas separadas.",
                 cno_labor_sorter_group_col_company: "Empresa",
                 cno_labor_sorter_group_col_piece_g: "Gr. pieza",
@@ -1744,12 +1809,21 @@
                 daily_packing_count_board: "Tablero (dedup)",
                 daily_packing_count_raw: "Por registro",
                 daily_packing_operlog_sync_hint: "Falló sync de operlog en algunos días; se usó dato del tablero. Reintente o pida resincronización.",
-                daily_packing_operlog_cache_hint: "Días sin caché operlog se muestran como 0. Pulse Sincronizar operlog (lento).",
+                daily_packing_operlog_cache_hint: "Días sin caché operlog = 0. Elija fecha y pulse Sincronizar día (por registro, un solo día).",
                 daily_packing_incomplete_hours_hint: "Algunos días tienen menos de 24 franjas horarias; rellene desde Gofo.",
-                daily_packing_operlog_raw_hint: "Por registro: operlog scan 217; manual/dispositivo por reglas de nombre; puede diferir del tablero.",
+                daily_packing_operlog_raw_hint: "Por registro: operlog scan 217, sin deduplicar; sincronice primero el día objetivo.",
                 daily_packing_board_sync_btn: "Sincronizar tablero",
                 daily_packing_board_cache_hint: "Faltan totales diarios del tablero Gofo; pulse Sincronizar tablero.",
-                daily_packing_operlog_sync_btn: "Sincronizar operlog",
+                daily_packing_operlog_sync_label: "Sincronizar operlog por día ancla (por registro, sin dedup)",
+                daily_packing_operlog_sync_one_btn: "Sincronizar día",
+                daily_packing_operlog_sync_one_running: "Obteniendo operlog del día…",
+                daily_packing_operlog_sync_one_ok: "Sincronización lista",
+                daily_packing_operlog_sync_one_fail: "Error de sincronización:",
+                daily_packing_operlog_sync_need_date: "Elija fecha ancla",
+                daily_packing_operlog_sync_window_hint: "Ventana: ",
+                daily_packing_operlog_sync_zero_warn: "Sin registros scan 217 en la ventana; revise fecha y ventana.",
+                daily_packing_operlog_unsynced_hint: "Días sin sincronizar (0): ",
+                daily_packing_count_mismatch_hint: "Tablero (dedup) y por registro difieren; no mezcle modos.",
                 daily_packing_chart_loading: "Cargando…",
                 daily_packing_split_hint: "Ventana de estadísticas seleccionada (hora local), últimos 14 días; altura = total diario (manual+dispositivo); etiquetas = proporción.",
                 daily_packing_split_tooltip_footer: "(Proporción respecto al total manual+dispositivo del día)",
@@ -2002,7 +2076,6 @@
             const m = getDailyPackingCountMode();
             const boardBtn = document.getElementById('dailyPackingCountBoardBtn');
             const rawBtn = document.getElementById('dailyPackingCountRawBtn');
-            const operlogSyncBtn = document.getElementById('dailyPackingOperlogSyncBtn');
             const boardSyncBtn = document.getElementById('dailyPackingBoardSyncBtn');
             const boardOn = m !== 'raw';
             if (boardBtn) {
@@ -2013,8 +2086,18 @@
                 rawBtn.classList.toggle('active', !boardOn);
                 rawBtn.setAttribute('aria-pressed', !boardOn ? 'true' : 'false');
             }
-            if (operlogSyncBtn) operlogSyncBtn.style.display = boardOn ? 'none' : '';
             if (boardSyncBtn) boardSyncBtn.style.display = boardOn ? '' : 'none';
+            const operlogBar = document.getElementById('dailyPackingOperlogSyncBar');
+            const operlogStatus = document.getElementById('dailyPackingOperlogSyncStatus');
+            const operlogWinHint = document.getElementById('dailyPackingOperlogSyncWindowHint');
+            if (operlogBar) operlogBar.style.display = boardOn ? 'none' : 'flex';
+            if (operlogStatus && boardOn) operlogStatus.textContent = '';
+            if (operlogWinHint && !boardOn) {
+                const t = translations[currentLang] || {};
+                const wmLabel = { calendar: '自然日', business: '业务日 05:00', seventeen: '17:00' };
+                operlogWinHint.textContent = (t.daily_packing_operlog_sync_window_hint || '统计窗口：')
+                    + (wmLabel[statsWindowMode] || statsWindowMode);
+            }
         }
 
         function syncStatsWindowToggleUi() {
@@ -2039,6 +2122,9 @@
             else statsWindowMode = 'calendar';
             localStorage.setItem('stats_window', statsWindowMode);
             syncStatsWindowToggleUi();
+            if (typeof syncDailyPackingCountModeUi === 'function') {
+                syncDailyPackingCountModeUi();
+            }
             const anchor = getDefaultStatsAnchorYmd();
             currentDate = anchor;
             const mainEl = document.getElementById('selectedDate');
@@ -2050,6 +2136,9 @@
             }
             if (typeof refreshCnoLaborSorterSyncScope === 'function') {
                 refreshCnoLaborSorterSyncScope();
+            }
+            if (typeof initCnoLaborSorterExportRangeInputs === 'function') {
+                initCnoLaborSorterExportRangeInputs(currentDate);
             }
         }
 
@@ -2071,6 +2160,60 @@
             const e = document.getElementById('dailyPackingChartsEnd');
             if (s) s.value = r.start;
             if (e) e.value = r.end;
+            const od = document.getElementById('dailyPackingOperlogSyncDate');
+            if (od) od.value = r.end || anchorYmd || currentDate || '';
+        }
+
+        function setDailyPackingOperlogSyncStatus(text, tone) {
+            const el = document.getElementById('dailyPackingOperlogSyncStatus');
+            if (!el) return;
+            el.textContent = text || '';
+            el.style.color = tone === 'error' ? '#dc3545' : (tone === 'success' ? '#198754' : '#666');
+        }
+
+        function syncDailyPackingOperlogOneDay() {
+            const t = translations[currentLang] || {};
+            const dateEl = document.getElementById('dailyPackingOperlogSyncDate');
+            const btn = document.getElementById('dailyPackingOperlogSyncOneDayBtn');
+            const dateStr = dateEl ? (dateEl.value || '').trim() : '';
+            if (!dateStr) {
+                showMessage(t.daily_packing_operlog_sync_need_date || '请选择运营日', 'error');
+                return;
+            }
+            if (btn) btn.disabled = true;
+            setDailyPackingOperlogSyncStatus(t.daily_packing_operlog_sync_one_running || '同步中…', 'info');
+            fetch(withStatsWindowParams('/api/statistics/daily_packing_operlog/sync', {}), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ date: dateStr, stats_window: statsWindowMode })
+            })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function (data) {
+                    if (btn) btn.disabled = false;
+                    if (!data.success) throw new Error(data.error || 'sync failed');
+                    setDailyPackingCountMode('raw');
+                    const statusMsg = data.message || (t.daily_packing_operlog_sync_one_ok || '完成');
+                    const tone = data.warning ? 'error' : 'success';
+                    setDailyPackingOperlogSyncStatus(
+                        data.warning ? (statusMsg + ' — ' + data.warning) : statusMsg,
+                        tone
+                    );
+                    showMessage(
+                        data.warning ? (t.daily_packing_operlog_sync_zero_warn || data.warning) : statusMsg,
+                        data.warning ? 'error' : 'success'
+                    );
+                    loadDailyPackingSplitData();
+                })
+                .catch(function (err) {
+                    if (btn) btn.disabled = false;
+                    const msg = (t.daily_packing_operlog_sync_one_fail || '失败:') + ' ' + err.message;
+                    setDailyPackingOperlogSyncStatus(msg, 'error');
+                    showMessage(msg, 'error');
+                });
         }
 
         function dailyPackingChartsRangeForFetch() {
@@ -2522,12 +2665,9 @@
                     loadDailyPackingSplitData({ syncBoard: true });
                 });
             }
-            const dailyPackingOperlogSyncBtn = document.getElementById('dailyPackingOperlogSyncBtn');
-            if (dailyPackingOperlogSyncBtn) {
-                dailyPackingOperlogSyncBtn.addEventListener('click', function () {
-                    if (getDailyPackingCountMode() !== 'raw') return;
-                    loadDailyPackingSplitData({ syncOperlog: true });
-                });
+            const dailyPackingOperlogSyncOneDayBtn = document.getElementById('dailyPackingOperlogSyncOneDayBtn');
+            if (dailyPackingOperlogSyncOneDayBtn) {
+                dailyPackingOperlogSyncOneDayBtn.addEventListener('click', syncDailyPackingOperlogOneDay);
             }
 
             (function syncWeekComparisonBarSectionVisibility() {
@@ -2628,6 +2768,9 @@
             if (typeof refreshCnoLaborSorterSyncScope === 'function') refreshCnoLaborSorterSyncScope();
             const cnoLaborCsvExp = document.getElementById('cnoLaborSorterExportCsvBtn');
             if (cnoLaborCsvExp) cnoLaborCsvExp.addEventListener('click', exportCnoLaborSorterHourlyCsv);
+            const cnoLaborRangeExp = document.getElementById('cnoLaborSorterExportRangeBtn');
+            if (cnoLaborRangeExp) cnoLaborRangeExp.addEventListener('click', exportCnoLaborSorterHourlyRangeCsv);
+            initCnoLaborSorterExportRangeInputs(currentDate);
             bindStatsChartExportBtn('cnoNarrowbeltChartExportBtn', function () { return window.cnoNarrowbeltHourlyChartInstance; }, function () {
                 return 'cno_narrowbelt_hourly_chart_' + getCnoNarrowbeltCountMode();
             });
@@ -3503,12 +3646,56 @@
                 });
         }
 
+        function initCnoLaborSorterExportRangeInputs(statsDateYmd) {
+            const s = document.getElementById('cnoLaborSorterExportStart');
+            const e = document.getElementById('cnoLaborSorterExportEnd');
+            const endBase = statsDateYmd || currentDate || '';
+            if (e && endBase) e.value = endBase;
+            if (s && endBase) {
+                const p = endBase.split('-').map(function (x) { return parseInt(x, 10); });
+                if (p.length === 3 && !p.some(function (n) { return Number.isNaN(n); })) {
+                    const endD = new Date(p[0], p[1] - 1, p[2]);
+                    const startD = new Date(endD.getTime());
+                    startD.setDate(startD.getDate() - 6);
+                    s.value = startD.getFullYear() + '-'
+                        + String(startD.getMonth() + 1).padStart(2, '0') + '-'
+                        + String(startD.getDate()).padStart(2, '0');
+                }
+            }
+        }
+
         function exportCnoLaborSorterHourlyCsv() {
             const qp = Object.assign(
                 currentDate ? { date: currentDate } : {},
                 { count_mode: getCnoNarrowbeltCountMode() }
             );
             const url = withStatsWindowParams('/api/statistics/cno_labor_sorter_hourly/export', qp);
+            window.location.href = url;
+        }
+
+        function exportCnoLaborSorterHourlyRangeCsv() {
+            const t = translations[currentLang] || {};
+            const startEl = document.getElementById('cnoLaborSorterExportStart');
+            const endEl = document.getElementById('cnoLaborSorterExportEnd');
+            const startStr = startEl ? startEl.value : '';
+            const endStr = endEl ? endEl.value : '';
+            if (!startStr || !endStr) {
+                showMessage(t.cno_labor_sorter_export_range_invalid || '请选择有效的起止日期', 'error');
+                return;
+            }
+            if (startStr > endStr) {
+                showMessage(t.cno_labor_sorter_export_range_order || '结束日期不能早于开始日期', 'error');
+                return;
+            }
+            const qp = {
+                start_date: startStr,
+                end_date: endStr,
+                count_mode: getCnoNarrowbeltCountMode()
+            };
+            const url = withStatsWindowParams(
+                '/api/statistics/cno_labor_sorter_hourly/export_range',
+                qp
+            );
             window.location.href = url;
         }
 
@@ -5145,7 +5332,6 @@
                 end_date: r.end,
                 count_mode: getDailyPackingCountMode()
             };
-            if (opts.syncOperlog) qp.sync_operlog = '1';
             if (opts.syncBoard) qp.sync_board = '1';
             const packUrl = withStatsWindowParams('/api/statistics/daily_packing_split', qp);
             const canvas = document.getElementById('dailyPackingSplitChart');
@@ -5158,9 +5344,7 @@
                 ctx.fillStyle = '#6c757d';
                 ctx.fillText(t0.daily_packing_chart_loading || '加载中…', canvas.width / 2, canvas.height / 2);
             }
-            const operlogSyncBtn = document.getElementById('dailyPackingOperlogSyncBtn');
             const boardSyncBtn = document.getElementById('dailyPackingBoardSyncBtn');
-            if (operlogSyncBtn) operlogSyncBtn.disabled = !!opts.syncOperlog;
             if (boardSyncBtn) boardSyncBtn.disabled = !!opts.syncBoard;
             fetch(packUrl, { cache: 'no-store', credentials: 'same-origin' })
                 .then(response => {
@@ -5168,7 +5352,6 @@
                     return response.json();
                 })
                 .then(data => {
-                    if (operlogSyncBtn) operlogSyncBtn.disabled = false;
                     if (boardSyncBtn) boardSyncBtn.disabled = false;
                     if (data.error) {
                         console.error('daily_packing_split:', data.error);
@@ -5181,7 +5364,6 @@
                     renderDailyPackingSplitChart(data);
                 })
                 .catch(err => {
-                    if (operlogSyncBtn) operlogSyncBtn.disabled = false;
                     if (boardSyncBtn) boardSyncBtn.disabled = false;
                     console.error('loadDailyPackingSplitData', err);
                     renderDailyPackingSplitChart(null);
@@ -5200,10 +5382,12 @@
                 const cm = (data && data.count_mode) || getDailyPackingCountMode();
                 const failures = Number(data && data.operlog_sync_failures) || 0;
                 const cacheMiss = Number(data && data.operlog_cache_misses) || 0;
+                const unsynced = (data && data.operlog_unsynced_dates) || [];
                 const boardFb = Number(data && data.board_fallback_days) || 0;
                 const boardMiss = Number(data && data.board_cache_misses) || 0;
                 const hourSlots = (data && data.hour_slots) || [];
                 let hintParts = [];
+                hintParts.push(t.daily_packing_count_mismatch_hint || '');
                 if (cm === 'board' && boardMiss > 0) {
                     hintParts.push(t.daily_packing_board_cache_hint || '');
                 }
@@ -5212,6 +5396,11 @@
                         hintParts.push(t.daily_packing_operlog_sync_hint || '');
                     } else if (cacheMiss > 0) {
                         hintParts.push(t.daily_packing_operlog_cache_hint || '');
+                        if (unsynced.length) {
+                            hintParts.push(
+                                (t.daily_packing_operlog_unsynced_hint || '') + unsynced.join(', ')
+                            );
+                        }
                     } else {
                         hintParts.push(t.daily_packing_operlog_raw_hint || '');
                     }

@@ -18,6 +18,9 @@ from sync_cno_narrowbelt_hourly import fetch_operatelog_window, narrowbelt_line_
 
 logger = logging.getLogger(__name__)
 
+# 人工/设备判定规则变更时递增；读缓存时版本不一致则视为未同步，避免展示旧误判数据。
+OPERLOG_CLASSIFIER_VERSION = 2
+
 # 与 Gofo 看板 collectArtificial / collectDevice 对齐：
 # - 「AAS Sorter」等人工分拣台算人工（Artificial），不能因含 Sorter 判为设备
 # - CNO 直线窄带、DWS/自动分拣机等算设备
@@ -118,33 +121,73 @@ def sync_daily_packing_operlog_anchor(
         rows = fetch_operatelog_window(begin_str, end_str)
         manual_raw, device_raw, manual_dedup, device_dedup = counts_manual_device_both(rows)
         synced_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        _write_cache(anchor_str, wm, manual_raw, device_raw, manual_dedup, device_dedup, synced_at)
+        _write_cache(
+            anchor_str,
+            wm,
+            manual_raw,
+            device_raw,
+            manual_dedup,
+            device_dedup,
+            synced_at,
+            OPERLOG_CLASSIFIER_VERSION,
+        )
         return {
             "success": True,
             "cached": False,
             "anchor_date": anchor_str,
             "stats_window": wm,
+            "period_begin": begin_str,
+            "period_end": end_str,
             "manual_raw": manual_raw,
             "device_raw": device_raw,
             "manual_dedup": manual_dedup,
             "device_dedup": device_dedup,
             "raw_rows": len(rows),
+            "classifier_ver": OPERLOG_CLASSIFIER_VERSION,
         }
     except Exception as e:
         logger.warning("daily_packing operlog sync %s %s: %s", anchor_str, wm, e)
         return {"success": False, "error": str(e), "anchor_date": anchor_str, "stats_window": wm}
 
 
+def _ensure_operlog_cache_columns() -> None:
+    """为 daily_packing_operlog_daily 增加 classifier_ver（SQLite / Postgres）。"""
+    from single_app import USE_POSTGRES, get_db
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        if USE_POSTGRES:
+            cur.execute(
+                "ALTER TABLE daily_packing_operlog_daily "
+                "ADD COLUMN IF NOT EXISTS classifier_ver INTEGER NOT NULL DEFAULT 0"
+            )
+        else:
+            cur.execute("PRAGMA table_info(daily_packing_operlog_daily)")
+            cols = {row[1] for row in cur.fetchall()}
+            if "classifier_ver" not in cols:
+                cur.execute(
+                    "ALTER TABLE daily_packing_operlog_daily "
+                    "ADD COLUMN classifier_ver INTEGER NOT NULL DEFAULT 0"
+                )
+        conn.commit()
+    except Exception as e:
+        logger.debug("operlog cache schema: %s", e)
+    finally:
+        conn.close()
+
+
 def _read_cache(anchor_str: str, window_mode: str) -> Optional[Dict[str, int]]:
     from single_app import convert_query_placeholders, get_db
 
+    _ensure_operlog_cache_columns()
     conn = get_db()
     cur = conn.cursor()
     try:
         cur.execute(
             convert_query_placeholders(
                 """
-                SELECT manual_raw, device_raw, manual_dedup, device_dedup
+                SELECT manual_raw, device_raw, manual_dedup, device_dedup, classifier_ver
                 FROM daily_packing_operlog_daily
                 WHERE anchor_date = ? AND stats_window = ?
                 """
@@ -153,6 +196,16 @@ def _read_cache(anchor_str: str, window_mode: str) -> Optional[Dict[str, int]]:
         )
         r = cur.fetchone()
         if not r:
+            return None
+        ver = int(r[4] or 0) if len(r) > 4 else 0
+        if ver < OPERLOG_CLASSIFIER_VERSION:
+            logger.info(
+                "invalidate operlog cache %s %s (classifier_ver=%s < %s)",
+                anchor_str,
+                window_mode,
+                ver,
+                OPERLOG_CLASSIFIER_VERSION,
+            )
             return None
         manual_raw = int(r[0] or 0)
         device_raw = int(r[1] or 0)
@@ -184,26 +237,65 @@ def _write_cache(
     manual_dedup: int,
     device_dedup: int,
     synced_at: str,
+    classifier_ver: int = OPERLOG_CLASSIFIER_VERSION,
 ) -> None:
     from single_app import get_db
 
+    _ensure_operlog_cache_columns()
     conn = get_db()
     cur = conn.cursor()
     try:
         cur.execute(
             """
             INSERT INTO daily_packing_operlog_daily
-                (anchor_date, stats_window, manual_raw, device_raw, manual_dedup, device_dedup, synced_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (anchor_date, stats_window, manual_raw, device_raw, manual_dedup, device_dedup, synced_at, classifier_ver)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(anchor_date, stats_window) DO UPDATE SET
                 manual_raw = excluded.manual_raw,
                 device_raw = excluded.device_raw,
                 manual_dedup = excluded.manual_dedup,
                 device_dedup = excluded.device_dedup,
-                synced_at = excluded.synced_at
+                synced_at = excluded.synced_at,
+                classifier_ver = excluded.classifier_ver
             """,
-            (anchor_str, window_mode, manual_raw, device_raw, manual_dedup, device_dedup, synced_at),
+            (
+                anchor_str,
+                window_mode,
+                manual_raw,
+                device_raw,
+                manual_dedup,
+                device_dedup,
+                synced_at,
+                classifier_ver,
+            ),
         )
         conn.commit()
     finally:
         conn.close()
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    parser = argparse.ArgumentParser(
+        description="单日 operlog 集包同步（逐条，force，写入 daily_packing_operlog_daily）"
+    )
+    parser.add_argument("date", help="运营锚点日 YYYY-MM-DD")
+    parser.add_argument(
+        "-w",
+        "--window",
+        default=os.environ.get("STATS_WINDOW", "calendar"),
+        choices=("calendar", "business", "seventeen"),
+        help="stats_window，默认 calendar 或环境变量 STATS_WINDOW",
+    )
+    args = parser.parse_args()
+    try:
+        anchor = datetime.strptime(args.date.strip()[:10], "%Y-%m-%d").date()
+    except ValueError:
+        print("date 格式应为 YYYY-MM-DD", file=sys.stderr)
+        sys.exit(2)
+    out = sync_daily_packing_operlog_anchor(anchor, args.window, force=True)
+    print(out)
+    sys.exit(0 if out.get("success") else 1)
