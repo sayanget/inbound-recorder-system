@@ -769,6 +769,54 @@
             <div class="chart-container" style="min-height: 360px;">
                 <canvas id="cnoLaborSorterHourlyCanvas"></canvas>
             </div>
+            <div id="cnoLaborGroupHourlyWrap" style="margin-top: 16px; display: none; border-top: 2px solid var(--primary-color, #4361ee); padding-top: 14px;">
+                <h4 id="cnoLaborGroupHourlyHeading" style="margin:0 0 10px 0; font-size:15px; color:var(--primary-color,#4361ee);"
+                    data-lang="cno_labor_group_hourly_heading">各小组每小时产能</h4>
+                <div
+                    style="display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:8px 12px; margin-bottom:8px;">
+                    <div style="font-size:13px; color:var(--text-muted,#666); flex:1; min-width:200px; line-height:1.45;"
+                        data-lang="cno_labor_group_hourly_caption">热力图展示各小组每整点件数；明细表默认收起（完整数据定时同步至飞书 Wiki）。</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; flex-shrink:0;">
+                        <button type="button" id="cnoLaborGroupHourlyToggleTableBtn" class="nav-btn"
+                            style="padding:6px 14px; font-size:13px; cursor:pointer; background:#6c757d; color:#fff; border:none; border-radius:4px;">
+                            <span data-lang="cno_labor_group_hourly_show_table">展开明细表</span>
+                        </button>
+                        <button type="button" id="cnoLaborGroupHourlyExportCsvBtn" class="nav-btn"
+                            style="padding:6px 14px; font-size:13px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
+                            <span data-lang="cno_labor_group_hourly_export_csv">导出小组分时 CSV</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="cnoLaborGroupHourlyHeatmapSection" style="margin-bottom: 14px;">
+                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-color, #333);"
+                        data-lang="cno_labor_group_hourly_heatmap_title">小组 × 小时产能热力图</div>
+                    <p style="font-size: 11px; color: var(--text-muted, #888); margin: 0 0 8px 0; line-height: 1.45;"
+                        data-lang="cno_labor_group_hourly_heatmap_hint">横轴为运营日内整点，纵轴为各小组；颜色越深表示该小时件数越高（相对当日所有格子中的最大值归一化）。</p>
+                    <div
+                        style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:8px; font-size:11px; color:var(--text-muted,#666);">
+                        <span data-lang="cno_labor_group_hourly_heatmap_scale">强度</span>
+                        <span
+                            style="display:inline-block; width:120px; height:10px; border-radius:4px; background:linear-gradient(to right, var(--table-stripe,#e9ecef), hsl(217, 82%, 42%)); border:1px solid var(--border-color,#dee2e6);"></span>
+                        <span data-lang="cno_labor_group_hourly_heatmap_low">低</span>
+                        <span data-lang="cno_labor_group_hourly_heatmap_to" style="padding:0 2px;">→</span>
+                        <span data-lang="cno_labor_group_hourly_heatmap_high">高</span>
+                    </div>
+                    <div id="cnoLaborGroupHourlyHeatmapScroll"
+                        style="overflow: auto; max-height: 520px; border: 1px solid var(--border-color, #e9ecef); border-radius: 6px; padding: 8px; background: var(--card-bg, #fff);">
+                        <div id="cnoLaborGroupHourlyHeatmapGrid"></div>
+                    </div>
+                </div>
+                <div id="cnoLaborGroupHourlyTableSection" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color, #dee2e6);">
+                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-muted, #555);"
+                        data-lang="cno_labor_group_hourly_table_title">明细表（小组 | 各整点件数 | 计薪 | 日合计）</div>
+                    <div style="font-size: 11px; color: var(--text-muted, #888); margin-bottom: 6px;"
+                        data-lang="cno_labor_group_hourly_scroll_hint">← 表格可左右滑动，组名右侧即为各小时产能 →</div>
+                    <div style="overflow-x: auto; max-height: 520px; overflow-y: auto;">
+                        <table id="cnoLaborGroupHourlyTable"
+                            style="width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums;"></table>
+                    </div>
+                </div>
+            </div>
             <div id="cnoLaborSorterGroupStatsWrap" style="margin-top: 12px; display: none;">
                 <div style="font-size:13px; font-weight:600; margin-bottom:8px; color:var(--text-color,#333);"
                     data-lang="cno_labor_sorter_group_caption">各劳务公司汇总：计件/计时分别显示组数、工作时长、合计件数及产能；上图按计件/计时分色曲线。</div>
@@ -838,7 +886,7 @@
                 <summary style="cursor:pointer;font-weight:600;padding:4px 0;list-style-position:outside;"
                     data-lang="packing_manual_device_week_comparison_summary">（人工 / 设备）集包周环比</summary>
                 <p style="margin:8px 0 10px;font-size:12px;color:var(--text-muted,#666);line-height:1.4;"
-                    data-lang="packing_manual_device_wow_details_hint">自然周（周一至周日）；与上方每日集包及顶部统计口径一致。</p>
+                    data-lang="packing_manual_device_wow_details_hint">自然周（周一至周日）；每日为 operatelog 逐条（不去重），与顶部统计窗口一致；缺缓存日为 0。</p>
                 <div id="packingMdWowWeekRangeBar"
                     style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 10px 0;font-size:13px;">
                     <span data-lang="wow_week_range_label"
@@ -1225,7 +1273,7 @@
                 cno_labor_sorter_export_range_from: "起始",
                 cno_labor_sorter_export_range_to: "截止",
                 cno_labor_sorter_export_range_btn: "导出时间段 CSV",
-                cno_labor_sorter_export_range_hint: "含分时、日汇总、账号时段明细；最多 62 天",
+                cno_labor_sorter_export_range_hint: "含分时、日汇总、小组分时矩阵、账号时段明细；最多 62 天",
                 cno_labor_sorter_export_range_invalid: "请选择有效的起止日期",
                 cno_labor_sorter_export_range_order: "结束日期不能早于开始日期",
                 cno_labor_sorter_group_caption: "各劳务公司汇总：计件/计时分别显示组数、工作时长、合计件数及产能；上图按计件/计时分色曲线。",
@@ -1244,6 +1292,25 @@
                 cno_labor_sorter_pay_hourly: "计时",
                 cno_labor_sorter_group_total: "合计",
                 cno_labor_sorter_group_empty: "暂无组数数据，请先「手动同步」当前运营日。",
+                cno_labor_group_hourly_heading: "各小组每小时产能",
+                cno_labor_group_hourly_caption: "热力图展示各小组每整点件数；明细表默认收起（完整数据定时同步至飞书 Wiki）。",
+                cno_labor_group_hourly_show_table: "展开明细表",
+                cno_labor_group_hourly_hide_table: "收起明细表",
+                cno_labor_group_hourly_col_group: "组号",
+                cno_labor_group_hourly_col_team: "小组",
+                cno_labor_group_hourly_col_pay: "计薪",
+                cno_labor_group_hourly_col_total: "日合计",
+                cno_labor_group_hourly_empty: "当前运营日暂无小组分时数据。若上方公司折线图有数据仍为空，请点「手动同步」；部署后请 Ctrl+F5 强刷页面。",
+                cno_labor_group_hourly_export_csv: "导出小组分时 CSV",
+                cno_labor_group_hourly_heatmap_title: "小组 × 小时产能热力图",
+                cno_labor_group_hourly_heatmap_hint: "横轴为运营日内整点，纵轴为各小组；颜色越深表示该小时件数越高（相对当日所有格子中的最大值归一化）。",
+                cno_labor_group_hourly_heatmap_scale: "强度",
+                cno_labor_group_hourly_heatmap_low: "低",
+                cno_labor_group_hourly_heatmap_to: "→",
+                cno_labor_group_hourly_heatmap_high: "高",
+                cno_labor_group_hourly_heatmap_row_label: "小组",
+                cno_labor_group_hourly_table_title: "明细表（小组 | 各整点件数 | 计薪 | 日合计）",
+                cno_labor_group_hourly_scroll_hint: "← 表格可左右滑动，组名右侧即为各小时产能 →",
                 pieces: "件数",
                 time_slot: "时间段",
                 pickup_forecast_title: "揽收预估数据",
@@ -1282,15 +1349,15 @@
                 daily_trend_copy_success: "已复制到剪贴板",
                 daily_trend_copy_failed: "复制失败",
                 packing_manual_device_week_comparison_summary: "（人工 / 设备）集包周环比",
-                packing_manual_device_wow_details_hint: "自然周（周一至周日）；与上方每日集包及顶部统计口径一致。",
+                packing_manual_device_wow_details_hint: "自然周（周一至周日）；每日为 operatelog 逐条（不去重），与顶部统计窗口一致；缺缓存日为 0。",
                 daily_packing_split_chart: "每日集包（人工 / 设备）",
                 daily_packing_count_label: "计数口径",
                 daily_packing_count_board: "看板（Gofo）",
                 daily_packing_count_raw: "逐条（日志）",
                 daily_packing_operlog_sync_hint: "部分日期操作日志同步失败，已回退为看板分拣数据；请稍后重试或联系管理员补同步。",
-                daily_packing_operlog_cache_hint: "部分日期尚无 operlog 缓存，该日显示为 0；请在下方选择运营日后点「同步该日」（逐条，仅单日）。",
                 daily_packing_incomplete_hours_hint: "部分日期小时槽不足 24 条，看板同步可能未齐全，可在管理端对区间执行 Gofo 分拣回填。",
-                daily_packing_operlog_raw_hint: "逐条：操作日志 scan 217，不去重；请先对目标运营日执行「同步该日」。",
+                daily_packing_operlog_raw_hint: "逐条：scan 217 不去重；服务每小时自动刷新当前运营日（17:00 窗口默认），无需每日手点同步。",
+                daily_packing_operlog_cache_hint: "部分日期尚无缓存（显示为 0）；系统每小时自动补当前运营日，历史日可点「同步该日」。",
                 daily_packing_board_sync_btn: "同步看板",
                 daily_packing_board_cache_hint: "部分日期未缓存 Gofo 看板日汇总，当前为小时累加值，与看板人工/设备可能不一致；请点击「同步看板」。",
                 daily_packing_operlog_sync_label: "按运营日同步 operatelog（逐条，不去重）",
@@ -1488,7 +1555,7 @@
                 cno_labor_sorter_export_range_from: "From",
                 cno_labor_sorter_export_range_to: "To",
                 cno_labor_sorter_export_range_btn: "Export range CSV",
-                cno_labor_sorter_export_range_hint: "Hourly, daily summary, account slots; max 62 days",
+                cno_labor_sorter_export_range_hint: "Hourly, daily summary, group hourly matrix, account slots; max 62 days",
                 cno_labor_sorter_export_range_invalid: "Select valid start and end dates",
                 cno_labor_sorter_export_range_order: "End date must be on or after start date",
                 cno_labor_sorter_group_caption: "Per company: piece and hourly groups, hours, totals, productivity; chart splits by pay type.",
@@ -1507,6 +1574,25 @@
                 cno_labor_sorter_pay_hourly: "Hourly",
                 cno_labor_sorter_group_total: "Total",
                 cno_labor_sorter_group_empty: "No group data. Run Sync now for this operating day.",
+                cno_labor_group_hourly_heading: "Hourly capacity by group",
+                cno_labor_group_hourly_caption: "Heatmap shows hourly pieces per team; detail table is collapsed by default (full data syncs to Feishu Wiki).",
+                cno_labor_group_hourly_show_table: "Show detail table",
+                cno_labor_group_hourly_hide_table: "Hide detail table",
+                cno_labor_group_hourly_col_group: "Group",
+                cno_labor_group_hourly_col_team: "Team",
+                cno_labor_group_hourly_col_pay: "Pay",
+                cno_labor_group_hourly_col_total: "Day total",
+                cno_labor_group_hourly_empty: "No per-group hourly data. Run Sync for this operating day.",
+                cno_labor_group_hourly_export_csv: "Export group hourly CSV",
+                cno_labor_group_hourly_heatmap_title: "Group × hour capacity heatmap",
+                cno_labor_group_hourly_heatmap_hint: "Hours along the top, one row per group; darker blue means more pieces in that hour (scaled to the max cell for the day).",
+                cno_labor_group_hourly_heatmap_scale: "Scale",
+                cno_labor_group_hourly_heatmap_low: "Low",
+                cno_labor_group_hourly_heatmap_to: "to",
+                cno_labor_group_hourly_heatmap_high: "High",
+                cno_labor_group_hourly_heatmap_row_label: "Group",
+                cno_labor_group_hourly_table_title: "Detail table (team | hourly pcs | pay | day total)",
+                cno_labor_group_hourly_scroll_hint: "← Scroll horizontally: hourly counts are to the right of each team →",
                 pieces: "Pieces",
                 time_slot: "Time Slot",
                 pickup_forecast_title: "Pickup Forecast",
@@ -1545,7 +1631,7 @@
                 daily_trend_copy_success: "Copied to clipboard",
                 daily_trend_copy_failed: "Copy failed",
                 packing_manual_device_week_comparison_summary: "Weekly WoW (manual / device packing)",
-                packing_manual_device_wow_details_hint: "Calendar weeks (Mon–Sun); same stats window as the daily manual/device chart above.",
+                packing_manual_device_wow_details_hint: "Calendar weeks (Mon–Sun); daily counts are operatelog per-line (no dedup), same stats window as the page header; missing cache days show as 0.",
                 daily_packing_split_chart: "Daily packing (manual / device)",
                 daily_packing_count_label: "Count mode",
                 daily_packing_count_board: "Board (deduped)",
@@ -1746,7 +1832,7 @@
                 cno_labor_sorter_export_range_from: "Desde",
                 cno_labor_sorter_export_range_to: "Hasta",
                 cno_labor_sorter_export_range_btn: "CSV por rango",
-                cno_labor_sorter_export_range_hint: "Horario, resumen diario, cuentas; máx. 62 días",
+                cno_labor_sorter_export_range_hint: "Horario, resumen diario, matriz grupo/hora, cuentas; máx. 62 días",
                 cno_labor_sorter_export_range_invalid: "Seleccione fechas válidas",
                 cno_labor_sorter_export_range_order: "La fecha fin no puede ser anterior al inicio",
                 cno_labor_sorter_group_caption: "Por empresa: pieza y horario con horas y piezas separadas.",
@@ -1765,6 +1851,25 @@
                 cno_labor_sorter_pay_hourly: "Horario",
                 cno_labor_sorter_group_total: "Total",
                 cno_labor_sorter_group_empty: "Sin datos de grupos; sincronice el día operativo.",
+                cno_labor_group_hourly_heading: "Capacidad por hora y grupo",
+                cno_labor_group_hourly_caption: "Mapa de calor por equipo/hora; tabla detalle oculta por defecto (sincroniza a Feishu Wiki).",
+                cno_labor_group_hourly_show_table: "Mostrar tabla",
+                cno_labor_group_hourly_hide_table: "Ocultar tabla",
+                cno_labor_group_hourly_col_group: "Grupo",
+                cno_labor_group_hourly_col_team: "Equipo",
+                cno_labor_group_hourly_col_pay: "Pago",
+                cno_labor_group_hourly_col_total: "Total día",
+                cno_labor_group_hourly_empty: "Sin datos por grupo/hora; sincronice el día operativo.",
+                cno_labor_group_hourly_export_csv: "Exportar CSV grupo/hora",
+                cno_labor_group_hourly_heatmap_title: "Mapa de calor grupo × hora",
+                cno_labor_group_hourly_heatmap_hint: "Eje X: horas del día operativo; eje Y: cada grupo. Más oscuro = más piezas (normalizado al máximo del día).",
+                cno_labor_group_hourly_heatmap_scale: "Escala",
+                cno_labor_group_hourly_heatmap_low: "Bajo",
+                cno_labor_group_hourly_heatmap_to: "→",
+                cno_labor_group_hourly_heatmap_high: "Alto",
+                cno_labor_group_hourly_heatmap_row_label: "Grupo",
+                cno_labor_group_hourly_table_title: "Tabla (equipo | pzas/h | pago | total)",
+                cno_labor_group_hourly_scroll_hint: "← Desplácese: a la derecha del equipo están las piezas por hora →",
                 pieces: "Piezas",
                 time_slot: "Franja Horaria",
                 pickup_forecast_title: "Previsión de Recogida",
@@ -1803,7 +1908,7 @@
                 daily_trend_copy_success: "Copiado al portapapeles",
                 daily_trend_copy_failed: "Error al copiar",
                 packing_manual_device_week_comparison_summary: "WoW semanal (empaque manual / dispositivo)",
-                packing_manual_device_wow_details_hint: "Semanas naturales (lun–dom); misma ventana de estadísticas que el gráfico diario manual/dispositivo superior.",
+                packing_manual_device_wow_details_hint: "Semanas naturales (lun–dom); conteos diarios por registro de operlog (sin dedup), misma ventana que el encabezado; días sin caché = 0.",
                 daily_packing_split_chart: "Empaque diario (manual / dispositivo)",
                 daily_packing_count_label: "Modo de conteo",
                 daily_packing_count_board: "Tablero (dedup)",
@@ -2768,6 +2873,14 @@
             if (typeof refreshCnoLaborSorterSyncScope === 'function') refreshCnoLaborSorterSyncScope();
             const cnoLaborCsvExp = document.getElementById('cnoLaborSorterExportCsvBtn');
             if (cnoLaborCsvExp) cnoLaborCsvExp.addEventListener('click', exportCnoLaborSorterHourlyCsv);
+            const cnoLaborGroupHourlyCsvExp = document.getElementById('cnoLaborGroupHourlyExportCsvBtn');
+            if (cnoLaborGroupHourlyCsvExp) {
+                cnoLaborGroupHourlyCsvExp.addEventListener('click', exportCnoLaborGroupHourlyCsv);
+            }
+            const cnoLaborGroupHourlyToggleTbl = document.getElementById('cnoLaborGroupHourlyToggleTableBtn');
+            if (cnoLaborGroupHourlyToggleTbl) {
+                cnoLaborGroupHourlyToggleTbl.addEventListener('click', toggleCnoLaborGroupHourlyDetailTable);
+            }
             const cnoLaborRangeExp = document.getElementById('cnoLaborSorterExportRangeBtn');
             if (cnoLaborRangeExp) cnoLaborRangeExp.addEventListener('click', exportCnoLaborSorterHourlyRangeCsv);
             initCnoLaborSorterExportRangeInputs(currentDate);
@@ -3670,6 +3783,15 @@
                 { count_mode: getCnoNarrowbeltCountMode() }
             );
             const url = withStatsWindowParams('/api/statistics/cno_labor_sorter_hourly/export', qp);
+            window.location.href = url;
+        }
+
+        function exportCnoLaborGroupHourlyCsv() {
+            const qp = Object.assign(
+                currentDate ? { date: currentDate } : {},
+                { count_mode: getCnoNarrowbeltCountMode() }
+            );
+            const url = withStatsWindowParams('/api/statistics/cno_labor_group_hourly/export', qp);
             window.location.href = url;
         }
 
@@ -4632,6 +4754,186 @@
             const tbl = document.getElementById('cnoLaborSorterGroupStatsTable');
             if (tbl) tbl.innerHTML = '';
             if (wrap) wrap.style.display = 'none';
+            clearCnoLaborGroupHourlyTable();
+        }
+
+        function clearCnoLaborGroupHourlyTable() {
+            const wrap = document.getElementById('cnoLaborGroupHourlyWrap');
+            const tbl = document.getElementById('cnoLaborGroupHourlyTable');
+            const tblSec = document.getElementById('cnoLaborGroupHourlyTableSection');
+            const hm = document.getElementById('cnoLaborGroupHourlyHeatmapGrid');
+            const hmSec = document.getElementById('cnoLaborGroupHourlyHeatmapSection');
+            if (hm) hm.innerHTML = '';
+            if (hmSec) hmSec.style.display = '';
+            if (tbl) tbl.innerHTML = '';
+            if (tblSec) tblSec.style.display = 'none';
+            if (wrap) wrap.style.display = 'none';
+            _syncCnoLaborGroupHourlyToggleTableBtn(false);
+        }
+
+        function _syncCnoLaborGroupHourlyToggleTableBtn(expanded) {
+            const btn = document.getElementById('cnoLaborGroupHourlyToggleTableBtn');
+            const label = btn ? btn.querySelector('[data-lang]') : null;
+            const t = translations[currentLang] || {};
+            if (!btn || !label) return;
+            label.setAttribute('data-lang', expanded ? 'cno_labor_group_hourly_hide_table' : 'cno_labor_group_hourly_show_table');
+            label.textContent = expanded
+                ? (t.cno_labor_group_hourly_hide_table || '收起明细表')
+                : (t.cno_labor_group_hourly_show_table || '展开明细表');
+        }
+
+        function toggleCnoLaborGroupHourlyDetailTable() {
+            const sec = document.getElementById('cnoLaborGroupHourlyTableSection');
+            if (!sec) return;
+            const show = sec.style.display === 'none';
+            sec.style.display = show ? 'block' : 'none';
+            _syncCnoLaborGroupHourlyToggleTableBtn(show);
+        }
+
+        function _cnoStatsEscapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function _cnoStatsEscapeAttr(s) {
+            return _cnoStatsEscapeHtml(s).replace(/\n/g, ' ');
+        }
+
+        function renderCnoLaborGroupHourlyHeatmap(payload) {
+            const section = document.getElementById('cnoLaborGroupHourlyHeatmapSection');
+            const grid = document.getElementById('cnoLaborGroupHourlyHeatmapGrid');
+            if (!section || !grid) return;
+            const t = translations[currentLang] || {};
+            const mx = (payload && payload.group_hourly_matrix) ? payload.group_hourly_matrix : {};
+            const labels = mx.labels || (payload && payload.labels) || [];
+            const rows = mx.rows || [];
+            const wrap = document.getElementById('cnoLaborGroupHourlyWrap');
+            if (wrap) wrap.style.display = 'block';
+            if (!rows.length || !labels.length) {
+                grid.innerHTML = '<div style="padding:12px;color:#856404;background:#fff8e1;border-radius:6px;line-height:1.5;">'
+                    + (t.cno_labor_group_hourly_empty || '暂无小组分时数据') + '</div>';
+                section.style.display = 'block';
+                return;
+            }
+            let vmax = 0;
+            rows.forEach(function (r) {
+                const h = r.hourly || [];
+                for (let i = 0; i < labels.length; i++) {
+                    const n = Number(h[i]) || 0;
+                    if (n > vmax) vmax = n;
+                }
+            });
+            if (vmax <= 0) vmax = 1;
+
+            function cellStyle(n) {
+                const v = Number(n) || 0;
+                if (v <= 0) {
+                    return 'background:var(--table-stripe,#f1f3f5);color:#adb5bd;';
+                }
+                const ratio = Math.min(1, Math.pow(v / vmax, 0.5));
+                const L = Math.round(94 - ratio * 48);
+                const S = Math.round(35 + ratio * 50);
+                const textColor = ratio > 0.55 ? '#fff' : '#1a1a1a';
+                return 'background:hsl(217,' + S + '%,' + L + '%);color:' + textColor + ';font-weight:600;';
+            }
+
+            const payPieceLab = t.cno_labor_sorter_pay_piece || '计件';
+            const payHourlyLab = t.cno_labor_sorter_pay_hourly || '计时';
+            const rowHead = t.cno_labor_group_hourly_heatmap_row_label || '小组';
+
+            grid.style.display = 'grid';
+            grid.style.gridTemplateColumns = 'minmax(140px, 1.7fr) repeat(' + labels.length + ', minmax(32px, 1fr))';
+            grid.style.gap = '3px';
+            grid.style.fontSize = '11px';
+            grid.style.alignItems = 'stretch';
+
+            const stickyCorner = 'position:sticky;left:0;z-index:3;box-shadow:4px 0 6px -3px rgba(0,0,0,0.06);';
+            const stickyRow = 'position:sticky;left:0;z-index:2;box-shadow:4px 0 6px -3px rgba(0,0,0,0.06);';
+
+            let html = '';
+            html += '<div style="padding:6px 8px;font-weight:600;border-radius:4px;background:var(--table-stripe,#f8f9fa);display:flex;align-items:center;' + stickyCorner + '">'
+                + _cnoStatsEscapeHtml(rowHead) + '</div>';
+            labels.forEach(function (lab) {
+                html += '<div style="padding:6px 2px;text-align:center;font-weight:600;line-height:1.2;border-radius:4px;background:var(--table-stripe,#f8f9fa);">'
+                    + _cnoStatsEscapeHtml(lab) + '</div>';
+            });
+
+            rows.forEach(function (r) {
+                const payLab = r.pay_type === 'hourly' ? payHourlyLab : payPieceLab;
+                const rowLabel = (r.company || '') + ' · ' + (r.group_no || '') + ' (' + payLab + ')';
+                html += '<div style="padding:6px 8px;display:flex;align-items:center;line-height:1.25;border-radius:4px;background:var(--card-bg,#fff);border:1px solid var(--border-color,#e9ecef);' + stickyRow + '">'
+                    + _cnoStatsEscapeHtml(rowLabel) + '</div>';
+                const h = r.hourly || [];
+                for (let hi = 0; hi < labels.length; hi++) {
+                    const n = Number(h[hi]) || 0;
+                    const lab = labels[hi] || '';
+                    const tip = rowLabel + ' · ' + lab + ': ' + n;
+                    html += '<div title="' + _cnoStatsEscapeAttr(tip) + '" style="' + cellStyle(n)
+                        + 'display:flex;align-items:center;justify-content:center;border-radius:4px;min-height:30px;font-variant-numeric:tabular-nums;padding:2px;">'
+                        + (n > 0 ? _fmtNarrowbeltInt(n) : '') + '</div>';
+                }
+            });
+            grid.innerHTML = html;
+            section.style.display = 'block';
+        }
+
+        function renderCnoLaborGroupHourlyMatrixTable(payload) {
+            const tbl = document.getElementById('cnoLaborGroupHourlyTable');
+            if (!tbl) return;
+            const t = translations[currentLang] || {};
+            const mx = (payload && payload.group_hourly_matrix) ? payload.group_hourly_matrix : {};
+            const labels = mx.labels || (payload && payload.labels) || [];
+            const rows = mx.rows || [];
+            const payPieceLab = t.cno_labor_sorter_pay_piece || '计件';
+            const payHourlyLab = t.cno_labor_sorter_pay_hourly || '计时';
+
+            const border = '1px solid var(--border-color, #e5e7eb)';
+            const thBase = 'text-align:center;padding:6px 8px;font-weight:600;background:var(--table-stripe, #f8f9fa);border-bottom:2px solid var(--border-color,#dee2e6);white-space:nowrap;position:sticky;top:0;z-index:1;';
+            const thStickyL = thBase + 'text-align:left;left:0;z-index:2;background:var(--table-stripe,#f8f9fa);';
+            const thStickyGroup = thStickyL + 'min-width:140px;max-width:220px;';
+            const thHour = thBase + 'min-width:44px;background:#dbeafe;color:#1e3a5f;';
+            const tdL = 'padding:6px 8px;border-top:' + border + ';white-space:nowrap;';
+            const tdR = tdL + 'text-align:right;';
+            const tdHour = tdR + 'min-width:44px;font-size:12px;';
+            const tdStickyGroup = tdL + 'position:sticky;left:0;background:var(--card-bg,#fff);z-index:1;font-weight:600;line-height:1.35;';
+
+            if (!rows.length) {
+                tbl.innerHTML = '';
+                renderCnoLaborGroupHourlyHeatmap(payload);
+                return;
+            }
+
+            let html = '<thead><tr>';
+            html += '<th style="' + thStickyGroup + '">' + (t.cno_labor_group_hourly_col_team || '小组') + '</th>';
+            labels.forEach(function (lab) {
+                html += '<th style="' + thHour + '" title="' + _cnoStatsEscapeAttr(lab) + '">' + _cnoStatsEscapeHtml(lab) + '</th>';
+            });
+            html += '<th style="' + thBase + '">' + (t.cno_labor_group_hourly_col_pay || '计薪') + '</th>';
+            html += '<th style="' + thBase + '">' + (t.cno_labor_group_hourly_col_total || '日合计') + '</th>';
+            html += '</tr></thead><tbody>';
+
+            rows.forEach(function (r) {
+                const payLab = r.pay_type === 'hourly' ? payHourlyLab : payPieceLab;
+                const teamLabel = (r.company || '') + ' · ' + (r.group_no || '');
+                html += '<tr>';
+                html += '<td style="' + tdStickyGroup + '">' + _cnoStatsEscapeHtml(teamLabel) + '</td>';
+                (r.hourly || []).forEach(function (v, hi) {
+                    const n = Number(v) || 0;
+                    const cellBg = n > 0 ? 'background:#e8f4fd;' : '';
+                    const tip = teamLabel + ' · ' + (labels[hi] || '') + ': ' + n;
+                    html += '<td style="' + tdHour + cellBg + '" title="' + _cnoStatsEscapeAttr(tip) + '">'
+                        + (n > 0 ? _fmtNarrowbeltInt(n) : '—') + '</td>';
+                });
+                html += '<td style="' + tdL + 'text-align:center">' + payLab + '</td>';
+                html += '<td style="' + tdR + 'font-weight:600">' + _fmtNarrowbeltInt(r.total || 0) + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody>';
+            tbl.innerHTML = html;
+            renderCnoLaborGroupHourlyHeatmap(payload);
         }
 
         function renderCnoLaborSorterGroupStatsTable(payload) {
@@ -4787,6 +5089,7 @@
                 const maxV = flat.length ? Math.max(0, ...flat.map(v => Number(v) || 0)) : 0;
                 const yAxisMax = maxV > 0 ? Math.ceil(maxV / 100) * 100 + 100 : 500;
                 const isMobile = window.innerWidth < 768;
+                renderCnoLaborGroupHourlyMatrixTable(payload);
                 renderCnoLaborSorterGroupStatsTable(payload);
                 const canvasEl = document.getElementById('cnoLaborSorterHourlyCanvas');
                 if (!canvasEl) return;

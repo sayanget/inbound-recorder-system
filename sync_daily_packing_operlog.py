@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from sync_cno_narrowbelt_hourly import fetch_operatelog_window, narrowbelt_line_from_operator
@@ -20,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 # 人工/设备判定规则变更时递增；读缓存时版本不一致则视为未同步，避免展示旧误判数据。
 OPERLOG_CLASSIFIER_VERSION = 2
+
+_operlog_sync_lock = threading.Lock()
 
 # 与 Gofo 看板 collectArtificial / collectDevice 对齐：
 # - 「AAS Sorter」等人工分拣台算人工（Artificial），不能因含 Sorter 判为设备
@@ -99,6 +103,95 @@ def read_daily_packing_operlog_anchor(
     if cached is not None:
         return {"success": True, "cached": True, "anchor_date": anchor_str, "stats_window": wm, **cached}
     return {"success": False, "cached": False, "anchor_date": anchor_str, "stats_window": wm}
+
+
+def operlog_hourly_anchor_dates(window_mode: str) -> List[date]:
+    """当前运营锚点日；17:00/05:00 窗口在换日前后多保留前一日（图表近 2 天）。"""
+    from single_app import LA_TZ, _default_stats_request_date
+
+    cur = _default_stats_request_date(window_mode)
+    dates = [cur]
+    prev = cur - timedelta(days=1)
+    if window_mode in ("business", "seventeen") and prev not in dates:
+        dates.insert(0, prev)
+    return dates
+
+
+def hourly_sync_windows_from_env() -> tuple[str, ...]:
+    raw = (os.environ.get("DAILY_PACKING_OPERLOG_HOURLY_WINDOWS") or "seventeen").strip()
+    out = []
+    for part in raw.split(","):
+        w = part.strip().lower()
+        if w in ("calendar", "business", "seventeen") and w not in out:
+            out.append(w)
+    return tuple(out) if out else ("seventeen",)
+
+
+def run_hourly_operlog_sync() -> Dict[str, Any]:
+    """每小时：逐条 operlog 刷新当前运营日（持锁，避免与手动/上次任务重叠）。"""
+    if os.environ.get("DISABLE_DAILY_PACKING_OPERLOG_HOURLY", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return {"success": False, "skipped": True, "reason": "disabled"}
+
+    if not _operlog_sync_lock.acquire(blocking=False):
+        return {"success": False, "skipped": True, "reason": "sync_in_progress"}
+
+    results: List[Dict[str, Any]] = []
+    try:
+        for wm in hourly_sync_windows_from_env():
+            for anchor in operlog_hourly_anchor_dates(wm):
+                res = sync_daily_packing_operlog_anchor(anchor, wm, force=True)
+                results.append(res)
+                logger.info(
+                    "hourly operlog %s %s ok=%s man=%s dev=%s rows=%s",
+                    anchor,
+                    wm,
+                    res.get("success"),
+                    res.get("manual_raw"),
+                    res.get("device_raw"),
+                    res.get("raw_rows"),
+                )
+        _maybe_push_operlog_cache_to_neon()
+        return {"success": True, "results": results}
+    finally:
+        _operlog_sync_lock.release()
+
+
+def _maybe_push_operlog_cache_to_neon() -> None:
+    """本机 SQLite 且配置了 neon_sync.env 时，把近 3 天 operlog 缓存推到 Neon。"""
+    if os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL"):
+        return
+    root = Path(__file__).resolve().parent
+    neon_env = root / "neon_sync.env"
+    if not neon_env.is_file():
+        return
+    try:
+        from single_app import LA_TZ
+
+        end = datetime.now(LA_TZ).date()
+        start = end - timedelta(days=2)
+        import subprocess
+        import sys
+
+        push = root / "scripts" / "push_daily_packing_cache_to_neon.py"
+        if not push.is_file():
+            return
+        subprocess.run(
+            [
+                sys.executable,
+                str(push),
+                start.strftime("%Y-%m-%d"),
+                end.strftime("%Y-%m-%d"),
+            ],
+            cwd=str(root),
+            timeout=120,
+            check=False,
+        )
+    except Exception as e:
+        logger.warning("neon push after hourly operlog: %s", e)
 
 
 def sync_daily_packing_operlog_anchor(
@@ -184,31 +277,48 @@ def _read_cache(anchor_str: str, window_mode: str) -> Optional[Dict[str, int]]:
     conn = get_db()
     cur = conn.cursor()
     try:
-        cur.execute(
-            convert_query_placeholders(
-                """
-                SELECT manual_raw, device_raw, manual_dedup, device_dedup, classifier_ver
-                FROM daily_packing_operlog_daily
-                WHERE anchor_date = ? AND stats_window = ?
-                """
-            ),
-            (anchor_str, window_mode),
-        )
+        has_ver = True
+        try:
+            cur.execute(
+                convert_query_placeholders(
+                    """
+                    SELECT manual_raw, device_raw, manual_dedup, device_dedup, classifier_ver
+                    FROM daily_packing_operlog_daily
+                    WHERE anchor_date = ? AND stats_window = ?
+                    """
+                ),
+                (anchor_str, window_mode),
+            )
+        except Exception:
+            conn.rollback()
+            has_ver = False
+            cur.execute(
+                convert_query_placeholders(
+                    """
+                    SELECT manual_raw, device_raw, manual_dedup, device_dedup
+                    FROM daily_packing_operlog_daily
+                    WHERE anchor_date = ? AND stats_window = ?
+                    """
+                ),
+                (anchor_str, window_mode),
+            )
         r = cur.fetchone()
         if not r:
             return None
-        ver = int(r[4] or 0) if len(r) > 4 else 0
-        if ver < OPERLOG_CLASSIFIER_VERSION:
+        manual_raw = int(r[0] or 0)
+        device_raw = int(r[1] or 0)
+        ver = int(r[4] or 0) if has_ver and len(r) > 4 else OPERLOG_CLASSIFIER_VERSION
+        # 仅当「设备异常高于人工」的旧坏缓存才因版本号作废；有正常件数且 ver=0 仍可读（避免图表全 0）
+        if ver < OPERLOG_CLASSIFIER_VERSION and (
+            device_raw > manual_raw * 2 and manual_raw < 50000 and device_raw > 100000
+        ):
             logger.info(
-                "invalidate operlog cache %s %s (classifier_ver=%s < %s)",
+                "invalidate operlog cache %s %s (classifier_ver=%s, inverted ratio)",
                 anchor_str,
                 window_mode,
                 ver,
-                OPERLOG_CLASSIFIER_VERSION,
             )
             return None
-        manual_raw = int(r[0] or 0)
-        device_raw = int(r[1] or 0)
         # 旧版误将含 Sorter 的人工台计为设备，缓存比例倒置时作废
         if device_raw > manual_raw * 2 and manual_raw < 50000 and device_raw > 100000:
             logger.info(

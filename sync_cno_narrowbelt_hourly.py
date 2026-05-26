@@ -49,7 +49,20 @@ def narrowbelt_line_from_operator(name: Any) -> Optional[str]:
     return SUFFIX_TO_LINE.get(suf)
 
 
-def _headers(token: str) -> Dict[str, str]:
+def _format_gmt_offset(tz_dt) -> str:
+    """Convert aware datetime offset to string like 'GMT-0700'."""
+    off = getattr(tz_dt, "utcoffset", None)() if tz_dt is not None else None
+    if off is None:
+        return "GMT-0800"
+    total_minutes = int(off.total_seconds() // 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    abs_minutes = abs(total_minutes)
+    hh = abs_minutes // 60
+    mm = abs_minutes % 60
+    return f"GMT{sign}{hh:02d}{mm:02d}"
+
+
+def _headers(token: str, *, time_zone: str) -> Dict[str, str]:
     return {
         "Admin-Token": token,
         "Authorization": f"Bearer {token}",
@@ -61,7 +74,9 @@ def _headers(token: str) -> Dict[str, str]:
         "User-Agent": "Mozilla/5.0 (compatible; InboundGofo/1.0)",
         "User-Time-Zone": "America/Los_Angeles",
         "lang": "zh",
-        "timeZone": "GMT-0800",
+        # DMS/Gofo 会用该字段解释 scanBeginTime/scanEndTime。
+        # LA 在 5 月处于 DST，应为 GMT-0700；不能固定写 GMT-0800。
+        "timeZone": time_zone,
     }
 
 
@@ -74,7 +89,13 @@ def _fetch_operatelog_single_window(
     scan_begin: str, scan_end: str, *, max_retries: int = 3
 ) -> List[Dict[str, Any]]:
     token = get_gofo_token()
-    headers = _headers(token)
+    # 根据 scan_begin 对应的 LA 时区偏移生成 timeZone（避免 DST 偏移错误）
+    try:
+        sb = LA_TZ.localize(datetime.strptime(scan_begin.strip(), "%Y-%m-%d %H:%M:%S"))
+        tz_str = _format_gmt_offset(sb)
+    except Exception:
+        tz_str = "GMT-0800"
+    headers = _headers(token, time_zone=tz_str)
     all_rows: List[Dict[str, Any]] = []
     page_num = 1
     page_size = 500

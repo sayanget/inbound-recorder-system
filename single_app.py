@@ -35,6 +35,7 @@ import json
 from queue import Queue
 import calc_outsource_finance # 导入生产人工同步逻辑
 import requests
+import feishu_auth
 
 try:
     import gofo_dms_auth as _gofo_dms_auth
@@ -552,6 +553,19 @@ def initialize_app():
                 # 5. 每小时自动同步卡车约车数据
                 truck_sync_thread = threading.Thread(target=truck_booking_hourly_sync_job, daemon=True)
                 truck_sync_thread.start()
+
+                # 6. 每小时自动同步每日集包 operlog 逐条（统计图「逐条日志」）
+                packing_operlog_thread = threading.Thread(
+                    target=daily_packing_operlog_hourly_sync_job, daemon=True
+                )
+                packing_operlog_thread.start()
+
+                # 7. 每小时自动同步：CNO 小组分时明细 → 飞书电子表格「元数据」工作表
+                feishu_wiki_meta_thread = threading.Thread(
+                    target=feishu_wiki_sync_cno_labor_group_hourly_metadata_job,
+                    daemon=True,
+                )
+                feishu_wiki_meta_thread.start()
                 
                 print("[应用初始化] 所有后台同步线程已启动")
 
@@ -936,6 +950,22 @@ def init_db():
             pieces_deduped INTEGER,
             synced_at TEXT,
             PRIMARY KEY (record_date, time_slot, company_code, account_label)
+        );""")
+        cursor.execute(sql)
+
+        # 劳务小组分时产能：运营日 × 统计窗口 × 整点 × 公司 × 组号（便于展示每组每小时票数）
+        sql = convert_sql("""CREATE TABLE IF NOT EXISTS cno_labor_group_hourly (
+            anchor_date TEXT NOT NULL,
+            stats_window TEXT NOT NULL,
+            time_slot TEXT NOT NULL,
+            company_code TEXT NOT NULL,
+            group_no TEXT NOT NULL,
+            pay_type TEXT NOT NULL,
+            pieces INTEGER NOT NULL DEFAULT 0,
+            pieces_deduped INTEGER,
+            record_date_la TEXT,
+            synced_at TEXT,
+            PRIMARY KEY (anchor_date, stats_window, time_slot, company_code, group_no)
         );""")
         cursor.execute(sql)
 
@@ -2554,6 +2584,28 @@ def _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
     return rd == anchor_str
 
 
+def la_record_slot_to_operating_anchor(record_date: str, time_slot: str, window_mode: str):
+    """洛杉矶日历日 + 整点时段 → 该 stats_window 下的运营锚点日 YYYY-MM-DD。"""
+    try:
+        d = datetime.strptime(str(record_date)[:10], '%Y-%m-%d').date()
+    except ValueError:
+        return None
+    slot = _norm_labor_time_slot(time_slot)
+    if not slot:
+        return None
+    try:
+        h = int(slot[:2])
+    except ValueError:
+        return None
+    if window_mode == 'business':
+        if h < 5:
+            d = d - timedelta(days=1)
+    elif window_mode == 'seventeen':
+        if h < 17:
+            d = d - timedelta(days=1)
+    return d.strftime('%Y-%m-%d')
+
+
 def _labor_pick_piece_count(cm, n_raw, n_dedup):
     if cm == 'deduped':
         if n_dedup is None:
@@ -2966,6 +3018,220 @@ def _build_cno_labor_sorter_hourly_series(
     }
 
 
+def _backfill_cno_labor_group_hourly_from_account(cursor, anchor_date, window_mode: str) -> int:
+    """从账号分时表回填小组分时表（历史数据无 group_hourly 时）。"""
+    if isinstance(anchor_date, datetime):
+        anchor_date = anchor_date.date()
+    anchor_str = anchor_date.strftime('%Y-%m-%d')
+    synced_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    clause, binds = _record_date_slot_window_sql_binds(window_mode, anchor_date)
+    cursor.execute(
+        convert_query_placeholders(
+            f"""
+            SELECT record_date, time_slot, company_code, account_label, pay_type,
+                   pieces, pieces_deduped
+            FROM cno_labor_sorter_account_hourly
+            WHERE {clause}
+            """
+        ),
+        binds,
+    )
+    n = 0
+    for row in cursor.fetchall():
+        rd = _db_row_get(row, 'record_date', '') or _db_row_get(row, 0, '')
+        if hasattr(rd, 'strftime'):
+            rd = rd.strftime('%Y-%m-%d')
+        rd = str(rd)[:10]
+        slot = _norm_labor_time_slot(
+            _db_row_get(row, 'time_slot', '') or _db_row_get(row, 1, '')
+        )
+        company = str(
+            _db_row_get(row, 'company_code', '') or _db_row_get(row, 2, '')
+        ).strip()
+        group_no = str(
+            _db_row_get(row, 'account_label', '') or _db_row_get(row, 3, '')
+        ).strip()
+        pay_type = str(
+            _db_row_get(row, 'pay_type', '') or _db_row_get(row, 4, '')
+        ).strip().lower()
+        if not company or not group_no or pay_type not in ('piece', 'hourly') or not slot:
+            continue
+        anchor2 = la_record_slot_to_operating_anchor(rd, slot, window_mode)
+        if anchor2 != anchor_str:
+            continue
+        try:
+            n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 5, 0) or 0)
+        except (TypeError, ValueError):
+            n_raw = 0
+        pd = _db_row_get(row, 'pieces_deduped', None)
+        if pd is None:
+            pd = _db_row_get(row, 6, None)
+        try:
+            n_ded = int(pd) if pd is not None and pd != '' else None
+        except (TypeError, ValueError):
+            n_ded = None
+        cursor.execute(
+            convert_query_placeholders(
+                """
+                INSERT INTO cno_labor_group_hourly
+                    (anchor_date, stats_window, time_slot, company_code, group_no,
+                     pay_type, pieces, pieces_deduped, record_date_la, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(anchor_date, stats_window, time_slot, company_code, group_no)
+                DO UPDATE SET
+                    pay_type = excluded.pay_type,
+                    pieces = excluded.pieces,
+                    pieces_deduped = excluded.pieces_deduped,
+                    record_date_la = excluded.record_date_la,
+                    synced_at = excluded.synced_at
+                """
+            ),
+            (
+                anchor_str,
+                window_mode,
+                slot,
+                company,
+                group_no,
+                pay_type,
+                n_raw,
+                n_ded,
+                rd,
+                synced_at,
+            ),
+        )
+        n += 1
+    return n
+
+
+def _aggregate_labor_group_hourly_from_account(
+    cursor, anchor_date, window_mode: str, count_mode: str, labels, slot_to_idx
+):
+    """从 cno_labor_sorter_account_hourly 聚合小组×整点矩阵（与劳务汇总同源，不依赖 group_hourly 表）。"""
+    if isinstance(anchor_date, datetime):
+        anchor_date = anchor_date.date()
+    anchor_str = anchor_date.strftime('%Y-%m-%d')
+    next_str = (anchor_date + timedelta(days=1)).strftime('%Y-%m-%d')
+    cm = _parse_cno_narrowbelt_count_mode(count_mode)
+    matrix = {}
+    clause, binds = _record_date_slot_window_sql_binds(window_mode, anchor_date)
+    cursor.execute(
+        convert_query_placeholders(
+            f"""
+            SELECT record_date, time_slot, company_code, account_label, pay_type,
+                   pieces, pieces_deduped
+            FROM cno_labor_sorter_account_hourly
+            WHERE {clause}
+            """
+        ),
+        binds,
+    )
+    for row in cursor.fetchall():
+        rd = _db_row_get(row, 'record_date', '') or _db_row_get(row, 0, '')
+        if hasattr(rd, 'strftime'):
+            rd = rd.strftime('%Y-%m-%d')
+        rd = str(rd)[:10]
+        slot = _norm_labor_time_slot(
+            _db_row_get(row, 'time_slot', '') or _db_row_get(row, 1, '')
+        )
+        company = str(
+            _db_row_get(row, 'company_code', '') or _db_row_get(row, 2, '')
+        ).strip()
+        group_no = str(
+            _db_row_get(row, 'account_label', '') or _db_row_get(row, 3, '')
+        ).strip()
+        pay_type = str(
+            _db_row_get(row, 'pay_type', '') or _db_row_get(row, 4, '')
+        ).strip().lower()
+        if not company or not group_no or pay_type not in ('piece', 'hourly') or not slot:
+            continue
+        if not _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
+            continue
+        try:
+            n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 5, 0) or 0)
+        except (TypeError, ValueError):
+            n_raw = 0
+        pd = _db_row_get(row, 'pieces_deduped', None)
+        if pd is None:
+            pd = _db_row_get(row, 6, None)
+        try:
+            n_ded = int(pd) if pd is not None and pd != '' else None
+        except (TypeError, ValueError):
+            n_ded = None
+        n, _ = _labor_pick_piece_count(cm, n_raw, n_ded)
+        idx = slot_to_idx.get(slot)
+        if idx is None:
+            continue
+        key = (company, group_no, pay_type)
+        if key not in matrix:
+            matrix[key] = [0] * 24
+        matrix[key][idx] += int(n or 0)
+    return matrix
+
+
+def _build_cno_labor_group_hourly_matrix(
+    anchor_date, window_mode: str = 'calendar', count_mode: str = 'raw'
+):
+    """公司 × 组号 × 运营日各整点件数矩阵（用于小组每小时产能表）。"""
+    if isinstance(anchor_date, datetime):
+        anchor_date = anchor_date.date()
+    anchor_str = anchor_date.strftime('%Y-%m-%d')
+    cm = _parse_cno_narrowbelt_count_mode(count_mode)
+
+    if window_mode == 'business':
+        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
+    elif window_mode == 'seventeen':
+        labels = [f"{((17 + i) % 24):02d}:00" for i in range(24)]
+    else:
+        labels = [f"{i:02d}:00" for i in range(24)]
+    slot_to_idx = {s: i for i, s in enumerate(labels)}
+
+    matrix = {}
+    backfilled = False
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        matrix = _aggregate_labor_group_hourly_from_account(
+            cursor, anchor_date, window_mode, cm, labels, slot_to_idx
+        )
+        if not any(sum(v) > 0 for v in matrix.values()):
+            try:
+                n_ins = _backfill_cno_labor_group_hourly_from_account(
+                    cursor, anchor_date, window_mode
+                )
+                if n_ins:
+                    conn.commit()
+                    backfilled = True
+                    matrix = _aggregate_labor_group_hourly_from_account(
+                        cursor, anchor_date, window_mode, cm, labels, slot_to_idx
+                    )
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+    rows_out = []
+    for (company, group_no, pay_type), hourly in sorted(matrix.items()):
+        total = int(sum(hourly))
+        if total <= 0:
+            continue
+        rows_out.append({
+            'company': company,
+            'group_no': group_no,
+            'pay_type': pay_type,
+            'hourly': hourly,
+            'total': total,
+        })
+
+    return {
+        'date': anchor_str,
+        'stats_window': window_mode,
+        'count_mode': cm,
+        'labels': labels,
+        'rows': rows_out,
+        'backfilled': backfilled,
+    }
+
+
 @app.route('/api/statistics/cno_labor_sorter_hourly', methods=['GET'])
 def api_statistics_cno_labor_sorter_hourly():
     """CNO 劳务公司 Sorter 分时产能（GF 计时/计件）；与窄带相同 stats_window、count_mode。"""
@@ -2987,6 +3253,9 @@ def api_statistics_cno_labor_sorter_hourly():
     try:
         data = _build_cno_labor_sorter_hourly_series(anchor, wm, cm)
         data['group_summary'] = _build_cno_labor_sorter_group_summary(anchor, wm, cm)
+        data['group_hourly_matrix'] = _build_cno_labor_group_hourly_matrix(
+            anchor, wm, cm
+        )
         data['sync_plan'] = _build_cno_operlog_sync_plan(anchor, wm)
         resp = jsonify(data)
         resp.headers['Cache-Control'] = 'no-store, max-age=0'
@@ -3003,6 +3272,13 @@ def api_statistics_cno_labor_sorter_hourly():
             'labels': labels,
             'companies': [],
             'series': {},
+            'group_hourly_matrix': {
+                'date': anchor.strftime('%Y-%m-%d'),
+                'stats_window': wm,
+                'count_mode': cm,
+                'labels': labels,
+                'rows': [],
+            },
         }), 500
 
 
@@ -3253,6 +3529,45 @@ def _append_cno_labor_sorter_group_summary_csv(w, gs):
         ])
 
 
+def _append_cno_labor_group_hourly_matrix_csv(w, matrix, write_header=True):
+    """宽表：运营锚点日 × 公司 × 组号 × 各整点件数（与统计页矩阵一致）。"""
+    labels = matrix.get('labels') or []
+    if write_header:
+        w.writerow(
+            [
+                'operating_day_anchor_la',
+                'stats_window',
+                'count_mode',
+                'company_code',
+                'group_no',
+                'pay_type',
+                'day_total',
+            ]
+            + list(labels)
+        )
+    anchor = matrix.get('date', '')
+    sw = matrix.get('stats_window', '')
+    cm = matrix.get('count_mode', 'raw')
+    nlab = len(labels)
+    for row in matrix.get('rows') or []:
+        hourly = row.get('hourly') or []
+        vals = [
+            int(hourly[i]) if i < len(hourly) else 0 for i in range(nlab)
+        ]
+        w.writerow(
+            [
+                anchor,
+                sw,
+                cm,
+                row.get('company'),
+                row.get('group_no'),
+                row.get('pay_type'),
+                int(row.get('total') or 0),
+            ]
+            + vals
+        )
+
+
 def _append_cno_labor_sorter_account_slot_csv(
     w, cursor, start_date, end_date, wm, cm
 ):
@@ -3365,6 +3680,23 @@ def api_statistics_cno_labor_sorter_hourly_export():
     _append_cno_labor_sorter_hourly_csv_chart_section(w, data, wm, cm)
     w.writerow([])
     _append_cno_labor_sorter_group_summary_csv(w, data.get('group_summary') or {})
+    w.writerow([])
+    w.writerow(['# section', 'group_hourly_matrix'])
+    try:
+        matrix = _build_cno_labor_group_hourly_matrix(anchor, wm, cm)
+        _append_cno_labor_group_hourly_matrix_csv(w, matrix, write_header=True)
+    except Exception:
+        w.writerow(
+            [
+                'operating_day_anchor_la',
+                'stats_window',
+                'count_mode',
+                'company_code',
+                'group_no',
+                'pay_type',
+                'day_total',
+            ]
+        )
 
     fn = f"cno_labor_sorter_hourly_{data['date']}_{data.get('count_mode', 'raw')}.csv"
     return Response(
@@ -3376,7 +3708,7 @@ def api_statistics_cno_labor_sorter_hourly_export():
 
 @app.route('/api/statistics/cno_labor_sorter_hourly/export_range', methods=['GET'])
 def api_statistics_cno_labor_sorter_hourly_export_range():
-    """按 LA 运营日区间导出劳务 Sorter 分时（图表口径 + 日汇总 + 账号时段明细）。"""
+    """按 LA 运营日区间导出劳务 Sorter 分时（图表口径 + 日汇总 + 小组分时矩阵 + 账号时段明细）。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
@@ -3442,6 +3774,18 @@ def api_statistics_cno_labor_sorter_hourly_export_range():
             cur += timedelta(days=1)
 
         w.writerow([])
+        w.writerow(['# section', 'group_hourly_matrix'])
+        cur = start_d
+        first_matrix = True
+        while cur <= end_d:
+            matrix = _build_cno_labor_group_hourly_matrix(cur, wm, cm)
+            _append_cno_labor_group_hourly_matrix_csv(
+                w, matrix, write_header=first_matrix
+            )
+            first_matrix = False
+            cur += timedelta(days=1)
+
+        w.writerow([])
         w.writerow(['# section', 'account_slot_detail'])
         _append_cno_labor_sorter_account_slot_csv(
             w, cursor, start_raw, end_raw, wm, cm
@@ -3454,6 +3798,43 @@ def api_statistics_cno_labor_sorter_hourly_export_range():
 
     fn = (
         f"cno_labor_sorter_range_{start_raw}_{end_raw}_"
+        f"{wm}_{cm}.csv"
+    )
+    return Response(
+        buf.getvalue().encode('utf-8-sig'),
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename={fn}'},
+    )
+
+
+@app.route('/api/statistics/cno_labor_group_hourly/export', methods=['GET'])
+def api_statistics_cno_labor_group_hourly_export():
+    """仅导出各小组每小时产能矩阵 CSV（与统计页表格列一致）。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    raw = request.args.get('date')
+    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    if raw:
+        try:
+            anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
+        except ValueError:
+            anchor = _default_stats_request_date(wm)
+    else:
+        anchor = _default_stats_request_date(wm)
+    cm = _parse_cno_narrowbelt_count_mode(request.args.get('count_mode'))
+    try:
+        matrix = _build_cno_labor_group_hourly_matrix(anchor, wm, cm)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(['# section', 'group_hourly_matrix'])
+    _append_cno_labor_group_hourly_matrix_csv(w, matrix, write_header=True)
+    fn = (
+        f"cno_labor_group_hourly_{matrix.get('date', anchor.strftime('%Y-%m-%d'))}_"
         f"{wm}_{cm}.csv"
     )
     return Response(
@@ -3709,19 +4090,24 @@ def api_statistics_center_collect_week_comparison():
 
 @app.route('/api/statistics/packing_manual_device_week_comparison', methods=['GET'])
 def api_statistics_packing_manual_device_week_comparison():
-    """自然周（周一至周日）人工/设备堆叠；每日与 daily_packing_split 一致；周环比为相对上一完整自然周总件数。"""
+    """自然周（周一至周日）人工/设备堆叠；每日为 operatelog scan217 逐条（不去重），读 daily_packing_operlog_daily；周环比为相对上一完整自然周总件数。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
     try:
+        import sync_daily_packing_operlog as _dp_oper
+
         conn = get_db()
         cursor = conn.cursor()
         window_mode = _parse_stats_window_param(request.args.get('stats_window'))
         min_str = None
         try:
             cursor.execute(
-                convert_query_placeholders("SELECT MIN(sorting_time) FROM sorting_records")
+                convert_query_placeholders(
+                    "SELECT MIN(anchor_date) FROM daily_packing_operlog_daily WHERE stats_window = ?"
+                ),
+                (window_mode,),
             )
             mr = cursor.fetchone()
             min_str = _db_row_get(mr, 0, None) if mr else None
@@ -3803,7 +4189,14 @@ def api_statistics_packing_manual_device_week_comparison():
                     })
                     continue
 
-                mn, dv = _sorting_biz_day_manual_device_split(cursor, current_day, window_mode)
+                sync_res = _dp_oper.read_daily_packing_operlog_anchor(
+                    current_day, window_mode
+                )
+                if sync_res.get('success'):
+                    mn = int(sync_res.get('manual_raw') or 0)
+                    dv = int(sync_res.get('device_raw') or 0)
+                else:
+                    mn, dv = 0, 0
                 tot = mn + dv
                 week_total_manual += mn
                 week_total_device += dv
@@ -7337,18 +7730,11 @@ def perform_gofo_hourly_sync():
     }
     try:
         import sync_daily_packing_board as _dp_board
-        import sync_daily_packing_operlog as _dp_oper
 
         anchor = now_la.date()
         for wm in ("calendar", "business", "seventeen"):
             threading.Thread(
                 target=_dp_board.sync_daily_packing_board_anchor,
-                args=(anchor, wm),
-                kwargs={"force": True},
-                daemon=True,
-            ).start()
-            threading.Thread(
-                target=_dp_oper.sync_daily_packing_operlog_anchor,
                 args=(anchor, wm),
                 kwargs={"force": True},
                 daemon=True,
@@ -12991,18 +13377,9 @@ def _feishu_sync_core(link=''):
         m_sheet = re.search(r'[?&]sheet=([A-Za-z0-9]+)', link)
         if m_sheet: sheet_id = m_sheet.group(1)
 
-    app_id = "cli_a9fc1c1c0bb8dbcb"
-    app_secret = "XeStEZgDlQQUnUU93w1d3emYSdMSfiq6"
-    import requests
     import json
     try:
-        r_tok = requests.post("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal/",
-                              json={"app_id": app_id, "app_secret": app_secret})
-        if r_tok.status_code != 200:
-            return False, f'获取飞书 Token 失败: {r_tok.text}'
-        token = r_tok.json().get('tenant_access_token')
-        if not token:
-            return False, '飞书 Token 为空'
+        token = feishu_auth.feishu_tenant_access_token()
 
         url_sheet = (f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/"
                      f"{spreadsheet_token}/values/{sheet_id}!A1:AG30000?valueRenderOption=FormattedValue")
@@ -14872,6 +15249,369 @@ def daily_feishu_sync_job():
         except Exception:
             _time.sleep(3600)
 
+# 飞书「元数据」表模板表头（仅当线上第 1 行损坏时回退；正常以表格第 1 行为准）
+_CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK = [
+    "No",
+    "Date",
+    "company_code",
+    "group_no",
+    "pay_type",
+    "day_total",
+] + [f"{((17 + i) % 24):02d}:00" for i in range(24)] + [0, 0]
+
+
+def _anchor_date_to_excel_serial(anchor) -> int:
+    from datetime import date as date_cls
+
+    if isinstance(anchor, datetime):
+        d = anchor.date()
+    elif isinstance(anchor, str):
+        d = datetime.strptime(str(anchor)[:10], "%Y-%m-%d").date()
+    else:
+        d = anchor
+    return (d - date_cls(1899, 12, 30)).days
+
+
+def _normalize_feishu_template_header(header_row: list) -> list:
+    if not header_row:
+        return list(_CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK)
+    row = list(header_row)
+    # 去掉尾部空列，避免 AZ 宽范围读出虚高列数
+    while row and (row[-1] is None or str(row[-1]).strip() == ""):
+        row.pop()
+    if not row or str(row[0]).strip() != "No":
+        return list(_CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK)
+    fb = _CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK
+    if len(row) < len(fb):
+        row.extend([fb[i] for i in range(len(row), len(fb))])
+    return row
+
+
+def _feishu_header_col_index(header: list, name: str) -> int:
+    for i, h in enumerate(header):
+        if str(h).strip() == name:
+            return i
+    return -1
+
+
+def _parse_feishu_sheet_int(v):
+    if v is None or str(v).strip() == "":
+        return None
+    try:
+        return int(float(str(v).strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_cno_labor_feishu_row(
+    no: int,
+    excel_date: int,
+    r: dict,
+    header: list,
+    label_to_idx: dict,
+) -> list:
+    """单行：列顺序与表头一致。"""
+    ncols = len(header)
+    row = [""] * ncols
+    hourly = r.get("hourly") or []
+    for col_idx, h in enumerate(header):
+        hstr = str(h).strip() if h is not None else ""
+        if hstr == "No":
+            row[col_idx] = no
+        elif hstr == "Date":
+            row[col_idx] = excel_date
+        elif hstr == "company_code":
+            row[col_idx] = r.get("company") or ""
+        elif hstr == "group_no":
+            row[col_idx] = r.get("group_no") or ""
+        elif hstr == "pay_type":
+            row[col_idx] = r.get("pay_type") or ""
+        elif hstr == "day_total":
+            row[col_idx] = int(r.get("total") or 0)
+        elif hstr in label_to_idx:
+            j = label_to_idx[hstr]
+            row[col_idx] = int(hourly[j]) if j < len(hourly) else 0
+        elif hstr in ("0", ""):
+            row[col_idx] = 0
+        else:
+            row[col_idx] = ""
+    return row
+
+
+def _cno_labor_feishu_should_append_new_row(
+    r: dict, label_to_idx: dict
+) -> bool:
+    """无历史行时：17:00 有数才新增（运营日从 17:00 起）。环境变量可放宽为只要有 day_total。"""
+    if int(r.get("total") or 0) <= 0:
+        return False
+    if os.getenv("FEISHU_CNO_LABOR_APPEND_IF_TOTAL", "").strip() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return True
+    j = label_to_idx.get("17:00")
+    if j is None:
+        return int((r.get("hourly") or [0])[0] or 0) > 0
+    hourly = r.get("hourly") or []
+    return int(hourly[j]) > 0 if j < len(hourly) else False
+
+
+def _merge_cno_labor_feishu_sheet_body(
+    template_header: list,
+    matrix: dict,
+    existing_rows: list,
+) -> tuple:
+    """
+    合并表内历史行与「今天」矩阵：非今日行原样保留；今日行按公司/组/计薪更新或追加。
+    追加时 No = 全表最大 No + 1，Date = 当日运营锚点 Excel 序列。
+    返回 (combined_rows, max_no_used, num_appended_today)
+    """
+    header = _normalize_feishu_template_header(template_header)
+    ncols = len(header)
+    labels = matrix.get("labels") or []
+    label_to_idx = {str(s).strip(): i for i, s in enumerate(labels)}
+    excel_today = _anchor_date_to_excel_serial(matrix.get("date") or "")
+    matrix_rows = matrix.get("rows") or []
+
+    i_no = _feishu_header_col_index(header, "No")
+    i_date = _feishu_header_col_index(header, "Date")
+    i_cc = _feishu_header_col_index(header, "company_code")
+    i_gn = _feishu_header_col_index(header, "group_no")
+    i_pt = _feishu_header_col_index(header, "pay_type")
+
+    def pad(cells):
+        r = list(cells or [])
+        if len(r) < ncols:
+            r.extend([""] * (ncols - len(r)))
+        return r[:ncols]
+
+    max_no = 0
+    historical = []
+    today_no_by_key = {}
+    today_row_by_key = {}
+
+    for cells in existing_rows:
+        c = pad(cells)
+        if i_no < 0:
+            continue
+        n = _parse_feishu_sheet_int(c[i_no])
+        if n is None:
+            continue
+        max_no = max(max_no, n)
+        d = _parse_feishu_sheet_int(c[i_date]) if i_date >= 0 else None
+        if d == excel_today and i_cc >= 0 and i_gn >= 0 and i_pt >= 0:
+            key2 = (str(c[i_cc]).strip(), str(c[i_gn]).strip(), str(c[i_pt]).strip())
+            today_no_by_key[key2] = n
+            today_row_by_key[key2] = c
+            continue
+        historical.append(c)
+
+    num_append = 0
+    today_block = []
+    used_keys = set()
+    for r in matrix_rows:
+        key2 = (
+            str(r.get("company") or "").strip(),
+            str(r.get("group_no") or "").strip(),
+            str(r.get("pay_type") or "").strip(),
+        )
+        if key2 in today_no_by_key:
+            no = today_no_by_key[key2]
+        elif _cno_labor_feishu_should_append_new_row(r, label_to_idx):
+            max_no += 1
+            no = max_no
+            today_no_by_key[key2] = no
+            num_append += 1
+        else:
+            continue
+        today_block.append(
+            _build_cno_labor_feishu_row(no, excel_today, r, header, label_to_idx)
+        )
+        used_keys.add(key2)
+
+    for key2, old_cells in today_row_by_key.items():
+        if key2 not in used_keys:
+            historical.append(pad(old_cells))
+
+    historical.sort(
+        key=lambda c: (
+            _parse_feishu_sheet_int(c[i_date]) if i_date >= 0 else 0,
+            _parse_feishu_sheet_int(c[i_no]) if i_no >= 0 else 0,
+        )
+    )
+    combined = [pad(c) for c in historical] + today_block
+    return combined, max_no, num_append
+
+
+def _feishu_trim_trailing_empty_rows(rows):
+    out = list(rows or [])
+    while out:
+        last = out[-1]
+        if last and any(
+            str(x).strip() != "" for x in last if x is not None
+        ):
+            break
+        out.pop()
+    return out
+
+
+def _feishu_count_existing_data_rows(
+    tenant_token: str, spreadsheet_token: str, sheet_id: str, data_start_row: int
+) -> int:
+    """根据 A 列「No」估算已有数据行数（用于清除旧行）。"""
+    col_a = feishu_auth.feishu_sheet_read_values(
+        tenant_token,
+        spreadsheet_token,
+        f"{sheet_id}!A{data_start_row}:A500",
+    )
+    n = 0
+    for cells in col_a:
+        if not cells:
+            continue
+        v = cells[0]
+        if v is None or str(v).strip() == "":
+            break
+        n += 1
+    return n
+
+
+def feishu_sync_cno_labor_group_hourly_sheet_once(
+    stats_window: str = "seventeen",
+    count_mode: str = "raw",
+):
+    """
+    将 CNO 小组分时矩阵写入飞书电子表格（保留表头）。
+    非「今日运营锚点」的历史行保留；今日按 company/group/pay 更新整行。
+    若该组合在表中尚无今日行且 17:00 列已有件数，则追加一行：No=全表最大 No+1，
+    Date=当日运营锚点的 Excel 序列号。各公司各组规则相同。
+    """
+    spreadsheet_token = os.getenv(
+        "FEISHU_CNO_LABOR_GROUP_HOURLY_SPREADSHEET_TOKEN",
+        "Kg5Mwy0TViWEvokr3AScfTrCnbg",
+    ).strip()
+    sheet_id_cfg = os.getenv("FEISHU_CNO_LABOR_GROUP_HOURLY_SHEET_ID", "e7b9e6").strip()
+    sheet_title = os.getenv(
+        "FEISHU_CNO_LABOR_GROUP_HOURLY_SHEET_TITLE", "元数据"
+    ).strip()
+    cfg_last_key = "feishu_wiki_cno_labor_group_hourly_meta_last_synced_at"
+
+    wm = stats_window
+    cm = count_mode
+    anchor = _default_stats_request_date(wm)
+    matrix = _build_cno_labor_group_hourly_matrix(anchor, wm, cm)
+    synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    data_start_row = int(
+        os.getenv("FEISHU_CNO_LABOR_GROUP_HOURLY_DATA_START_ROW", "2")
+    )
+
+    tenant_token = feishu_auth.feishu_tenant_access_token()
+    sheet_id = feishu_auth.feishu_sheet_resolve_sheet_id(
+        tenant_token,
+        spreadsheet_token,
+        sheet_id=sheet_id_cfg,
+        sheet_title=sheet_title,
+    )
+
+    # 读取第 1 行表头，仅更新数据区（不改表头/列布局）
+    header_rows = feishu_auth.feishu_sheet_read_values(
+        tenant_token, spreadsheet_token, f"{sheet_id}!A1:AF1"
+    )
+    template_header = _normalize_feishu_template_header(
+        (header_rows[0] if header_rows else None) or []
+    )
+    ncols = len(template_header)
+    end_col = feishu_auth.feishu_sheet_col_letter(ncols - 1)
+    max_body = int(os.getenv("FEISHU_CNO_LABOR_SHEET_MAX_BODY_ROWS", "3000"))
+
+    prev_contiguous = _feishu_count_existing_data_rows(
+        tenant_token, spreadsheet_token, sheet_id, data_start_row
+    )
+    body_raw = feishu_auth.feishu_sheet_read_values(
+        tenant_token,
+        spreadsheet_token,
+        f"{sheet_id}!A{data_start_row}:{end_col}{data_start_row + max_body - 1}",
+    )
+    body_trim = _feishu_trim_trailing_empty_rows(body_raw)
+    prev_filled = max(prev_contiguous, len(body_trim))
+
+    data_values, max_no_used, num_appended = _merge_cno_labor_feishu_sheet_body(
+        template_header, matrix, body_trim
+    )
+    new_rows = len(data_values)
+
+    result = {}
+    if new_rows:
+        result = feishu_auth.feishu_sheet_write_values(
+            tenant_token,
+            spreadsheet_token,
+            sheet_id,
+            data_values,
+            start_row=data_start_row,
+            start_col=1,
+        )
+
+    cleared = 0
+    if prev_filled > new_rows:
+        blank = [[""] * ncols for _ in range(prev_filled - new_rows)]
+        feishu_auth.feishu_sheet_write_values(
+            tenant_token,
+            spreadsheet_token,
+            sheet_id,
+            blank,
+            start_row=data_start_row + new_rows,
+            start_col=1,
+        )
+        cleared = prev_filled - new_rows
+
+    conn = get_db()
+    cursor = conn.cursor()
+    _set_system_config_value(cursor, cfg_last_key, synced_at)
+    conn.commit()
+    conn.close()
+    return {
+        "spreadsheet_token": spreadsheet_token,
+        "sheet_id": sheet_id,
+        "header_cols": ncols,
+        "data_rows": new_rows,
+        "max_no": max_no_used,
+        "appended_today": num_appended,
+        "cleared_old_rows": cleared,
+        "updated_range": result.get("updatedRange"),
+        "template_preserved": True,
+    }
+
+
+# 每小时同步：CNO 小组分时明细 → 飞书电子表格（Wiki 链接即表格 token）
+def feishu_wiki_sync_cno_labor_group_hourly_metadata_job():
+    import time as _time
+
+    def _run_once():
+        info = feishu_sync_cno_labor_group_hourly_sheet_once()
+        print(
+            f"[AutoSync] Feishu sheet meta OK "
+            f"range={info.get('updated_range')} data_rows={info.get('data_rows')} "
+            f"appended_today={info.get('appended_today')}"
+        )
+
+    print("[AutoSync] Feishu 表格（CNO 小组分时明细）后台任务启动")
+    while True:
+        try:
+            now_la = datetime.now(LA_TZ)
+            next_run = now_la.replace(minute=15, second=0, microsecond=0)
+            if next_run <= now_la:
+                next_run += timedelta(hours=1)
+            wait_sec = (next_run - now_la).total_seconds()
+            print(
+                f"[AutoSync] Feishu sheet meta next run "
+                f"{next_run.strftime('%Y-%m-%d %H:%M:%S')} (wait {wait_sec:.0f}s)"
+            )
+            _time.sleep(wait_sec)
+            _run_once()
+        except Exception as e:
+            print(f"[AutoSync] Feishu sheet meta sync FAIL: {e}")
+            _time.sleep(1800)
+
 # 每小时自动同步 Gofo 集包数据 (方案 1)
 
 def truck_booking_hourly_sync_job():
@@ -14940,6 +15680,54 @@ def _maybe_backfill_center_collect_initial():
         )
     except Exception as e:
         print(f"[GofoAutoSync] center_collect backfill failed: {e}")
+
+
+def daily_packing_operlog_hourly_sync_job():
+    """每小时刷新 daily_packing_operlog_daily（逐条），供统计页「逐条（日志）」图表。"""
+    import sync_daily_packing_operlog as _dp_oper
+
+    log_prefix = "DailyPackingOperlog"
+    print(f"[{log_prefix}] Background job started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    def job():
+        try:
+            res = _dp_oper.run_hourly_operlog_sync()
+            if res.get("skipped"):
+                print(f"[{log_prefix}] skipped: {res.get('reason')}")
+                return
+            n = len(res.get("results") or [])
+            print(f"[{log_prefix}] finished {n} anchor/window sync(s)")
+            try:
+                broadcast_update("refresh_stats")
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"[{log_prefix}] ERROR: {e}")
+
+    try:
+        print(f"[{log_prefix}] Bootstrap run...")
+        job()
+    except Exception as e:
+        print(f"[{log_prefix}] Bootstrap error: {e}")
+
+    while True:
+        try:
+            now = datetime.now()
+            # 整点后 10 分钟执行，避开 Gofo 整点同步高峰
+            next_run = now.replace(minute=10, second=0, microsecond=0)
+            if next_run <= now:
+                next_run += timedelta(hours=1)
+            wait_seconds = (next_run - now).total_seconds()
+            print(
+                f"[{log_prefix}] Next run {next_run.strftime('%Y-%m-%d %H:%M:%S')} "
+                f"(wait {wait_seconds:.0f}s)"
+            )
+            if wait_seconds > 0:
+                time.sleep(wait_seconds)
+            job()
+        except Exception as e:
+            print(f"[{log_prefix}] Loop error: {e}")
+            time.sleep(60)
 
 
 def gofo_hourly_sync_job():

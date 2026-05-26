@@ -210,6 +210,9 @@ def persist_hour_slot_from_rows(
                     synced_at,
                 ),
             )
+        _persist_group_hourly_slots(
+            cur, record_date, time_slot, acct_raw, acct_dedup, acct_keys, synced_at
+        )
         conn.commit()
     finally:
         conn.close()
@@ -219,3 +222,56 @@ def persist_hour_slot_from_rows(
         "labor_account_keys": len(acct_keys),
         "counts": {f"{c}|{p}": counts_raw.get((c, p), 0) for c, p in all_keys},
     }
+
+
+def _persist_group_hourly_slots(
+    cur,
+    record_date: str,
+    time_slot: str,
+    acct_raw: Dict[Tuple[str, str, str], int],
+    acct_dedup: Dict[Tuple[str, str, str], int],
+    acct_keys: set,
+    synced_at: str,
+) -> None:
+    """写入 cno_labor_group_hourly：按运营锚点日 + 统计窗口 + 组号 + 整点。"""
+    from single_app import la_record_slot_to_operating_anchor
+
+    slot_norm = (time_slot or "").strip()
+    if len(slot_norm) >= 5 and slot_norm[2] == ":":
+        slot_norm = f"{int(slot_norm[:2]):02d}:{slot_norm[3:5]}"
+    for window_mode in ("calendar", "business", "seventeen"):
+        anchor = la_record_slot_to_operating_anchor(
+            record_date, slot_norm, window_mode
+        )
+        if not anchor:
+            continue
+        for company, account, pay_type in acct_keys:
+            n_raw = int(acct_raw.get((company, account, pay_type), 0))
+            n_ded = int(acct_dedup.get((company, account, pay_type), 0))
+            cur.execute(
+                """
+                INSERT INTO cno_labor_group_hourly
+                    (anchor_date, stats_window, time_slot, company_code, group_no,
+                     pay_type, pieces, pieces_deduped, record_date_la, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(anchor_date, stats_window, time_slot, company_code, group_no)
+                DO UPDATE SET
+                    pay_type = excluded.pay_type,
+                    pieces = excluded.pieces,
+                    pieces_deduped = excluded.pieces_deduped,
+                    record_date_la = excluded.record_date_la,
+                    synced_at = excluded.synced_at
+                """,
+                (
+                    anchor,
+                    window_mode,
+                    slot_norm,
+                    company,
+                    account,
+                    pay_type,
+                    n_raw,
+                    n_ded,
+                    record_date,
+                    synced_at,
+                ),
+            )
