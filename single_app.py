@@ -15249,6 +15249,16 @@ def daily_feishu_sync_job():
         except Exception:
             _time.sleep(3600)
 
+# 飞书「分拣」表：每个整点有量时追加 4 行（A/B/C/D 各一行，记录该时段件数）
+_CNO_NARROWBELT_FEISHU_HEADER_FALLBACK = [
+    "No",
+    "Date",
+    "time_slot",
+    "line_code",
+    "line_label",
+    "pieces",
+]
+
 # 飞书「元数据」表模板表头（仅当线上第 1 行损坏时回退；正常以表格第 1 行为准）
 _CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK = [
     "No",
@@ -15272,19 +15282,34 @@ def _anchor_date_to_excel_serial(anchor) -> int:
     return (d - date_cls(1899, 12, 30)).days
 
 
-def _normalize_feishu_template_header(header_row: list) -> list:
+def _normalize_feishu_header_row(header_row: list, fallback: list) -> list:
     if not header_row:
-        return list(_CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK)
+        return list(fallback)
     row = list(header_row)
-    # 去掉尾部空列，避免 AZ 宽范围读出虚高列数
     while row and (row[-1] is None or str(row[-1]).strip() == ""):
         row.pop()
     if not row or str(row[0]).strip() != "No":
-        return list(_CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK)
-    fb = _CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK
+        return list(fallback)
+    fb = fallback
     if len(row) < len(fb):
         row.extend([fb[i] for i in range(len(row), len(fb))])
     return row
+
+
+def _normalize_feishu_template_header(header_row: list) -> list:
+    return _normalize_feishu_header_row(
+        header_row, _CNO_LABOR_FEISHU_TEMPLATE_HEADER_FALLBACK
+    )
+
+
+def _normalize_feishu_narrowbelt_header(header_row: list) -> list:
+    row = _normalize_feishu_header_row(
+        header_row, _CNO_NARROWBELT_FEISHU_HEADER_FALLBACK
+    )
+    names = {str(h).strip().lower() for h in row if h is not None}
+    if "time_slot" in names and "line_code" in names:
+        return row
+    return list(_CNO_NARROWBELT_FEISHU_HEADER_FALLBACK)
 
 
 def _feishu_header_col_index(header: list, name: str) -> int:
@@ -15476,6 +15501,439 @@ def _feishu_count_existing_data_rows(
     return n
 
 
+_CNO_NARROWBELT_LINE_LABELS = {
+    "A": "产线 A（AA）",
+    "B": "产线 B（AB）",
+    "C": "产线 C（AC）",
+    "D": "产线 D（AD）",
+}
+
+
+def _narrowbelt_hourly_line_stats(hourly_arr):
+    vals = [int(x or 0) for x in (hourly_arr or [])]
+    total = sum(vals)
+    active = sum(1 for v in vals if v > 0)
+    mean_active = (total / active) if active > 0 else 0.0
+    return total, active, mean_active
+
+
+def _build_cno_narrowbelt_stats_rows(matrix):
+    """与 statistics 页 cnoNarrowbeltHourlyStatsTable 一致（A–D 四条产线）。"""
+    lines = (matrix or {}).get("lines") or {}
+    out = []
+    for code in ("A", "B", "C", "D"):
+        total, active, mean_active = _narrowbelt_hourly_line_stats(lines.get(code))
+        out.append(
+            {
+                "line_code": code,
+                "line_label": _CNO_NARROWBELT_LINE_LABELS.get(code, code),
+                "total": total,
+                "active_slots": active,
+                "mean_active": round(mean_active, 1),
+            }
+        )
+    return out
+
+
+def _build_cno_narrowbelt_feishu_slot_row(
+    no, excel_date, time_slot, line_code, pieces, header
+):
+    """单产线、单整点一行（17:00 有量时 A/B/C/D 各追加一行）。"""
+    ncols = len(header)
+    row = [""] * ncols
+    label = _CNO_NARROWBELT_LINE_LABELS.get(line_code, line_code)
+    for col_idx, h in enumerate(header):
+        hstr = str(h).strip() if h is not None else ""
+        if hstr == "No":
+            row[col_idx] = no
+        elif hstr == "Date":
+            row[col_idx] = excel_date
+        elif hstr in ("time_slot", "time_slot_la"):
+            row[col_idx] = time_slot
+        elif hstr in ("line_code", "line"):
+            row[col_idx] = line_code
+        elif hstr in ("line_label", "line_name", "产线"):
+            row[col_idx] = label
+        elif hstr in (
+            "pieces",
+            "total_pieces",
+            "total",
+            "day_total",
+            "合计(件)",
+            "合计",
+        ):
+            row[col_idx] = int(pieces or 0)
+        elif hstr in ("0", ""):
+            row[col_idx] = 0
+    return row
+
+
+def _feishu_narrowbelt_template_kind(header: list) -> str:
+    names = {str(h).strip().lower() for h in header if h is not None}
+    if "time_slot" in names and "line_code" in names and "pieces" in names:
+        return "slot_lines"
+    if "time_slot" in names or "time_slot_la" in names:
+        return "hourly_wide"
+    return "legacy_summary"
+
+
+def _narrowbelt_slot_has_pieces(matrix, slot_label: str) -> bool:
+    labels = matrix.get("labels") or []
+    lines = matrix.get("lines") or {}
+    if slot_label not in labels:
+        return False
+    idx = labels.index(slot_label)
+    for code in ("A", "B", "C", "D"):
+        arr = lines.get(code) or []
+        if idx < len(arr) and int(arr[idx] or 0) > 0:
+            return True
+    return False
+
+
+def _narrowbelt_line_pieces_at_slot(matrix, line_code: str, slot_label: str) -> int:
+    labels = matrix.get("labels") or []
+    lines = matrix.get("lines") or {}
+    if slot_label not in labels:
+        return 0
+    idx = labels.index(slot_label)
+    arr = lines.get(line_code) or []
+    return int(arr[idx]) if idx < len(arr) else 0
+
+
+def _narrowbelt_slot_la_start(anchor_date, slot_label: str, window_mode: str):
+    """运营日锚点 + 整点标签 → 该时段开始的洛杉矶时刻。"""
+    if isinstance(anchor_date, str):
+        anchor_date = datetime.strptime(str(anchor_date)[:10], "%Y-%m-%d").date()
+    elif isinstance(anchor_date, datetime):
+        anchor_date = anchor_date.date()
+    h = int(str(slot_label)[:2])
+    d = anchor_date
+    if window_mode == "seventeen" and h < 17:
+        d = anchor_date + timedelta(days=1)
+    elif window_mode == "business" and h < 5:
+        d = anchor_date + timedelta(days=1)
+    return datetime.combine(d, dtime(h, 0), tzinfo=LA_TZ)
+
+
+def _narrowbelt_slot_has_started(anchor_date, slot_label: str, window_mode: str) -> bool:
+    """仅当洛杉矶当前时间 ≥ 该整点开始时，才允许写入飞书。"""
+    return datetime.now(LA_TZ) >= _narrowbelt_slot_la_start(
+        anchor_date, slot_label, window_mode
+    )
+
+
+def _narrowbelt_row_slot_key(cells, header, excel_today):
+    i_date = _feishu_header_col_index(header, "Date")
+    i_slot = _feishu_header_col_index(header, "time_slot")
+    if i_slot < 0:
+        i_slot = _feishu_header_col_index(header, "time_slot_la")
+    i_lc = _feishu_header_col_index(header, "line_code")
+    if i_lc < 0:
+        i_lc = _feishu_header_col_index(header, "line")
+    if i_date < 0 or i_slot < 0 or i_lc < 0:
+        return None
+    d = _parse_feishu_sheet_int(cells[i_date])
+    if d != excel_today:
+        return None
+    slot = str(cells[i_slot] or "").strip()
+    lc = str(cells[i_lc] or "").strip().upper()
+    if not slot or not lc:
+        return None
+    return (slot, lc)
+
+
+def _build_cno_narrowbelt_feishu_hourly_rows(matrix, header):
+    """与 /api/statistics/cno_narrowbelt_hourly/export CSV 一致（每整点一行）。"""
+    labels = matrix.get("labels") or []
+    lines = matrix.get("lines") or {}
+    excel_date = _anchor_date_to_excel_serial(matrix.get("date") or "")
+    ncols = len(header)
+    i_no = _feishu_header_col_index(header, "No")
+    i_date = _feishu_header_col_index(header, "Date")
+    i_slot = _feishu_header_col_index(header, "time_slot")
+    if i_slot < 0:
+        i_slot = _feishu_header_col_index(header, "time_slot_la")
+    line_cols = {
+        "A": _feishu_header_col_index(header, "line_a_pieces"),
+        "B": _feishu_header_col_index(header, "line_b_pieces"),
+        "C": _feishu_header_col_index(header, "line_c_pieces"),
+        "D": _feishu_header_col_index(header, "line_d_pieces"),
+    }
+    if line_cols["A"] < 0:
+        line_cols = {
+            "A": _feishu_header_col_index(header, "line_a"),
+            "B": _feishu_header_col_index(header, "line_b"),
+            "C": _feishu_header_col_index(header, "line_c"),
+            "D": _feishu_header_col_index(header, "line_d"),
+        }
+    out = []
+    for idx, lab in enumerate(labels):
+        row = [""] * ncols
+        if i_no >= 0:
+            row[i_no] = idx + 1
+        if i_date >= 0:
+            row[i_date] = excel_date
+        if i_slot >= 0:
+            row[i_slot] = lab
+        for code, ci in line_cols.items():
+            if ci >= 0:
+                arr = lines.get(code) or []
+                row[ci] = int(arr[idx]) if idx < len(arr) else 0
+        out.append(row)
+    return out
+
+
+def _merge_cno_narrowbelt_feishu_sheet_body(
+    template_header: list,
+    matrix: dict,
+    existing_rows: list,
+    *,
+    reset_operating_day: bool = False,
+) -> tuple:
+    """
+    按整点追加：某时段（如 17:00）任一线有量且表中尚无该日该时段四行时，
+    追加 A/B/C/D 四行（No 递增，Date 为运营日 Excel 序列，pieces 为该时段件数）。
+    已有四行则原地更新 pieces。
+    """
+    header = _normalize_feishu_narrowbelt_header(template_header)
+    kind = _feishu_narrowbelt_template_kind(header)
+    excel_today = _anchor_date_to_excel_serial(matrix.get("date") or "")
+    anchor_date = matrix.get("date") or ""
+    wm = matrix.get("stats_window") or "seventeen"
+    ncols = len(header)
+    labels = matrix.get("labels") or []
+
+    def pad(cells):
+        r = list(cells or [])
+        if len(r) < ncols:
+            r.extend([""] * (ncols - len(r)))
+        return r[:ncols]
+
+    i_no = _feishu_header_col_index(header, "No")
+    i_date = _feishu_header_col_index(header, "Date")
+
+    if kind == "hourly_wide":
+        today_block = _build_cno_narrowbelt_feishu_hourly_rows(matrix, header)
+        max_no = 0
+        for row in today_block:
+            n = _parse_feishu_sheet_int(row[i_no]) if i_no >= 0 else None
+            if n is not None:
+                max_no = max(max_no, n)
+        return (
+            [pad(c) for c in existing_rows],
+            max_no,
+            len(today_block),
+            {"appended_slots": [], "updated_slots": []},
+        )
+
+    max_no = 0
+    historical = []
+    today_by_key = {}
+
+    for cells in existing_rows:
+        c = pad(cells)
+        if i_no < 0:
+            continue
+        n = _parse_feishu_sheet_int(c[i_no])
+        if n is None:
+            continue
+        max_no = max(max_no, n)
+        sk = _narrowbelt_row_slot_key(c, header, excel_today)
+        if sk and reset_operating_day:
+            continue
+        if sk:
+            today_by_key[sk] = (n, c)
+        else:
+            historical.append(c)
+
+    today_out = []
+    appended_slots = []
+    updated_slots = []
+    skipped_future_slots = []
+    line_codes = ("A", "B", "C", "D")
+
+    for slot in labels:
+        if not _narrowbelt_slot_has_started(anchor_date, slot, wm):
+            if _narrowbelt_slot_has_pieces(matrix, slot):
+                skipped_future_slots.append(slot)
+            continue
+        if not _narrowbelt_slot_has_pieces(matrix, slot):
+            continue
+        keys = [(slot, lc) for lc in line_codes]
+        had_all = all(k in today_by_key for k in keys)
+        slot_new = False
+        for lc in line_codes:
+            pcs = _narrowbelt_line_pieces_at_slot(matrix, lc, slot)
+            if (slot, lc) in today_by_key:
+                no, _old = today_by_key[(slot, lc)]
+            else:
+                max_no += 1
+                no = max_no
+                slot_new = True
+            today_out.append(
+                _build_cno_narrowbelt_feishu_slot_row(
+                    no, excel_today, slot, lc, pcs, header
+                )
+            )
+        if had_all:
+            updated_slots.append(slot)
+        elif slot_new:
+            appended_slots.append(slot)
+
+    def _sort_today_row(cells):
+        sk = _narrowbelt_row_slot_key(cells, header, excel_today)
+        slot_ord = labels.index(sk[0]) if sk and sk[0] in labels else 999
+        line_ord = line_codes.index(sk[1]) if sk and sk[1] in line_codes else 9
+        return (slot_ord, line_ord)
+
+    today_out.sort(key=_sort_today_row)
+
+    historical.sort(
+        key=lambda c: (
+            _parse_feishu_sheet_int(c[i_date]) if i_date >= 0 else 0,
+            _parse_feishu_sheet_int(c[i_no]) if i_no >= 0 else 0,
+        )
+    )
+    meta = {
+        "appended_slots": appended_slots,
+        "updated_slots": updated_slots,
+        "skipped_future_slots": skipped_future_slots,
+    }
+    return [pad(c) for c in historical] + today_out, max_no, len(today_out), meta
+
+
+def feishu_sync_cno_narrowbelt_sheet_once(
+    stats_window: str = "seventeen",
+    count_mode: str = "raw",
+    reset_operating_day: bool = False,
+):
+    """
+    将 statistics 窄带分时数据写入飞书 eEZ3Ly。
+    每个整点（如 17:00）任一线有量且洛杉矶该整点已开始、表中尚无四行时，追加 A/B/C/D；
+    未到整点的不写入。reset_operating_day=True 时先清空本运营日已有行再导入。
+    """
+    spreadsheet_token = os.getenv(
+        "FEISHU_CNO_NARROWBELT_SPREADSHEET_TOKEN",
+        os.getenv(
+            "FEISHU_CNO_LABOR_GROUP_HOURLY_SPREADSHEET_TOKEN",
+            "Kg5Mwy0TViWEvokr3AScfTrCnbg",
+        ),
+    ).strip()
+    sheet_id_cfg = os.getenv("FEISHU_CNO_NARROWBELT_SHEET_ID", "eEZ3Ly").strip()
+    sheet_title = os.getenv("FEISHU_CNO_NARROWBELT_SHEET_TITLE", "分拣").strip()
+    cfg_last_key = "feishu_cno_narrowbelt_sheet_last_synced_at"
+
+    wm = stats_window
+    cm = count_mode
+    anchor = _default_stats_request_date(wm)
+    matrix = _build_cno_narrowbelt_hourly_series(anchor, wm, cm)
+    synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    data_start_row = int(os.getenv("FEISHU_CNO_NARROWBELT_DATA_START_ROW", "2"))
+
+    tenant_token = feishu_auth.feishu_tenant_access_token()
+    sheet_id = feishu_auth.feishu_sheet_resolve_sheet_id(
+        tenant_token,
+        spreadsheet_token,
+        sheet_id=sheet_id_cfg,
+        sheet_title=sheet_title,
+    )
+
+    header_rows = feishu_auth.feishu_sheet_read_values(
+        tenant_token, spreadsheet_token, f"{sheet_id}!A1:AF1"
+    )
+    raw_header = (header_rows[0] if header_rows else None) or []
+    has_header = raw_header and any(
+        str(x).strip() for x in raw_header if x is not None
+    )
+    template_header = _normalize_feishu_narrowbelt_header(raw_header)
+    ncols = len(template_header)
+    end_col = feishu_auth.feishu_sheet_col_letter(ncols - 1)
+    legacy_header = has_header and _feishu_narrowbelt_template_kind(
+        _normalize_feishu_header_row(raw_header, _CNO_NARROWBELT_FEISHU_HEADER_FALLBACK)
+    ) == "legacy_summary"
+
+    if not has_header or legacy_header:
+        feishu_auth.feishu_sheet_write_values(
+            tenant_token,
+            spreadsheet_token,
+            sheet_id,
+            [template_header],
+            start_row=1,
+            start_col=1,
+        )
+
+    max_body = int(os.getenv("FEISHU_CNO_LABOR_SHEET_MAX_BODY_ROWS", "3000"))
+    prev_contiguous = _feishu_count_existing_data_rows(
+        tenant_token, spreadsheet_token, sheet_id, data_start_row
+    )
+    body_raw = feishu_auth.feishu_sheet_read_values(
+        tenant_token,
+        spreadsheet_token,
+        f"{sheet_id}!A{data_start_row}:{end_col}{data_start_row + max_body - 1}",
+    )
+    body_trim = _feishu_trim_trailing_empty_rows(body_raw)
+    prev_filled = max(prev_contiguous, len(body_trim))
+
+    if not reset_operating_day:
+        reset_operating_day = os.getenv(
+            "FEISHU_CNO_NARROWBELT_RESET_OPERATING_DAY", ""
+        ).strip().lower() in ("1", "true", "yes")
+
+    data_values, max_no, today_rows, slot_meta = _merge_cno_narrowbelt_feishu_sheet_body(
+        template_header, matrix, body_trim, reset_operating_day=reset_operating_day
+    )
+    new_rows = len(data_values)
+    kind = _feishu_narrowbelt_template_kind(template_header)
+
+    result = {}
+    if new_rows:
+        result = feishu_auth.feishu_sheet_write_values(
+            tenant_token,
+            spreadsheet_token,
+            sheet_id,
+            data_values,
+            start_row=data_start_row,
+            start_col=1,
+        )
+
+    cleared = 0
+    if prev_filled > new_rows:
+        blank = [[""] * ncols for _ in range(prev_filled - new_rows)]
+        feishu_auth.feishu_sheet_write_values(
+            tenant_token,
+            spreadsheet_token,
+            sheet_id,
+            blank,
+            start_row=data_start_row + new_rows,
+            start_col=1,
+        )
+        cleared = prev_filled - new_rows
+
+    conn = get_db()
+    cursor = conn.cursor()
+    _set_system_config_value(cursor, cfg_last_key, synced_at)
+    conn.commit()
+    conn.close()
+    return {
+        "spreadsheet_token": spreadsheet_token,
+        "sheet_id": sheet_id,
+        "template_kind": kind,
+        "operating_day": matrix.get("date"),
+        "count_mode": cm,
+        "stats_window": wm,
+        "data_rows": new_rows,
+        "today_rows": today_rows,
+        "appended_slots": slot_meta.get("appended_slots") or [],
+        "updated_slots": slot_meta.get("updated_slots") or [],
+        "skipped_future_slots": slot_meta.get("skipped_future_slots") or [],
+        "reset_operating_day": reset_operating_day,
+        "max_no": max_no,
+        "cleared_old_rows": cleared,
+        "updated_range": result.get("updatedRange"),
+        "template_preserved": bool(has_header) and not legacy_header,
+    }
+
+
 def feishu_sync_cno_labor_group_hourly_sheet_once(
     stats_window: str = "seventeen",
     count_mode: str = "raw",
@@ -15587,14 +16045,20 @@ def feishu_wiki_sync_cno_labor_group_hourly_metadata_job():
     import time as _time
 
     def _run_once():
+        nb = feishu_sync_cno_narrowbelt_sheet_once()
+        print(
+            f"[AutoSync] Feishu narrowbelt OK "
+            f"range={nb.get('updated_range')} rows={nb.get('data_rows')} "
+            f"day={nb.get('operating_day')}"
+        )
         info = feishu_sync_cno_labor_group_hourly_sheet_once()
         print(
-            f"[AutoSync] Feishu sheet meta OK "
+            f"[AutoSync] Feishu labor group OK "
             f"range={info.get('updated_range')} data_rows={info.get('data_rows')} "
             f"appended_today={info.get('appended_today')}"
         )
 
-    print("[AutoSync] Feishu 表格（CNO 小组分时明细）后台任务启动")
+    print("[AutoSync] Feishu 表格（窄带按线 + 小组分时）后台任务启动")
     while True:
         try:
             now_la = datetime.now(LA_TZ)
