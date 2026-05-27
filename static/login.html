@@ -351,8 +351,13 @@
                 if (response.ok && data.success) {
                     messageDiv.style.color = 'var(--accent)';
                     messageDiv.textContent = t.success;
+                    const params = new URLSearchParams(window.location.search);
+                    const nextUrl = params.get('next');
+                    const safeNext = nextUrl && nextUrl.startsWith('/') && !nextUrl.startsWith('//')
+                        ? nextUrl
+                        : null;
                     setTimeout(() => {
-                        window.location.href = data.redirect || '/';
+                        window.location.href = safeNext || data.redirect || '/';
                     }, 800);
                 } else {
                     messageDiv.style.color = 'var(--error)';
@@ -373,6 +378,10 @@
             .then(r => r.json())
             .then(data => { if (data.logged_in) window.location.href = '/'; });
     </script>
+    <footer id="login-copyright-footer"
+        style="position:fixed;bottom:0;left:0;right:0;padding:10px 16px;font-size:11px;text-align:center;color:#888;background:rgba(255,255,255,0.92);border-top:1px solid #e9ecef;">
+        Copyright © 2026 Fan Yang. All rights reserved.
+    </footer>
 </body>
 
 </html>

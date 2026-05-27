@@ -563,6 +563,35 @@
 
         <div id="message"></div>
 
+        <!-- 商业授权 -->
+        <div class="card" id="licenseCard">
+            <h2><i class="fas fa-certificate"></i> 商业授权</h2>
+            <p style="color: #666; margin-bottom: 16px;">
+                须先用<strong>主系统管理员</strong>登录（<code>/login</code>，非许可服务 8088 的密钥），再在此粘贴 <code>INB-…</code> 激活。
+                强制拦截需 <code>LICENSE_ENFORCE=1</code>。说明见 <code>docs/commercial-license.md</code>。
+            </p>
+            <div id="licenseStatusPanel" style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px; font-size: 14px;">
+                加载授权状态…
+            </div>
+            <div class="form-row">
+                <div class="form-col" style="flex: 2;">
+                    <div class="form-group">
+                        <label for="licenseKeyInput">许可证密钥 (INB-…):</label>
+                        <input type="text" id="licenseKeyInput" placeholder="INB-xxxxxxxx" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-col" style="align-self: flex-end;">
+                    <button type="button" class="action-btn btn-search" onclick="activateCommercialLicense()">
+                        <i class="fas fa-key"></i> 激活许可证
+                    </button>
+                    <button type="button" class="action-btn btn-reset" onclick="loadCommercialLicenseStatus()">
+                        <i class="fas fa-sync"></i> 刷新状态
+                    </button>
+                </div>
+            </div>
+            <p id="licenseActivateMsg" style="margin-top: 8px; font-size: 13px; color: #666;"></p>
+        </div>
+
         <!-- 用户管理 -->
         <div class="card">
             <h2><i class="fas fa-users"></i> 用户管理</h2>
@@ -1337,14 +1366,19 @@
                     .then(response => response.json())
                     .then(data => {
                         if (!data.logged_in) {
-                            window.location.href = '/login';
-                        } else if (data.user.role !== 'admin') {
+                            window.location.href = '/login?next=' + encodeURIComponent('/admin');
+                        } else if (!['admin', 'boss'].includes(data.user.role)) {
                             showMessage('权限不足，只有管理员可以访问此页面', 'error');
                             setTimeout(() => {
                                 window.location.href = '/';
                             }, 2000);
-                        } else if (typeof startLaborSyncPolling === 'function') {
-                            startLaborSyncPolling();
+                        } else {
+                            if (typeof loadCommercialLicenseStatus === 'function') {
+                                loadCommercialLicenseStatus();
+                            }
+                            if (typeof startLaborSyncPolling === 'function') {
+                                startLaborSyncPolling();
+                            }
                         }
                     })
                     .catch(error => {
@@ -2961,6 +2995,103 @@
                 if (_laborSyncPollTimer) return;
                 fetchSyncStatus();
                 _laborSyncPollTimer = setInterval(fetchSyncStatus, 5000);
+            }
+
+            function _licenseStatusHtml(d) {
+                if (!d) return '<span style="color:#dc3545">无法读取状态</span>';
+                const ok = d.ok;
+                const color = ok ? '#28a745' : '#dc3545';
+                const lines = [
+                    `<strong style="color:${color}">${ok ? '有效' : '无效或未配置'}</strong>`,
+                    `原因: ${d.reason || '—'}`,
+                    `已配置: ${d.configured ? '是' : '否'} · 强制拦截: ${d.enforced ? '是' : '否'}`,
+                    `可开启强制: ${d.ready_for_enforce ? '是' : '否'}`,
+                ];
+                if (d.label) lines.push(`许可标签: ${d.label}`);
+                if (d.expires_at) lines.push(`到期: ${d.expires_at}`);
+                if (d.device_fingerprint) {
+                    lines.push(`设备指纹: <code style="font-size:12px">${d.device_fingerprint}</code>`);
+                }
+                if (d.token_from_env) lines.push('Token 来源: 环境变量 LICENSE_DEVICE_TOKEN（优先）');
+                else if (d.configured) lines.push('Token 来源: 数据库 system_config');
+                if (!d.server_url_configured) {
+                    lines.push('<span style="color:#fd7e14">未设置 LICENSE_SERVER_URL</span>');
+                }
+                if (d.policy) {
+                    const p = d.policy;
+                    lines.push(
+                        `策略: 缓存 ${p.verify_cache_seconds}s · 宕机宽限 ${p.grace_hours}h · 吊销宽限 ${p.grace_on_revoke ? '开' : '关'}`
+                    );
+                }
+                return lines.join('<br>');
+            }
+
+            function loadCommercialLicenseStatus() {
+                const panel = document.getElementById('licenseStatusPanel');
+                if (!panel) return;
+                panel.textContent = '加载中…';
+                fetch('/api/admin/license/status', { credentials: 'same-origin' })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success && res.data) {
+                            panel.innerHTML = _licenseStatusHtml(res.data);
+                        } else {
+                            panel.innerHTML = `<span style="color:#dc3545">${res.error || '加载失败'}</span>`;
+                        }
+                    })
+                    .catch(() => {
+                        panel.innerHTML = '<span style="color:#dc3545">网络错误</span>';
+                    });
+            }
+
+            function activateCommercialLicense() {
+                const input = document.getElementById('licenseKeyInput');
+                const msg = document.getElementById('licenseActivateMsg');
+                const key = (input && input.value || '').trim();
+                if (!key) {
+                    alert('请输入许可证密钥');
+                    return;
+                }
+                if (!confirm('确认使用此密钥激活本服务器实例？')) return;
+                if (msg) msg.textContent = '正在激活…';
+                fetch('/api/admin/license/activate', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ license_key: key }),
+                })
+                    .then(r => r.json().then(j => ({ status: r.status, j })))
+                    .then(({ status, j: res }) => {
+                        if (status === 401) {
+                            const hint = res.hint || '请先用管理员账号登录主系统';
+                            alert('激活失败: ' + (res.error || '未登录') + '\n' + hint);
+                            window.location.href = '/login?next=' + encodeURIComponent('/admin');
+                            return;
+                        }
+                        if (res.success) {
+                            if (msg) {
+                                msg.style.color = '#28a745';
+                                let t = res.message || '激活成功';
+                                if (res.token_from_env) t += '（当前以环境变量 TOKEN 为准，未写入数据库）';
+                                else if (res.stored_in === 'database') t += '（已写入数据库）';
+                                msg.textContent = t;
+                            }
+                            if (input) input.value = '';
+                            loadCommercialLicenseStatus();
+                        } else {
+                            if (msg) {
+                                msg.style.color = '#dc3545';
+                                msg.textContent = res.error || ('HTTP ' + status);
+                            }
+                            alert('激活失败: ' + (res.error || status));
+                        }
+                    })
+                    .catch(() => {
+                        if (msg) {
+                            msg.style.color = '#dc3545';
+                            msg.textContent = '请求失败';
+                        }
+                    });
             }
 
             document.addEventListener('DOMContentLoaded', () => {

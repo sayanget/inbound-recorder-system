@@ -232,3 +232,50 @@
     }
 }
 
+/* 全站页脚版权 */
+.app-copyright-footer {
+    margin: 32px auto 24px;
+    max-width: 1400px;
+    padding: 14px 20px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted, #6c757d);
+    text-align: center;
+    border-top: 1px solid var(--border-color, #e9ecef);
+}
+
+.app-copyright-footer .app-copyright-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 12px;
+}
+
+.app-copyright-footer .app-copyright-commercial {
+    margin: 10px auto 0;
+    max-width: 960px;
+    text-align: left;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--text-muted, #888);
+    padding: 10px 12px;
+    background: var(--table-stripe, #f8f9fa);
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #e9ecef);
+}
+
+.app-copyright-footer .app-copyright-more {
+    border: none;
+    background: transparent;
+    color: var(--primary-color, #4361ee);
+    cursor: pointer;
+    font-size: 12px;
+    text-decoration: underline;
+    padding: 0;
+}
+
+.app-copyright-footer .app-copyright-more:hover {
+    opacity: 0.85;
+}
+

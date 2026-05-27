@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Fan Yang. All rights reserved.
 """一次性将 statistics「CNO 直线窄带分拣产能（按线）」写入飞书 eEZ3Ly。
 
 用法:

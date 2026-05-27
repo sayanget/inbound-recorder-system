@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-lang="statistics_title">入库统计</title>
+    <meta name="author" content="Fan Yang">
+    <meta name="copyright" content="Copyright (c) 2026 Fan Yang. All rights reserved.">
     <link rel="icon" type="image/x-icon" href="/static/in0.ico">
     <!-- 静音 Chrome 对 'unload' 事件的 Permissions-Policy 违规告警。
          unload 事件已被主流浏览器标记为废弃（pagehide/beforeunload 才是推荐替代），
@@ -775,8 +777,13 @@
                 <div
                     style="display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:8px 12px; margin-bottom:8px;">
                     <div style="font-size:13px; color:var(--text-muted,#666); flex:1; min-width:200px; line-height:1.45;"
-                        data-lang="cno_labor_group_hourly_caption">热力图展示各小组每整点件数；明细表默认收起（完整数据定时同步至飞书 Wiki）。</div>
+                        data-lang="cno_labor_group_hourly_caption">热力图展示各小组每整点件数；明细表默认收起。可点「同步到飞书」写入元数据表（亦每小时自动同步）。</div>
                     <div style="display:flex; flex-wrap:wrap; gap:8px; flex-shrink:0;">
+                        <button type="button" id="cnoLaborGroupHourlyFeishuSyncBtn" class="nav-btn"
+                            style="padding:6px 14px; font-size:13px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
+                            title="同步至飞书电子表格「元数据」">
+                            <span id="cnoLaborGroupHourlyFeishuSyncBtnLabel" data-lang="cno_labor_group_hourly_feishu_sync_btn">同步到飞书</span>
+                        </button>
                         <button type="button" id="cnoLaborGroupHourlyToggleTableBtn" class="nav-btn"
                             style="padding:6px 14px; font-size:13px; cursor:pointer; background:#6c757d; color:#fff; border:none; border-radius:4px;">
                             <span data-lang="cno_labor_group_hourly_show_table">展开明细表</span>
@@ -787,6 +794,7 @@
                         </button>
                     </div>
                 </div>
+                <div id="cnoLaborGroupHourlyFeishuSyncStatus" style="font-size:12px; min-height:18px; margin:0 0 8px 0; line-height:1.45; color:var(--text-muted,#666);"></div>
                 <div id="cnoLaborGroupHourlyHeatmapSection" style="margin-bottom: 14px;">
                     <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-color, #333);"
                         data-lang="cno_labor_group_hourly_heatmap_title">小组 × 小时产能热力图</div>
@@ -1293,7 +1301,13 @@
                 cno_labor_sorter_group_total: "合计",
                 cno_labor_sorter_group_empty: "暂无组数数据，请先「手动同步」当前运营日。",
                 cno_labor_group_hourly_heading: "各小组每小时产能",
-                cno_labor_group_hourly_caption: "热力图展示各小组每整点件数；明细表默认收起（完整数据定时同步至飞书 Wiki）。",
+                cno_labor_group_hourly_caption: "热力图展示各小组每整点件数；明细表默认收起。可点「同步到飞书」写入元数据表（亦每小时自动同步）。",
+                cno_labor_group_hourly_feishu_sync_btn: "同步到飞书",
+                cno_labor_group_hourly_feishu_sync_btn_running: "同步中…",
+                cno_labor_group_hourly_feishu_sync_ok: "已同步至飞书",
+                cno_labor_group_hourly_feishu_sync_fail: "飞书同步失败",
+                cno_labor_group_hourly_feishu_last_sync: "上次飞书同步：{time}",
+                cno_labor_group_hourly_feishu_never: "尚未同步至飞书",
                 cno_labor_group_hourly_show_table: "展开明细表",
                 cno_labor_group_hourly_hide_table: "收起明细表",
                 cno_labor_group_hourly_col_group: "组号",
@@ -1575,7 +1589,13 @@
                 cno_labor_sorter_group_total: "Total",
                 cno_labor_sorter_group_empty: "No group data. Run Sync now for this operating day.",
                 cno_labor_group_hourly_heading: "Hourly capacity by group",
-                cno_labor_group_hourly_caption: "Heatmap shows hourly pieces per team; detail table is collapsed by default (full data syncs to Feishu Wiki).",
+                cno_labor_group_hourly_caption: "Heatmap shows hourly pieces per team; detail table collapsed. Use Sync to Feishu for the metadata sheet (also hourly auto-sync).",
+                cno_labor_group_hourly_feishu_sync_btn: "Sync to Feishu",
+                cno_labor_group_hourly_feishu_sync_btn_running: "Syncing…",
+                cno_labor_group_hourly_feishu_sync_ok: "Synced to Feishu",
+                cno_labor_group_hourly_feishu_sync_fail: "Feishu sync failed",
+                cno_labor_group_hourly_feishu_last_sync: "Last Feishu sync: {time}",
+                cno_labor_group_hourly_feishu_never: "Not synced to Feishu yet",
                 cno_labor_group_hourly_show_table: "Show detail table",
                 cno_labor_group_hourly_hide_table: "Hide detail table",
                 cno_labor_group_hourly_col_group: "Group",
@@ -1852,7 +1872,13 @@
                 cno_labor_sorter_group_total: "Total",
                 cno_labor_sorter_group_empty: "Sin datos de grupos; sincronice el día operativo.",
                 cno_labor_group_hourly_heading: "Capacidad por hora y grupo",
-                cno_labor_group_hourly_caption: "Mapa de calor por equipo/hora; tabla detalle oculta por defecto (sincroniza a Feishu Wiki).",
+                cno_labor_group_hourly_caption: "Mapa de calor por equipo/hora; tabla oculta. Use «Sincronizar a Feishu» (también auto cada hora).",
+                cno_labor_group_hourly_feishu_sync_btn: "Sincronizar a Feishu",
+                cno_labor_group_hourly_feishu_sync_btn_running: "Sincronizando…",
+                cno_labor_group_hourly_feishu_sync_ok: "Sincronizado en Feishu",
+                cno_labor_group_hourly_feishu_sync_fail: "Error al sincronizar Feishu",
+                cno_labor_group_hourly_feishu_last_sync: "Última sync Feishu: {time}",
+                cno_labor_group_hourly_feishu_never: "Aún no sincronizado en Feishu",
                 cno_labor_group_hourly_show_table: "Mostrar tabla",
                 cno_labor_group_hourly_hide_table: "Ocultar tabla",
                 cno_labor_group_hourly_col_group: "Grupo",
@@ -2873,6 +2899,13 @@
             if (typeof refreshCnoLaborSorterSyncScope === 'function') refreshCnoLaborSorterSyncScope();
             const cnoLaborCsvExp = document.getElementById('cnoLaborSorterExportCsvBtn');
             if (cnoLaborCsvExp) cnoLaborCsvExp.addEventListener('click', exportCnoLaborSorterHourlyCsv);
+            const cnoLaborGroupHourlyFeishuBtn = document.getElementById('cnoLaborGroupHourlyFeishuSyncBtn');
+            if (cnoLaborGroupHourlyFeishuBtn) {
+                cnoLaborGroupHourlyFeishuBtn.addEventListener('click', syncCnoLaborGroupHourlyFeishu);
+            }
+            if (typeof refreshCnoLaborGroupHourlyFeishuStatus === 'function') {
+                refreshCnoLaborGroupHourlyFeishuStatus();
+            }
             const cnoLaborGroupHourlyCsvExp = document.getElementById('cnoLaborGroupHourlyExportCsvBtn');
             if (cnoLaborGroupHourlyCsvExp) {
                 cnoLaborGroupHourlyCsvExp.addEventListener('click', exportCnoLaborGroupHourlyCsv);
@@ -3795,6 +3828,111 @@
             window.location.href = url;
         }
 
+        let _cnoLaborGroupFeishuSyncInFlight = false;
+
+        function setCnoLaborGroupHourlyFeishuSyncStatus(text, tone) {
+            const el = document.getElementById('cnoLaborGroupHourlyFeishuSyncStatus');
+            if (!el) return;
+            el.textContent = text || '';
+            if (tone === 'success') el.style.color = '#198754';
+            else if (tone === 'error') el.style.color = '#dc3545';
+            else if (tone === 'warn') el.style.color = '#856404';
+            else el.style.color = 'var(--text-muted,#666)';
+        }
+
+        function setCnoLaborGroupHourlyFeishuSyncBtnUi(running) {
+            const btn = document.getElementById('cnoLaborGroupHourlyFeishuSyncBtn');
+            const label = document.getElementById('cnoLaborGroupHourlyFeishuSyncBtnLabel');
+            const t = translations[currentLang] || {};
+            if (btn) {
+                btn.disabled = !!running;
+                btn.style.opacity = running ? '0.75' : '1';
+                btn.style.cursor = running ? 'wait' : 'pointer';
+            }
+            if (label) {
+                label.textContent = running
+                    ? (t.cno_labor_group_hourly_feishu_sync_btn_running || '同步中…')
+                    : (t.cno_labor_group_hourly_feishu_sync_btn || '同步到飞书');
+            }
+        }
+
+        function refreshCnoLaborGroupHourlyFeishuStatus() {
+            const t = translations[currentLang] || {};
+            fetch('/api/statistics/cno_labor_group_hourly/feishu_sync_status', {
+                cache: 'no-store',
+                credentials: 'same-origin'
+            })
+                .then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(function (res) {
+                    const last = (res && res.last_synced_at) ? String(res.last_synced_at).trim() : '';
+                    if (last) {
+                        const tpl = t.cno_labor_group_hourly_feishu_last_sync || '上次飞书同步：{time}';
+                        setCnoLaborGroupHourlyFeishuSyncStatus(tpl.replace('{time}', last), 'info');
+                    } else {
+                        setCnoLaborGroupHourlyFeishuSyncStatus(
+                            t.cno_labor_group_hourly_feishu_never || '尚未同步至飞书',
+                            'info'
+                        );
+                    }
+                })
+                .catch(function () { /* ignore */ });
+        }
+
+        function syncCnoLaborGroupHourlyFeishu() {
+            const t = translations[currentLang] || {};
+            if (_cnoLaborGroupFeishuSyncInFlight) return;
+            const dateStr = getCnoLaborSyncAnchorDateStr();
+            _cnoLaborGroupFeishuSyncInFlight = true;
+            setCnoLaborGroupHourlyFeishuSyncBtnUi(true);
+            setCnoLaborGroupHourlyFeishuSyncStatus(
+                t.cno_labor_group_hourly_feishu_sync_btn_running || '同步中…',
+                'warn'
+            );
+            fetch('/api/statistics/cno_labor_group_hourly/feishu_sync', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    date: dateStr,
+                    stats_window: statsWindowMode,
+                    count_mode: getCnoNarrowbeltCountMode()
+                })
+            })
+                .then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(function (res) {
+                    if (!res.success) {
+                        throw new Error(res.error || res.message || 'sync failed');
+                    }
+                    showMessage(
+                        res.message || (t.cno_labor_group_hourly_feishu_sync_ok || '已同步至飞书'),
+                        'success'
+                    );
+                    const last = res.last_synced_at || '';
+                    if (last) {
+                        const tpl = t.cno_labor_group_hourly_feishu_last_sync || '上次飞书同步：{time}';
+                        setCnoLaborGroupHourlyFeishuSyncStatus(tpl.replace('{time}', last), 'success');
+                    } else {
+                        refreshCnoLaborGroupHourlyFeishuStatus();
+                    }
+                })
+                .catch(function (err) {
+                    const msg = (t.cno_labor_group_hourly_feishu_sync_fail || '飞书同步失败')
+                        + ': ' + (err.message || err);
+                    showMessage(msg, 'error');
+                    setCnoLaborGroupHourlyFeishuSyncStatus(msg, 'error');
+                })
+                .finally(function () {
+                    _cnoLaborGroupFeishuSyncInFlight = false;
+                    setCnoLaborGroupHourlyFeishuSyncBtnUi(false);
+                });
+        }
+
         function exportCnoLaborSorterHourlyRangeCsv() {
             const t = translations[currentLang] || {};
             const startEl = document.getElementById('cnoLaborSorterExportStart');
@@ -3836,6 +3974,9 @@
                     if (data.error) throw new Error(data.error);
                     if (data.sync_plan) renderCnoLaborSorterSyncScope(data.sync_plan);
                     renderCnoLaborSorterHourlyChart(data);
+                    if (typeof refreshCnoLaborGroupHourlyFeishuStatus === 'function') {
+                        refreshCnoLaborGroupHourlyFeishuStatus();
+                    }
                 })
                 .catch(error => {
                     console.error('Error loading CNO labor sorter hourly:', error);

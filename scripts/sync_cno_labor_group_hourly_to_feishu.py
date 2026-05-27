@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Fan Yang. All rights reserved.
 """一次性将 CNO 小组分时矩阵写入飞书电子表格「元数据」工作表。"""
 from __future__ import annotations
 

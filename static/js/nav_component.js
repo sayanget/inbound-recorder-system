@@ -1,6 +1,7 @@
 /**
  * Universal Navigation Component
  * Injects a consistent navigation menu into #nav-container
+ * Copyright (c) 2026 Fan Yang. All rights reserved.
  */
 (function() {
     const navConfig = [
@@ -203,10 +204,62 @@
             .catch(err => console.error('Nav check failed:', err));
     }
 
+    function initAppCopyrightFooter() {
+        if (document.getElementById('app-copyright-footer')) return;
+        const lang = (localStorage.getItem('preferred_language') || 'zh').toLowerCase();
+        const fallback = {
+            zh: 'Copyright © 2026 Fan Yang. 保留一切权利。未经授权之复制、传播或商业利用均被禁止。',
+            en: 'Copyright © 2026 Fan Yang. All rights reserved. Unauthorized reproduction or commercial use is prohibited.',
+            es: 'Copyright © 2026 Fan Yang. Todos los derechos reservados. Queda prohibida la reproducción o el uso comercial no autorizado.',
+        };
+        const moreLabel = { zh: '商业使用声明', en: 'Commercial use notice', es: 'Aviso de uso comercial' };
+
+        const footer = document.createElement('footer');
+        footer.id = 'app-copyright-footer';
+        footer.className = 'app-copyright-footer';
+        footer.innerHTML = `
+            <div class="app-copyright-inner">
+                <span id="app-copyright-text">${fallback[lang] || fallback.zh}</span>
+                <button type="button" class="app-copyright-more" id="app-copyright-more" aria-expanded="false">${moreLabel[lang] || moreLabel.zh}</button>
+            </div>
+            <p class="app-copyright-commercial" id="app-copyright-commercial" hidden></p>
+        `;
+        document.body.appendChild(footer);
+
+        const textEl = document.getElementById('app-copyright-text');
+        const commercialEl = document.getElementById('app-copyright-commercial');
+        const moreBtn = document.getElementById('app-copyright-more');
+        if (moreBtn && commercialEl) {
+            moreBtn.addEventListener('click', () => {
+                const open = commercialEl.hasAttribute('hidden');
+                if (open) {
+                    commercialEl.removeAttribute('hidden');
+                    moreBtn.setAttribute('aria-expanded', 'true');
+                } else {
+                    commercialEl.setAttribute('hidden', '');
+                    moreBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+        }
+
+        fetch('/api/app_identity', { credentials: 'same-origin' })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (!data) return;
+                if (textEl && data.copyright) textEl.textContent = data.copyright;
+                if (commercialEl && data.commercial_use) commercialEl.textContent = data.commercial_use;
+            })
+            .catch(() => {});
+    }
+
     // Run when DOM is ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initNav);
+        document.addEventListener('DOMContentLoaded', () => {
+            initNav();
+            initAppCopyrightFooter();
+        });
     } else {
         initNav();
+        initAppCopyrightFooter();
     }
 })();

@@ -115,9 +115,19 @@ _apply_trusted_proxy_headers()
 
 
 def _license_request_exempt() -> bool:
-    """不拦截的路径（健康检查、静态、OPTIONS、许可证状态）。"""
+    """不拦截的路径（健康检查、静态、登录、首次激活等）。"""
     p = request.path or ""
-    if p in ("/ping", "/health", "/api/license_status"):
+    if p in (
+        "/ping",
+        "/health",
+        "/api/license_status",
+        "/login",
+        "/api/login",
+        "/api/logout",
+        "/api/check_login",
+    ):
+        return True
+    if p.startswith("/api/admin/license/"):
         return True
     if p.startswith("/static"):
         return True
@@ -134,8 +144,14 @@ def _license_enforce_gate():
     ev = (os.environ.get("LICENSE_ENFORCE") or "").strip().lower()
     if ev not in ("1", "true", "yes", "on"):
         return None
-    base = (os.environ.get("LICENSE_SERVER_URL") or "").strip()
-    tok = (os.environ.get("LICENSE_DEVICE_TOKEN") or "").strip()
+    try:
+        from license_client import resolve_device_token, verify_license
+
+        base = (os.environ.get("LICENSE_SERVER_URL") or "").strip()
+        tok = resolve_device_token()
+    except Exception:
+        base = (os.environ.get("LICENSE_SERVER_URL") or "").strip()
+        tok = (os.environ.get("LICENSE_DEVICE_TOKEN") or "").strip()
     if not base or not tok:
         msg = "LICENSE_SERVER_URL 或 LICENSE_DEVICE_TOKEN 未配置"
         if request.path.startswith("/api/"):
@@ -146,8 +162,6 @@ def _license_enforce_gate():
             {"Content-Type": "text/html; charset=utf-8"},
         )
     try:
-        from license_client import verify_license
-
         ok, reason = verify_license()
     except Exception as e:
         ok, reason = False, str(e)
@@ -1288,6 +1302,8 @@ def init_db():
         _gofo_default = os.environ.get("GOFO_ADMIN_TOKEN", "")
         cursor.execute(f"INSERT OR IGNORE INTO system_config (config_key, config_value, description) VALUES ({placeholder}, {placeholder}, {placeholder})", 
                       ("gofo_admin_token", _gofo_default, "Gofo API Admin Token"))
+        cursor.execute(f"INSERT OR IGNORE INTO system_config (config_key, config_value, description) VALUES ({placeholder}, {placeholder}, {placeholder})",
+                      ("license_device_token", "", "商业许可证激活后的 device_token（LICENSE_DEVICE_TOKEN 环境变量优先）"))
         cursor.execute(f"INSERT OR IGNORE INTO system_config (config_key, config_value, description) VALUES ({placeholder}, {placeholder}, {placeholder})",
                       ("last_stretch_film_deduct_date", "", "洛杉矶日历日期，上次自动扣减缠绕膜的日期（防多进程重复扣减）"))
         # ====================================
@@ -3844,6 +3860,74 @@ def api_statistics_cno_labor_group_hourly_export():
     )
 
 
+@app.route('/api/statistics/cno_labor_group_hourly/feishu_sync', methods=['POST'])
+def api_statistics_cno_labor_group_hourly_feishu_sync():
+    """统计页手动同步：各小组每小时产能矩阵 → 飞书电子表格「元数据」工作表。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录', 'success': False}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限', 'success': False}), 403
+
+    data = request.get_json(silent=True) or {}
+    wm = _parse_stats_window_param(
+        data.get('stats_window') or request.args.get('stats_window')
+    )
+    cm = _parse_cno_narrowbelt_count_mode(
+        data.get('count_mode') or request.args.get('count_mode')
+    )
+    raw = (data.get('date') or request.args.get('date') or '').strip()[:10]
+    if raw:
+        try:
+            anchor = datetime.strptime(raw, '%Y-%m-%d').date()
+        except ValueError:
+            anchor = _default_stats_request_date(wm)
+    else:
+        anchor = _default_stats_request_date(wm)
+
+    try:
+        info = feishu_sync_cno_labor_group_hourly_sheet_once(
+            stats_window=wm, count_mode=cm, anchor_date=anchor
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    return jsonify({
+        'success': True,
+        'operating_day': anchor.strftime('%Y-%m-%d'),
+        'date': anchor.strftime('%Y-%m-%d'),
+        'stats_window': wm,
+        'count_mode': cm,
+        'data_rows': info.get('data_rows'),
+        'matrix_rows': info.get('matrix_rows'),
+        'appended_today': info.get('appended_today'),
+        'updated_range': info.get('updated_range'),
+        'last_synced_at': datetime.now(LA_TZ).strftime('%Y-%m-%d %H:%M:%S'),
+        'detail': info,
+        'message': (
+            f'已同步至飞书：运营日 {anchor.strftime("%Y-%m-%d")}，'
+            f'本运营日 {info.get("matrix_rows") or 0} 个小组'
+            f'（表内合计 {info.get("data_rows") or 0} 行数据）。'
+        ),
+    })
+
+
+@app.route('/api/statistics/cno_labor_group_hourly/feishu_sync_status', methods=['GET'])
+def api_statistics_cno_labor_group_hourly_feishu_sync_status():
+    """返回飞书小组分时表最近一次成功同步时间。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'error': '无权限'}), 403
+    cfg_key = 'feishu_wiki_cno_labor_group_hourly_meta_last_synced_at'
+    conn = get_db()
+    cursor = conn.cursor()
+    last = _get_system_config_value(cursor, cfg_key, '')
+    conn.close()
+    return jsonify({'success': True, 'last_synced_at': last or ''})
+
+
 @app.route('/api/statistics/cno_narrowbelt_hourly', methods=['GET'])
 def api_statistics_cno_narrowbelt_hourly():
     """CNO 直线窄带分拣机分时；与 sorting_hourly 相同 stats_window。"""
@@ -5306,6 +5390,97 @@ def api_license_status():
         return jsonify(license_status()), 200
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _admin_license_guard():
+    if 'user_id' not in session:
+        return jsonify({
+            'success': False,
+            'error': '未登录',
+            'hint': '请先用管理员账号登录主系统（/login），再打开 /admin 激活',
+        }), 401
+    if session.get('role') not in ('admin', 'boss'):
+        return jsonify({'success': False, 'error': '权限不足'}), 403
+    return None
+
+
+@app.route('/api/admin/license/status', methods=['GET'])
+def admin_license_status():
+    """管理员查看商业授权详情（含指纹，不含 token）。"""
+    err = _admin_license_guard()
+    if err is not None:
+        return err
+    try:
+        from license_client import license_status
+
+        st = license_status()
+        st['server_url_configured'] = bool(
+            (os.environ.get('LICENSE_SERVER_URL') or '').strip()
+        )
+        return jsonify({'success': True, 'data': st}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/license/activate', methods=['POST'])
+def admin_license_activate():
+    """用许可证密钥激活本实例（device_token 写入 system_config，除非环境变量已固定 token）。"""
+    err = _admin_license_guard()
+    if err is not None:
+        return err
+    data = request.get_json(silent=True) or {}
+    license_key = (data.get('license_key') or '').strip()
+    if not license_key:
+        return jsonify({'success': False, 'error': '请提供 license_key'}), 400
+    if not (os.environ.get('LICENSE_SERVER_URL') or '').strip():
+        return jsonify({'success': False, 'error': '未配置 LICENSE_SERVER_URL'}), 400
+    try:
+        from license_client import activate_license, device_fingerprint, invalidate_verify_cache
+
+        ok, reason, payload = activate_license(license_key, device_fingerprint())
+        if not ok:
+            return jsonify({'success': False, 'error': reason or 'activate_failed'}), 400
+        device_token = (payload.get('device_token') or '').strip()
+        if not device_token:
+            return jsonify({'success': False, 'error': '许可服务未返回 device_token'}), 502
+        stored_in = 'env'
+        if not (os.environ.get('LICENSE_DEVICE_TOKEN') or '').strip():
+            conn = get_db()
+            cursor = conn.cursor()
+            if USE_POSTGRES:
+                cursor.execute(
+                    """
+                    INSERT INTO system_config (config_key, config_value, description)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (config_key) DO UPDATE SET
+                        config_value = EXCLUDED.config_value,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (
+                        'license_device_token',
+                        device_token,
+                        '商业许可证 device_token',
+                    ),
+                )
+            else:
+                cursor.execute(
+                    "INSERT OR REPLACE INTO system_config (config_key, config_value, description) VALUES (?, ?, ?)",
+                    ('license_device_token', device_token, '商业许可证 device_token'),
+                )
+            conn.commit()
+            conn.close()
+            stored_in = 'database'
+        invalidate_verify_cache()
+        return jsonify({
+            'success': True,
+            'message': '激活成功',
+            'stored_in': stored_in,
+            'label': payload.get('label'),
+            'expires_at': payload.get('expires_at'),
+            'token_from_env': stored_in == 'env',
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/dashboard-assets/<path:filename>')
@@ -15366,31 +15541,33 @@ def _build_cno_labor_feishu_row(
 def _cno_labor_feishu_should_append_new_row(
     r: dict, label_to_idx: dict
 ) -> bool:
-    """无历史行时：17:00 有数才新增（运营日从 17:00 起）。环境变量可放宽为只要有 day_total。"""
+    """与统计页一致：day_total > 0 即写入（避免 17:00 为 0 的小组被漏掉）。"""
     if int(r.get("total") or 0) <= 0:
         return False
-    if os.getenv("FEISHU_CNO_LABOR_APPEND_IF_TOTAL", "").strip() in (
+    if os.getenv("FEISHU_CNO_LABOR_APPEND_REQUIRE_17", "").strip() in (
         "1",
         "true",
         "yes",
     ):
-        return True
-    j = label_to_idx.get("17:00")
-    if j is None:
-        return int((r.get("hourly") or [0])[0] or 0) > 0
-    hourly = r.get("hourly") or []
-    return int(hourly[j]) > 0 if j < len(hourly) else False
+        j = label_to_idx.get("17:00")
+        if j is None:
+            return int((r.get("hourly") or [0])[0] or 0) > 0
+        hourly = r.get("hourly") or []
+        return int(hourly[j]) > 0 if j < len(hourly) else False
+    return True
 
 
 def _merge_cno_labor_feishu_sheet_body(
     template_header: list,
     matrix: dict,
     existing_rows: list,
+    *,
+    replace_operating_day: bool = False,
 ) -> tuple:
     """
-    合并表内历史行与「今天」矩阵：非今日行原样保留；今日行按公司/组/计薪更新或追加。
+    合并表内历史行与当前运营日矩阵；replace_operating_day 时整批重写该运营日（与统计页行数一致）。
     追加时 No = 全表最大 No + 1，Date = 当日运营锚点 Excel 序列。
-    返回 (combined_rows, max_no_used, num_appended_today)
+    返回 (combined_rows, max_no_used, num_appended_today, matrix_row_count)
     """
     header = _normalize_feishu_template_header(template_header)
     ncols = len(header)
@@ -15426,6 +15603,8 @@ def _merge_cno_labor_feishu_sheet_body(
         max_no = max(max_no, n)
         d = _parse_feishu_sheet_int(c[i_date]) if i_date >= 0 else None
         if d == excel_today and i_cc >= 0 and i_gn >= 0 and i_pt >= 0:
+            if replace_operating_day:
+                continue
             key2 = (str(c[i_cc]).strip(), str(c[i_gn]).strip(), str(c[i_pt]).strip())
             today_no_by_key[key2] = n
             today_row_by_key[key2] = c
@@ -15441,7 +15620,11 @@ def _merge_cno_labor_feishu_sheet_body(
             str(r.get("group_no") or "").strip(),
             str(r.get("pay_type") or "").strip(),
         )
-        if key2 in today_no_by_key:
+        if replace_operating_day:
+            max_no += 1
+            no = max_no
+            num_append += 1
+        elif key2 in today_no_by_key:
             no = today_no_by_key[key2]
         elif _cno_labor_feishu_should_append_new_row(r, label_to_idx):
             max_no += 1
@@ -15455,9 +15638,10 @@ def _merge_cno_labor_feishu_sheet_body(
         )
         used_keys.add(key2)
 
-    for key2, old_cells in today_row_by_key.items():
-        if key2 not in used_keys:
-            historical.append(pad(old_cells))
+    if not replace_operating_day:
+        for key2, old_cells in today_row_by_key.items():
+            if key2 not in used_keys:
+                historical.append(pad(old_cells))
 
     historical.sort(
         key=lambda c: (
@@ -15466,7 +15650,7 @@ def _merge_cno_labor_feishu_sheet_body(
         )
     )
     combined = [pad(c) for c in historical] + today_block
-    return combined, max_no, num_append
+    return combined, max_no, num_append, len(matrix_rows)
 
 
 def _feishu_trim_trailing_empty_rows(rows):
@@ -15937,12 +16121,13 @@ def feishu_sync_cno_narrowbelt_sheet_once(
 def feishu_sync_cno_labor_group_hourly_sheet_once(
     stats_window: str = "seventeen",
     count_mode: str = "raw",
+    anchor_date=None,
+    replace_operating_day: bool = True,
 ):
     """
     将 CNO 小组分时矩阵写入飞书电子表格（保留表头）。
-    非「今日运营锚点」的历史行保留；今日按 company/group/pay 更新整行。
-    若该组合在表中尚无今日行且 17:00 列已有件数，则追加一行：No=全表最大 No+1，
-    Date=当日运营锚点的 Excel 序列号。各公司各组规则相同。
+    默认 replace_operating_day=True：当前运营日按矩阵整批重写，行数与统计页一致。
+    历史运营日行保留；No 在整表内递增。
     """
     spreadsheet_token = os.getenv(
         "FEISHU_CNO_LABOR_GROUP_HOURLY_SPREADSHEET_TOKEN",
@@ -15956,7 +16141,14 @@ def feishu_sync_cno_labor_group_hourly_sheet_once(
 
     wm = stats_window
     cm = count_mode
-    anchor = _default_stats_request_date(wm)
+    if anchor_date is None:
+        anchor = _default_stats_request_date(wm)
+    elif isinstance(anchor_date, datetime):
+        anchor = anchor_date.date()
+    elif isinstance(anchor_date, str):
+        anchor = datetime.strptime(str(anchor_date)[:10], "%Y-%m-%d").date()
+    else:
+        anchor = anchor_date
     matrix = _build_cno_labor_group_hourly_matrix(anchor, wm, cm)
     synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
     data_start_row = int(
@@ -15993,8 +16185,13 @@ def feishu_sync_cno_labor_group_hourly_sheet_once(
     body_trim = _feishu_trim_trailing_empty_rows(body_raw)
     prev_filled = max(prev_contiguous, len(body_trim))
 
-    data_values, max_no_used, num_appended = _merge_cno_labor_feishu_sheet_body(
-        template_header, matrix, body_trim
+    data_values, max_no_used, num_appended, matrix_row_count = (
+        _merge_cno_labor_feishu_sheet_body(
+            template_header,
+            matrix,
+            body_trim,
+            replace_operating_day=replace_operating_day,
+        )
     )
     new_rows = len(data_values)
 
@@ -16032,8 +16229,11 @@ def feishu_sync_cno_labor_group_hourly_sheet_once(
         "sheet_id": sheet_id,
         "header_cols": ncols,
         "data_rows": new_rows,
+        "matrix_rows": matrix_row_count,
+        "operating_day_rows": len(matrix.get("rows") or []),
         "max_no": max_no_used,
         "appended_today": num_appended,
+        "replace_operating_day": replace_operating_day,
         "cleared_old_rows": cleared,
         "updated_range": result.get("updatedRange"),
         "template_preserved": True,

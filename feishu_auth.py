@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Fan Yang. All rights reserved.
+# 商业/营利性使用须事先书面许可；未经授权构成侵权，权利人保留依法主张全部救济之权利。
 """飞书开放平台 tenant_access_token（与运单 sheet / CNO 小组分时元数据同步共用）。"""
 from __future__ import annotations
 
