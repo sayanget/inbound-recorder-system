@@ -792,10 +792,26 @@
                             style="padding:6px 14px; font-size:13px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
                             <span data-lang="cno_labor_group_hourly_export_csv">导出小组分时 CSV</span>
                         </button>
+                        <button type="button" id="cnoLaborGroupHourlyHeatmapExportBtn" class="nav-btn"
+                            style="padding:6px 14px; font-size:13px; cursor:pointer; background:#6f42c1; color:#fff; border:none; border-radius:4px;"
+                            title="导出热力图为 PNG 图片">
+                            <span id="cnoLaborGroupHourlyHeatmapExportBtnLabel" data-lang="cno_labor_group_hourly_heatmap_export_png">导出热力图截图</span>
+                        </button>
+                        <button type="button" id="cnoLaborGroupHourlyShareLinkBtn" class="nav-btn"
+                            style="padding:6px 14px; font-size:13px; cursor:pointer; background:#0dcaf0; color:#052c65; border:none; border-radius:4px;"
+                            title="复制仅含热力图的分享链接">
+                            <span data-lang="cno_labor_group_hourly_share_link">复制分享链接</span>
+                        </button>
+                        <a id="cnoLaborGroupHourlyShareOpenLink" href="#" target="_blank" rel="noopener"
+                            class="nav-btn"
+                            style="padding:6px 14px; font-size:13px; text-decoration:none; display:none; background:#4361ee; color:#fff; border-radius:4px;"
+                            data-lang="cno_labor_group_hourly_share_open">打开分享页</a>
                     </div>
                 </div>
                 <div id="cnoLaborGroupHourlyFeishuSyncStatus" style="font-size:12px; min-height:18px; margin:0 0 8px 0; line-height:1.45; color:var(--text-muted,#666);"></div>
                 <div id="cnoLaborGroupHourlyHeatmapSection" style="margin-bottom: 14px;">
+                    <div id="cnoLaborGroupHourlyHeatmapExportStamp"
+                        style="display:none; font-size:11px; color:var(--text-muted,#666); margin-bottom:6px; line-height:1.4;"></div>
                     <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-color, #333);"
                         data-lang="cno_labor_group_hourly_heatmap_title">小组 × 小时产能热力图</div>
                     <p style="font-size: 11px; color: var(--text-muted, #888); margin: 0 0 8px 0; line-height: 1.45;"
@@ -933,6 +949,13 @@
                 <button type="button" id="dailyCenterCollectSplitChartExportBtn" class="nav-btn"
                     style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                     data-lang="export_excel">导出表格</button>
+            </div>
+            <div id="trunkBranchCollectSyncPanel" style="display:none; margin:0 0 10px 0; padding:10px 12px; background:var(--table-stripe,#f8f9fa); border-radius:6px; border:1px solid var(--border-color,#dee2e6);">
+                <div id="trunkBranchCollectSyncStatus" style="font-size:13px; line-height:1.45; color:var(--text-color,#333); min-height:18px;"></div>
+                <div style="margin-top:8px; height:8px; background:#e9ecef; border-radius:4px; overflow:hidden;">
+                    <div id="trunkBranchCollectSyncBar" style="height:100%; width:0%; background:#4361ee; transition:width 0.25s ease;"></div>
+                </div>
+                <div id="trunkBranchCollectSyncDetail" style="font-size:11px; color:var(--text-muted,#666); margin-top:6px; line-height:1.4;"></div>
             </div>
             <div class="chart-container" style="height: 380px;">
                 <canvas id="dailyCenterCollectSplitChart"></canvas>
@@ -1316,6 +1339,13 @@
                 cno_labor_group_hourly_col_total: "日合计",
                 cno_labor_group_hourly_empty: "当前运营日暂无小组分时数据。若上方公司折线图有数据仍为空，请点「手动同步」；部署后请 Ctrl+F5 强刷页面。",
                 cno_labor_group_hourly_export_csv: "导出小组分时 CSV",
+                cno_labor_group_hourly_heatmap_export_png: "导出热力图截图",
+                cno_labor_group_hourly_heatmap_export_png_running: "生成截图中…",
+                cno_labor_group_hourly_heatmap_export_empty: "暂无热力图数据，请先加载统计页小组分时数据。",
+                cno_labor_group_hourly_heatmap_export_fail: "导出截图失败",
+                cno_labor_group_hourly_share_link: "复制分享链接",
+                cno_labor_group_hourly_share_link_ok: "分享链接已复制",
+                cno_labor_group_hourly_share_open: "打开分享页",
                 cno_labor_group_hourly_heatmap_title: "小组 × 小时产能热力图",
                 cno_labor_group_hourly_heatmap_hint: "横轴为运营日内整点，纵轴为各小组；颜色越深表示该小时件数越高（相对当日所有格子中的最大值归一化）。",
                 cno_labor_group_hourly_heatmap_scale: "强度",
@@ -1397,12 +1427,18 @@
                 packing_manual: "人工集包",
                 packing_device: "设备集包",
                 daily_center_collect_split_chart: "每日集包（干线 / 支线）",
-                daily_center_collect_split_hint: "与上图相同：日界与顶部统计口径一致。柱高合计=分拣表人工+设备件数（与上图总柱高一致）；干线/支线按集包看板当日干线:支线占比拆分；无看板占比时当日全部计作干线。",
+                daily_center_collect_split_hint: "与顶部统计口径一致。默认 operatelog 逐条（不去重）合计 + 看板 package 占比拆分干线/支线；加载时自动重拉 operatelog 与集包看板。",
                 daily_center_collect_split_tooltip_footer: "（占比 = 分项 / 当日干线与支线合计；合计=人工+设备）",
                 collect_trunk_label: "干线",
                 collect_branch_label: "支线",
                 center_collect_week_comparison_chart: "干线/支线集包周环比",
-                center_collect_week_comparison_hint: "自然周（周一至周日）；日界与顶部统计口径一致；每周一柱为干线与支线堆叠（段内为占周比）；周合计与分拣人工+设备一致；折线为周总量环比。",
+                center_collect_week_comparison_hint: "自然周（周一至周日）；日界与顶部统计口径一致；逐条 operatelog 合计 + package 占比；加载时自动重拉数据。",
+                trunk_branch_sync_title: "正在重拉干线/支线数据",
+                trunk_branch_sync_operlog: "operatelog",
+                trunk_branch_sync_board: "集包看板",
+                trunk_branch_sync_done: "同步完成，正在绘制图表…",
+                trunk_branch_sync_fail: "同步失败",
+                trunk_branch_sync_summary: "完成 {done}/{total} 步 · operatelog 成功 {operlog} · 看板成功 {board}",
                 collect_waybills_wan_axis: "集包运单 (万)",
                 packing_sum_label: "日合计",
                 week_comparison_chart: "周环比对比",
@@ -1604,6 +1640,13 @@
                 cno_labor_group_hourly_col_total: "Day total",
                 cno_labor_group_hourly_empty: "No per-group hourly data. Run Sync for this operating day.",
                 cno_labor_group_hourly_export_csv: "Export group hourly CSV",
+                cno_labor_group_hourly_heatmap_export_png: "Export heatmap PNG",
+                cno_labor_group_hourly_heatmap_export_png_running: "Capturing…",
+                cno_labor_group_hourly_heatmap_export_empty: "No heatmap data. Load group hourly stats first.",
+                cno_labor_group_hourly_heatmap_export_fail: "Screenshot export failed",
+                cno_labor_group_hourly_share_link: "Copy share link",
+                cno_labor_group_hourly_share_link_ok: "Share link copied",
+                cno_labor_group_hourly_share_open: "Open share page",
                 cno_labor_group_hourly_heatmap_title: "Group × hour capacity heatmap",
                 cno_labor_group_hourly_heatmap_hint: "Hours along the top, one row per group; darker blue means more pieces in that hour (scaled to the max cell for the day).",
                 cno_labor_group_hourly_heatmap_scale: "Scale",
@@ -1685,12 +1728,18 @@
                 packing_manual: "Manual packing",
                 packing_device: "Device packing",
                 daily_center_collect_split_chart: "Daily packing (trunk / branch)",
-                daily_center_collect_split_hint: "Same day boundary as stats window. Bar total = sorting manual+device (same as chart above). Trunk/branch = board trunk:branch share; if no board split, all counted as trunk.",
+                daily_center_collect_split_hint: "Matches stats window. Default: operlog per-scan total (no dedup) + board package share for trunk/branch; reload re-fetches operlog and collect board.",
                 daily_center_collect_split_tooltip_footer: "(Share = segment / trunk+branch; total = manual+device)",
                 collect_trunk_label: "Trunk",
                 collect_branch_label: "Branch",
                 center_collect_week_comparison_chart: "Trunk/Branch collect — week over week",
-                center_collect_week_comparison_hint: "Calendar weeks (Mon–Sun); day boundary matches stats window; each bar stacks trunk vs branch (share of week total); total matches sorting manual+device. Line = week-over-week.",
+                center_collect_week_comparison_hint: "Calendar weeks; stats window aligned; per-scan operlog total + package share; reload re-fetches data.",
+                trunk_branch_sync_title: "Refreshing trunk/branch data",
+                trunk_branch_sync_operlog: "operlog",
+                trunk_branch_sync_board: "collect board",
+                trunk_branch_sync_done: "Sync done, rendering charts…",
+                trunk_branch_sync_fail: "Sync failed",
+                trunk_branch_sync_summary: "Done {done}/{total} · operlog ok {operlog} · board ok {board}",
                 collect_waybills_wan_axis: "Collect waybills (10k)",
                 packing_sum_label: "Daily total",
                 week_comparison_chart: "Week-over-Week Comparison",
@@ -1887,6 +1936,13 @@
                 cno_labor_group_hourly_col_total: "Total día",
                 cno_labor_group_hourly_empty: "Sin datos por grupo/hora; sincronice el día operativo.",
                 cno_labor_group_hourly_export_csv: "Exportar CSV grupo/hora",
+                cno_labor_group_hourly_heatmap_export_png: "Exportar captura PNG",
+                cno_labor_group_hourly_heatmap_export_png_running: "Generando…",
+                cno_labor_group_hourly_heatmap_export_empty: "Sin mapa de calor. Cargue primero los datos por grupo.",
+                cno_labor_group_hourly_heatmap_export_fail: "Error al exportar captura",
+                cno_labor_group_hourly_share_link: "Copiar enlace",
+                cno_labor_group_hourly_share_link_ok: "Enlace copiado",
+                cno_labor_group_hourly_share_open: "Abrir página compartida",
                 cno_labor_group_hourly_heatmap_title: "Mapa de calor grupo × hora",
                 cno_labor_group_hourly_heatmap_hint: "Eje X: horas del día operativo; eje Y: cada grupo. Más oscuro = más piezas (normalizado al máximo del día).",
                 cno_labor_group_hourly_heatmap_scale: "Escala",
@@ -1973,7 +2029,13 @@
                 collect_trunk_label: "Troncal",
                 collect_branch_label: "Ramal",
                 center_collect_week_comparison_chart: "Empaque troncal/ramal — semana a semana",
-                center_collect_week_comparison_hint: "Semanas naturales; límite de día = ventana de estadísticas; cada barra apila troncal vs ramal (% de la semana); el total coincide con sorting manual+dispositivo. Línea = semana a semana.",
+                center_collect_week_comparison_hint: "Semanas naturales; límite de día = ventana de estadísticas; total operlog por escaneo + proporción package; recarga vuelve a sincronizar.",
+                trunk_branch_sync_title: "Actualizando datos troncal/ramal",
+                trunk_branch_sync_operlog: "operlog",
+                trunk_branch_sync_board: "tablero de empaque",
+                trunk_branch_sync_done: "Sincronización lista, dibujando gráficos…",
+                trunk_branch_sync_fail: "Error de sincronización",
+                trunk_branch_sync_summary: "Hecho {done}/{total} · operlog ok {operlog} · tablero ok {board}",
                 collect_waybills_wan_axis: "Guías empaque (×10k)",
                 packing_sum_label: "Total diario",
                 week_comparison_chart: "Comparación Semanal",
@@ -2271,6 +2333,9 @@
             if (typeof initCnoLaborSorterExportRangeInputs === 'function') {
                 initCnoLaborSorterExportRangeInputs(currentDate);
             }
+            if (typeof updateCnoLaborGroupHourlyShareOpenLink === 'function') {
+                updateCnoLaborGroupHourlyShareOpenLink();
+            }
         }
 
         let loadedStatsData = null;
@@ -2391,7 +2456,7 @@
             const r = dailyPackingChartsParseRangeStrict();
             if (!r) return;
             loadDailyPackingSplitData();
-            loadDailyCenterCollectSplitData();
+            if (typeof loadTrunkBranchChartsWithSync === 'function') loadTrunkBranchChartsWithSync();
         }
 
         const WOW_CHARTS_DEFAULT_WEEK_COUNT = 8;
@@ -2513,7 +2578,7 @@
                 if (pe && we) pe.value = we.value;
             })();
             loadWeekComparisonData();
-            if (typeof loadCenterCollectWeekComparisonData === 'function') loadCenterCollectWeekComparisonData();
+            if (typeof loadTrunkBranchChartsWithSync === 'function') loadTrunkBranchChartsWithSync();
             if (typeof loadPackingManualDeviceWeekComparisonData === 'function') loadPackingManualDeviceWeekComparisonData();
         }
 
@@ -2528,7 +2593,7 @@
                 if (we && pe) we.value = pe.value;
             })();
             loadWeekComparisonData();
-            if (typeof loadCenterCollectWeekComparisonData === 'function') loadCenterCollectWeekComparisonData();
+            if (typeof loadTrunkBranchChartsWithSync === 'function') loadTrunkBranchChartsWithSync();
             if (typeof loadPackingManualDeviceWeekComparisonData === 'function') loadPackingManualDeviceWeekComparisonData();
         }
 
@@ -2868,6 +2933,9 @@
                     document.getElementById('selectedDate').value = v;
                     currentDate = v;
                     updateFloatingStatsNavState();
+                    if (typeof updateCnoLaborGroupHourlyShareOpenLink === 'function') {
+                        updateCnoLaborGroupHourlyShareOpenLink();
+                    }
                     loadData();
                     refreshTrendAndCompareCharts();
                 });
@@ -2910,6 +2978,15 @@
             if (cnoLaborGroupHourlyCsvExp) {
                 cnoLaborGroupHourlyCsvExp.addEventListener('click', exportCnoLaborGroupHourlyCsv);
             }
+            const cnoLaborGroupHourlyHeatmapExp = document.getElementById('cnoLaborGroupHourlyHeatmapExportBtn');
+            if (cnoLaborGroupHourlyHeatmapExp) {
+                cnoLaborGroupHourlyHeatmapExp.addEventListener('click', exportCnoLaborGroupHourlyHeatmapPng);
+            }
+            const cnoLaborGroupHourlyShareBtn = document.getElementById('cnoLaborGroupHourlyShareLinkBtn');
+            if (cnoLaborGroupHourlyShareBtn) {
+                cnoLaborGroupHourlyShareBtn.addEventListener('click', copyCnoLaborGroupHourlyShareLink);
+            }
+            updateCnoLaborGroupHourlyShareOpenLink();
             const cnoLaborGroupHourlyToggleTbl = document.getElementById('cnoLaborGroupHourlyToggleTableBtn');
             if (cnoLaborGroupHourlyToggleTbl) {
                 cnoLaborGroupHourlyToggleTbl.addEventListener('click', toggleCnoLaborGroupHourlyDetailTable);
@@ -3247,7 +3324,7 @@
         // Load statistics data
         function loadData() {
             if (typeof loadDailyPackingSplitData === 'function') loadDailyPackingSplitData();
-            if (typeof loadDailyCenterCollectSplitData === 'function') loadDailyCenterCollectSplitData();
+            if (typeof loadTrunkBranchChartsWithSync === 'function') loadTrunkBranchChartsWithSync();
             console.log('Loading data for date:', currentDate);
             const statsParams = currentDate ? { date: currentDate } : {};
             let url = withStatsWindowParams('/api/stats', statsParams);
@@ -3826,6 +3903,176 @@
             );
             const url = withStatsWindowParams('/api/statistics/cno_labor_group_hourly/export', qp);
             window.location.href = url;
+        }
+
+        function buildCnoLaborGroupHourlyShareUrl() {
+            const q = new URLSearchParams();
+            if (currentDate) q.set('date', currentDate);
+            q.set('stats_window', statsWindowMode || 'seventeen');
+            q.set('count_mode', getCnoNarrowbeltCountMode() || 'raw');
+            return window.location.origin + '/share/cno-labor-group-heatmap?' + q.toString();
+        }
+
+        function updateCnoLaborGroupHourlyShareOpenLink() {
+            const a = document.getElementById('cnoLaborGroupHourlyShareOpenLink');
+            if (!a) return;
+            a.href = buildCnoLaborGroupHourlyShareUrl();
+            a.style.display = 'inline-flex';
+            a.style.alignItems = 'center';
+        }
+
+        function copyCnoLaborGroupHourlyShareLink() {
+            const t = translations[currentLang] || {};
+            const url = buildCnoLaborGroupHourlyShareUrl();
+            const done = function () {
+                setCnoLaborGroupHourlyFeishuSyncStatus(
+                    t.cno_labor_group_hourly_share_link_ok || '分享链接已复制',
+                    'success'
+                );
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(done).catch(function () {
+                    window.prompt(t.cno_labor_group_hourly_share_link || '复制分享链接', url);
+                });
+            } else {
+                window.prompt(t.cno_labor_group_hourly_share_link || '复制分享链接', url);
+            }
+        }
+
+        let _cnoLaborGroupHourlyLastPayload = null;
+        let _cnoLaborGroupHourlyHeatmapHasData = false;
+        let _cnoLaborGroupHeatmapExportBusy = false;
+
+        function _loadHtml2CanvasLib() {
+            return new Promise(function (resolve, reject) {
+                if (typeof window.html2canvas === 'function') {
+                    resolve(window.html2canvas);
+                    return;
+                }
+                const existing = document.getElementById('html2canvasScript');
+                if (existing) {
+                    existing.addEventListener('load', function () { resolve(window.html2canvas); });
+                    existing.addEventListener('error', function () { reject(new Error('html2canvas')); });
+                    return;
+                }
+                const s = document.createElement('script');
+                s.id = 'html2canvasScript';
+                s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                s.async = true;
+                s.onload = function () { resolve(window.html2canvas); };
+                s.onerror = function () { reject(new Error('html2canvas load failed')); };
+                document.head.appendChild(s);
+            });
+        }
+
+        function _statsWindowModeLabel(mode) {
+            const t = translations[currentLang] || {};
+            if (mode === 'calendar') return t.stats_window_calendar_short || '自然日';
+            if (mode === 'business') return t.stats_window_business_short || '5:00–次日5:00';
+            return t.stats_window_seventeen_short || '17:00–次日17:00';
+        }
+
+        function setCnoLaborGroupHourlyHeatmapExportBtnUi(running) {
+            const btn = document.getElementById('cnoLaborGroupHourlyHeatmapExportBtn');
+            const label = document.getElementById('cnoLaborGroupHourlyHeatmapExportBtnLabel');
+            const t = translations[currentLang] || {};
+            if (!btn) return;
+            btn.disabled = !!running;
+            btn.style.opacity = running ? '0.65' : '1';
+            btn.style.cursor = running ? 'wait' : 'pointer';
+            if (label) {
+                label.textContent = running
+                    ? (t.cno_labor_group_hourly_heatmap_export_png_running || '生成截图中…')
+                    : (t.cno_labor_group_hourly_heatmap_export_png || '导出热力图截图');
+            }
+        }
+
+        async function exportCnoLaborGroupHourlyHeatmapPng() {
+            const t = translations[currentLang] || {};
+            const section = document.getElementById('cnoLaborGroupHourlyHeatmapSection');
+            const scroll = document.getElementById('cnoLaborGroupHourlyHeatmapScroll');
+            const grid = document.getElementById('cnoLaborGroupHourlyHeatmapGrid');
+            if (!section || !scroll || !grid || !_cnoLaborGroupHourlyHeatmapHasData) {
+                alert(t.cno_labor_group_hourly_heatmap_export_empty || '暂无热力图数据');
+                return;
+            }
+            if (_cnoLaborGroupHeatmapExportBusy) return;
+            _cnoLaborGroupHeatmapExportBusy = true;
+            setCnoLaborGroupHourlyHeatmapExportBtnUi(true);
+
+            const stamp = document.getElementById('cnoLaborGroupHourlyHeatmapExportStamp');
+            const payload = _cnoLaborGroupHourlyLastPayload || {};
+            const datePart = String(payload.date || currentDate || '').slice(0, 10) || 'day';
+            const wm = payload.stats_window || statsWindowMode || 'seventeen';
+            const cm = payload.count_mode || getCnoNarrowbeltCountMode() || 'raw';
+            const cmLab = cm === 'deduped'
+                ? (t.cno_narrowbelt_count_deduped || '去重')
+                : (t.cno_narrowbelt_count_raw || '逐条');
+            if (stamp) {
+                stamp.textContent = (t.cno_labor_group_hourly_heatmap_title || '小组 × 小时产能热力图')
+                    + ' · ' + datePart + ' · ' + _statsWindowModeLabel(wm) + ' · ' + cmLab
+                    + ' · ' + new Date().toLocaleString();
+                stamp.style.display = 'block';
+            }
+
+            const stickyEls = section.querySelectorAll('[style*="position:sticky"], [style*="position: sticky"]');
+            const stickyBackup = [];
+            stickyEls.forEach(function (el) {
+                stickyBackup.push([el, el.style.position, el.style.zIndex, el.style.boxShadow]);
+                el.style.position = 'static';
+                el.style.zIndex = 'auto';
+                el.style.boxShadow = 'none';
+            });
+
+            const prevScrollMax = scroll.style.maxHeight;
+            const prevScrollOv = scroll.style.overflow;
+            scroll.style.maxHeight = 'none';
+            scroll.style.overflow = 'visible';
+
+            try {
+                const html2canvas = await _loadHtml2CanvasLib();
+                const cardBg = getComputedStyle(document.documentElement)
+                    .getPropertyValue('--card-bg').trim();
+                const canvas = await html2canvas(section, {
+                    backgroundColor: cardBg || '#ffffff',
+                    scale: Math.min(2.5, Math.max(1.5, (window.devicePixelRatio || 1) * 1.25)),
+                    useCORS: true,
+                    logging: false,
+                    allowTaint: true,
+                });
+                await new Promise(function (resolve, reject) {
+                    canvas.toBlob(function (blob) {
+                        if (!blob) {
+                            reject(new Error('toBlob failed'));
+                            return;
+                        }
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'cno_labor_group_hourly_heatmap_' + datePart + '_' + wm + '.png';
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+                        resolve();
+                    }, 'image/png', 0.95);
+                });
+            } catch (err) {
+                console.error('[heatmap export]', err);
+                alert((t.cno_labor_group_hourly_heatmap_export_fail || '导出截图失败') + ': ' + (err.message || err));
+            } finally {
+                scroll.style.maxHeight = prevScrollMax;
+                scroll.style.overflow = prevScrollOv;
+                stickyBackup.forEach(function (pair) {
+                    const el = pair[0];
+                    el.style.position = pair[1];
+                    el.style.zIndex = pair[2];
+                    el.style.boxShadow = pair[3];
+                });
+                if (stamp) stamp.style.display = 'none';
+                _cnoLaborGroupHeatmapExportBusy = false;
+                setCnoLaborGroupHourlyHeatmapExportBtnUi(false);
+            }
         }
 
         let _cnoLaborGroupFeishuSyncInFlight = false;
@@ -4899,6 +5146,8 @@
         }
 
         function clearCnoLaborGroupHourlyTable() {
+            _cnoLaborGroupHourlyLastPayload = null;
+            _cnoLaborGroupHourlyHeatmapHasData = false;
             const wrap = document.getElementById('cnoLaborGroupHourlyWrap');
             const tbl = document.getElementById('cnoLaborGroupHourlyTable');
             const tblSec = document.getElementById('cnoLaborGroupHourlyTableSection');
@@ -4947,6 +5196,7 @@
             const section = document.getElementById('cnoLaborGroupHourlyHeatmapSection');
             const grid = document.getElementById('cnoLaborGroupHourlyHeatmapGrid');
             if (!section || !grid) return;
+            _cnoLaborGroupHourlyLastPayload = payload || null;
             const t = translations[currentLang] || {};
             const mx = (payload && payload.group_hourly_matrix) ? payload.group_hourly_matrix : {};
             const labels = mx.labels || (payload && payload.labels) || [];
@@ -4954,11 +5204,13 @@
             const wrap = document.getElementById('cnoLaborGroupHourlyWrap');
             if (wrap) wrap.style.display = 'block';
             if (!rows.length || !labels.length) {
+                _cnoLaborGroupHourlyHeatmapHasData = false;
                 grid.innerHTML = '<div style="padding:12px;color:#856404;background:#fff8e1;border-radius:6px;line-height:1.5;">'
                     + (t.cno_labor_group_hourly_empty || '暂无小组分时数据') + '</div>';
                 section.style.display = 'block';
                 return;
             }
+            _cnoLaborGroupHourlyHeatmapHasData = true;
             let vmax = 0;
             rows.forEach(function (r) {
                 const h = r.hourly || [];
@@ -6037,32 +6289,293 @@
             }
         }
 
-        function loadDailyCenterCollectSplitData() {
-            const r = dailyPackingChartsRangeForFetch();
-            const u = withStatsWindowParams('/api/statistics/daily_center_collect_split', {
-                start_date: r.start,
-                end_date: r.end
+        function trunkBranchCollectFetchParams(extra) {
+            return Object.assign({
+                count_mode: 'raw',
+            }, extra || {});
+        }
+
+        function formatStatsYmd(d) {
+            return d.getFullYear() + '-'
+                + String(d.getMonth() + 1).padStart(2, '0') + '-'
+                + String(d.getDate()).padStart(2, '0');
+        }
+
+        function enumerateStatsDatesYmd(startYmd, endYmd) {
+            if (!startYmd || !endYmd) return [];
+            const out = [];
+            const cur = new Date(startYmd + 'T12:00:00');
+            const end = new Date(endYmd + 'T12:00:00');
+            if (Number.isNaN(cur.getTime()) || Number.isNaN(end.getTime()) || cur > end) return [];
+            while (cur <= end) {
+                out.push(formatStatsYmd(cur));
+                cur.setDate(cur.getDate() + 1);
+            }
+            return out;
+        }
+
+        function calendarDatesForStatsAnchor(anchorYmd, wm) {
+            const out = [anchorYmd];
+            if (wm === 'business' || wm === 'seventeen') {
+                const d = new Date(anchorYmd + 'T12:00:00');
+                d.setDate(d.getDate() + 1);
+                out.push(formatStatsYmd(d));
+            }
+            return out;
+        }
+
+        function collectTrunkBranchSyncPlan() {
+            const pack = dailyPackingChartsRangeForFetch();
+            const wow = wowChartsWeekRangeForFetch();
+            const anchorSet = new Set();
+            enumerateStatsDatesYmd(pack.start, pack.end).forEach(function (d) { anchorSet.add(d); });
+            if (wow.week_start && wow.week_end) {
+                enumerateStatsDatesYmd(wow.week_start, wow.week_end).forEach(function (d) { anchorSet.add(d); });
+            }
+            // 从现在（最近日期）往前拉，优先 currentDate / 区间结束日
+            const anchors = Array.from(anchorSet).sort(function (a, b) { return b.localeCompare(a); });
+            const wm = statsWindowMode || 'seventeen';
+            const steps = [];
+            anchors.forEach(function (anchor) {
+                steps.push({ kind: 'operlog', anchor: anchor, label: anchor });
+                const calDates = calendarDatesForStatsAnchor(anchor, wm);
+                for (let ci = calDates.length - 1; ci >= 0; ci -= 1) {
+                    steps.push({ kind: 'board', anchor: anchor, label: calDates[ci] });
+                }
             });
-            fetch(u)
-                .then(response => {
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.error) {
-                        console.error('daily_center_collect_split:', data.error);
-                        if (typeof showMessage === 'function') {
-                            showMessage(String(data.error), 'error');
-                        }
-                        renderDailyCenterCollectSplitChart(null);
-                        return;
+            return { anchors: anchors, steps: steps };
+        }
+
+        let _trunkBranchSyncRunId = 0;
+        let _trunkBranchSyncPromise = null;
+        let _trunkBranchSyncPlanKey = '';
+
+        function setTrunkBranchCollectSyncUi(visible, statusText, pct, detailText, tone) {
+            const panel = document.getElementById('trunkBranchCollectSyncPanel');
+            const st = document.getElementById('trunkBranchCollectSyncStatus');
+            const bar = document.getElementById('trunkBranchCollectSyncBar');
+            const det = document.getElementById('trunkBranchCollectSyncDetail');
+            if (panel) panel.style.display = visible ? 'block' : 'none';
+            if (st) {
+                st.textContent = statusText || '';
+                if (tone === 'err') st.style.color = '#dc3545';
+                else if (tone === 'ok') st.style.color = '#198754';
+                else st.style.color = 'var(--text-color,#333)';
+            }
+            if (bar) bar.style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
+            if (det) det.textContent = detailText || '';
+        }
+
+        function trunkBranchSyncPlanKey(plan) {
+            return (statsWindowMode || '') + '|' + plan.steps.map(function (s) {
+                return s.kind + ':' + s.label;
+            }).join(',');
+        }
+
+        async function ensureTrunkBranchCollectSynced(force) {
+            const plan = collectTrunkBranchSyncPlan();
+            const key = trunkBranchSyncPlanKey(plan);
+            if (!force && _trunkBranchSyncPromise && _trunkBranchSyncPlanKey === key) {
+                return _trunkBranchSyncPromise;
+            }
+            _trunkBranchSyncPlanKey = key;
+            const runId = ++_trunkBranchSyncRunId;
+            const t = translations[currentLang] || {};
+            const total = plan.steps.length;
+            if (!total) {
+                setTrunkBranchCollectSyncUi(false, '', 0, '', null);
+                return { operlogOk: 0, boardOk: 0, total: 0 };
+            }
+
+            _trunkBranchSyncPromise = (async function () {
+                let done = 0;
+                let operlogOk = 0;
+                let boardOk = 0;
+                const wm = statsWindowMode || 'seventeen';
+                const logLines = [];
+                setTrunkBranchCollectSyncUi(true, (t.trunk_branch_sync_title || '正在重拉干线/支线数据') + '…', 0, '', null);
+
+                for (let i = 0; i < plan.steps.length; i++) {
+                    if (runId !== _trunkBranchSyncRunId) {
+                        throw new Error('cancelled');
                     }
-                    renderDailyCenterCollectSplitChart(data);
-                })
-                .catch(err => {
-                    console.error('loadDailyCenterCollectSplitData', err);
+                    const step = plan.steps[i];
+                    const pct = Math.round(((i + 1) / total) * 100);
+                    const phase = step.kind === 'operlog'
+                        ? (t.trunk_branch_sync_operlog || 'operatelog')
+                        : (t.trunk_branch_sync_board || '集包看板');
+                    setTrunkBranchCollectSyncUi(
+                        true,
+                        phase + ' ' + (done + 1) + '/' + total + ' · ' + step.label,
+                        pct,
+                        logLines.slice(-4).join(' · '),
+                        null
+                    );
+                    try {
+                        if (step.kind === 'operlog') {
+                            const res = await fetch(withStatsWindowParams('/api/statistics/daily_packing_operlog/sync'), {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ date: step.anchor, stats_window: wm }),
+                            });
+                            const js = await res.json().catch(function () { return {}; });
+                            if (res.ok && js.success) {
+                                operlogOk += 1;
+                                logLines.push(step.label + ' op ' + (js.total != null ? js.total : 'ok'));
+                            } else {
+                                logLines.push(step.label + ' op ✗');
+                            }
+                        } else {
+                            const res = await fetch('/api/statistics/center_collect/sync_day', {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ date: step.label }),
+                            });
+                            const js = await res.json().catch(function () { return {}; });
+                            if (res.ok && js.success) {
+                                boardOk += 1;
+                                logLines.push(step.label + ' bd ' + (js.stored_rows != null ? js.stored_rows : 'ok'));
+                            } else {
+                                logLines.push(step.label + ' bd ✗');
+                            }
+                        }
+                    } catch (e) {
+                        logLines.push(step.label + ' err');
+                        console.warn('[trunkBranchSync]', step, e);
+                    }
+                    done += 1;
+                }
+
+                const summaryTpl = t.trunk_branch_sync_summary
+                    || '完成 {done}/{total} 步 · operatelog 成功 {operlog} · 看板成功 {board}';
+                const summary = summaryTpl
+                    .replace('{done}', String(done))
+                    .replace('{total}', String(total))
+                    .replace('{operlog}', String(operlogOk))
+                    .replace('{board}', String(boardOk));
+                setTrunkBranchCollectSyncUi(
+                    true,
+                    t.trunk_branch_sync_done || '同步完成，正在绘制图表…',
+                    100,
+                    summary,
+                    'ok'
+                );
+                return { operlogOk: operlogOk, boardOk: boardOk, total: total, summary: summary };
+            })();
+
+            try {
+                return await _trunkBranchSyncPromise;
+            } catch (e) {
+                if (String(e.message) !== 'cancelled') {
+                    setTrunkBranchCollectSyncUi(true, (t.trunk_branch_sync_fail || '同步失败') + ': ' + e.message, 0, '', 'err');
+                }
+                throw e;
+            }
+        }
+
+        async function loadDailyCenterCollectSplitData(opts) {
+            opts = opts || {};
+            const r = dailyPackingChartsRangeForFetch();
+            const canvas = document.getElementById('dailyCenterCollectSplitChart');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                const t0 = translations[currentLang] || {};
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText(t0.daily_packing_chart_loading || '加载中…', canvas.width / 2, canvas.height / 2);
+            }
+            try {
+                if (!opts.skipSync) {
+                    await ensureTrunkBranchCollectSynced(false);
+                }
+                const u = withStatsWindowParams('/api/statistics/daily_center_collect_split', trunkBranchCollectFetchParams({
+                    start_date: r.start,
+                    end_date: r.end
+                }));
+                const response = await fetch(u, { cache: 'no-store', credentials: 'same-origin' });
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const data = await response.json();
+                if (data.error) {
+                    console.error('daily_center_collect_split:', data.error);
+                    if (typeof showMessage === 'function') showMessage(String(data.error), 'error');
                     renderDailyCenterCollectSplitChart(null);
-                });
+                    return;
+                }
+                renderDailyCenterCollectSplitChart(data);
+            } catch (err) {
+                console.error('loadDailyCenterCollectSplitData', err);
+                renderDailyCenterCollectSplitChart(null);
+            }
+        }
+
+        async function loadCenterCollectWeekComparisonData(opts) {
+            opts = opts || {};
+            const r = wowChartsWeekRangeForFetch();
+            const qp = trunkBranchCollectFetchParams({});
+            if (currentDate) qp.end_date = currentDate;
+            if (r.week_start) qp.week_start = r.week_start;
+            if (r.week_end) qp.week_end = r.week_end;
+            const canvas = document.getElementById('centerCollectWeekComparisonChart');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                const t0 = translations[currentLang] || {};
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText(t0.daily_packing_chart_loading || '加载中…', canvas.width / 2, canvas.height / 2);
+            }
+            try {
+                if (!opts.skipSync) {
+                    await ensureTrunkBranchCollectSynced(false);
+                }
+                const u = withStatsWindowParams('/api/statistics/center_collect_week_comparison', qp);
+                const response = await fetch(u, { cache: 'no-store', credentials: 'same-origin' });
+                if (!response.ok) {
+                    const j = await response.json().catch(function () { return {}; });
+                    throw new Error(j.error || ('HTTP ' + response.status));
+                }
+                const data = await response.json();
+                if (data && !Array.isArray(data) && data.error) {
+                    console.error('center_collect_week_comparison:', data.error);
+                    if (typeof showMessage === 'function') showMessage(String(data.error), 'error');
+                    renderCenterCollectWeekComparisonChart(null);
+                    return;
+                }
+                const weeks = Array.isArray(data) ? data : (data.weeks || []);
+                renderCenterCollectWeekComparisonChart(weeks);
+            } catch (error) {
+                console.error('Error fetching center collect week comparison:', error);
+                try {
+                    const canvas = document.getElementById('centerCollectWeekComparisonChart');
+                    if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.font = '16px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillStyle = '#dc3545';
+                        ctx.fillText(translations[currentLang].error_loading_data || '加载数据出错', canvas.width / 2, canvas.height / 2);
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        }
+
+        async function loadTrunkBranchChartsWithSync() {
+            try {
+                await ensureTrunkBranchCollectSynced(true);
+                await Promise.all([
+                    loadDailyCenterCollectSplitData({ skipSync: true }),
+                    loadCenterCollectWeekComparisonData({ skipSync: true }),
+                ]);
+            } catch (e) {
+                console.error('loadTrunkBranchChartsWithSync', e);
+            }
         }
 
         function renderDailyCenterCollectSplitChart(data) {
@@ -7275,47 +7788,6 @@
             });
         }
 
-        function loadCenterCollectWeekComparisonData() {
-            const r = wowChartsWeekRangeForFetch();
-            const qp = {};
-            if (currentDate) qp.end_date = currentDate;
-            if (r.week_start) qp.week_start = r.week_start;
-            if (r.week_end) qp.week_end = r.week_end;
-            const u = withStatsWindowParams('/api/statistics/center_collect_week_comparison', qp);
-            fetch(u)
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(j => Promise.reject(new Error(j.error || ('HTTP ' + response.status))));
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data && !Array.isArray(data) && data.error) {
-                        console.error('center_collect_week_comparison:', data.error);
-                        if (typeof showMessage === 'function') showMessage(String(data.error), 'error');
-                        renderCenterCollectWeekComparisonChart(null);
-                        return;
-                    }
-                    renderCenterCollectWeekComparisonChart(data);
-                })
-                .catch(error => {
-                    console.error('Error fetching center collect week comparison:', error);
-                    try {
-                        const canvas = document.getElementById('centerCollectWeekComparisonChart');
-                        if (canvas) {
-                            const ctx = canvas.getContext('2d');
-                            ctx.clearRect(0, 0, canvas.width, canvas.height);
-                            ctx.font = '16px Arial';
-                            ctx.textAlign = 'center';
-                            ctx.fillStyle = '#dc3545';
-                            ctx.fillText(translations[currentLang].error_loading_data || '加载数据出错', canvas.width / 2, canvas.height / 2);
-                        }
-                    } catch (e) {
-                        console.error(e);
-                    }
-                });
-        }
-
         function renderCenterCollectWeekComparisonChart(data) {
             const canvasEl = document.getElementById('centerCollectWeekComparisonChart');
             if (!canvasEl) return;
@@ -8408,9 +8880,6 @@
             loadWeeklyWaybillTrendData();
             loadDailyTrendData();
             loadWeekComparisonData();
-            if (typeof loadCenterCollectWeekComparisonData === 'function') {
-                loadCenterCollectWeekComparisonData();
-            }
             if (typeof loadPackingManualDeviceWeekComparisonData === 'function') {
                 loadPackingManualDeviceWeekComparisonData();
             }

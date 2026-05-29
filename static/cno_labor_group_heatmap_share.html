@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小组 × 小时产能热力图</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            background: var(--body-bg, #f5f7fb);
+            color: var(--text-color, #333);
+            margin: 0;
+            padding: clamp(12px, 3vw, 24px);
+            line-height: 1.5;
+        }
+
+        .wrap {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--card-bg, #fff);
+            border-radius: 10px;
+            padding: 16px 18px 20px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 18px;
+            color: var(--primary-color, #4361ee);
+        }
+
+        .meta {
+            font-size: 13px;
+            color: var(--text-muted, #666);
+            margin-bottom: 12px;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .btn {
+            padding: 6px 14px;
+            font-size: 13px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #fff;
+        }
+
+        .btn-primary { background: #4361ee; }
+        .btn-muted { background: #6c757d; }
+        .btn-success { background: #198754; }
+        .btn:disabled { opacity: 0.6; cursor: wait; }
+
+        #status {
+            font-size: 12px;
+            min-height: 18px;
+            color: var(--text-muted, #666);
+            margin-bottom: 8px;
+        }
+
+        #heatmapScroll {
+            overflow: auto;
+            max-height: 75vh;
+            border: 1px solid var(--border-color, #e9ecef);
+            border-radius: 6px;
+            padding: 8px;
+            background: var(--card-bg, #fff);
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: var(--text-muted, #666);
+        }
+
+        .legend-bar {
+            display: inline-block;
+            width: 120px;
+            height: 10px;
+            border-radius: 4px;
+            background: linear-gradient(to right, var(--table-stripe, #e9ecef), hsl(217, 82%, 42%));
+            border: 1px solid var(--border-color, #dee2e6);
+        }
+
+        .err {
+            padding: 12px;
+            color: #842029;
+            background: #f8d7da;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <h1 id="pageTitle">小组 × 小时产能热力图</h1>
+        <div class="meta" id="pageMeta">加载中…</div>
+        <div class="toolbar">
+            <button type="button" class="btn btn-muted" id="btnCopyLink">复制本页链接</button>
+            <button type="button" class="btn btn-success" id="btnOpenStats">打开完整统计页</button>
+            <button type="button" class="btn btn-primary" id="btnRefresh">刷新数据</button>
+        </div>
+        <div id="status"></div>
+        <div class="legend">
+            <span>强度</span>
+            <span class="legend-bar"></span>
+            <span>低 → 高</span>
+        </div>
+        <div id="heatmapScroll">
+            <div id="heatmapGrid"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/cno_labor_group_heatmap.js"></script>
+    <script>
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            const state = {
+                date: params.get('date') || '',
+                stats_window: params.get('stats_window') || 'seventeen',
+                count_mode: params.get('count_mode') || 'raw',
+            };
+
+            const elStatus = document.getElementById('status');
+            const elMeta = document.getElementById('pageMeta');
+            const elGrid = document.getElementById('heatmapGrid');
+
+            function windowLabel(wm) {
+                if (wm === 'calendar') return '自然日（0–24h）';
+                if (wm === 'business') return '5:00–次日5:00';
+                return '17:00–次日17:00';
+            }
+
+            function countLabel(cm) {
+                return cm === 'deduped' ? '去重' : '逐条';
+            }
+
+            function buildShareUrl() {
+                const q = new URLSearchParams();
+                if (state.date) q.set('date', state.date);
+                q.set('stats_window', state.stats_window || 'seventeen');
+                q.set('count_mode', state.count_mode || 'raw');
+                return window.location.origin + '/share/cno-labor-group-heatmap?' + q.toString();
+            }
+
+            function buildStatsUrl() {
+                const q = new URLSearchParams();
+                if (state.date) q.set('date', state.date);
+                return '/statistics' + (q.toString() ? '?' + q.toString() : '');
+            }
+
+            function setStatus(msg, tone) {
+                elStatus.textContent = msg || '';
+                if (tone === 'err') elStatus.style.color = '#dc3545';
+                else if (tone === 'ok') elStatus.style.color = '#198754';
+                else elStatus.style.color = 'var(--text-muted,#666)';
+            }
+
+            async function loadData() {
+                setStatus('正在加载…');
+                elGrid.innerHTML = '';
+                const q = new URLSearchParams();
+                if (state.date) q.set('date', state.date);
+                q.set('stats_window', state.stats_window);
+                q.set('count_mode', state.count_mode);
+                try {
+                    const res = await fetch('/api/statistics/cno_labor_group_hourly?' + q.toString(), {
+                        credentials: 'same-origin',
+                    });
+                    const data = await res.json().catch(function () { return {}; });
+                    if (res.status === 401) {
+                        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
+                        return;
+                    }
+                    if (res.status === 403) {
+                        elGrid.innerHTML = '<div class="err">无权限查看统计页数据</div>';
+                        setStatus('权限不足', 'err');
+                        return;
+                    }
+                    if (!res.ok) {
+                        throw new Error(data.error || ('HTTP ' + res.status));
+                    }
+                    state.date = data.date || state.date;
+                    state.stats_window = data.stats_window || state.stats_window;
+                    state.count_mode = data.count_mode || state.count_mode;
+                    elMeta.textContent =
+                        '运营日 ' + (data.date || '—')
+                        + ' · ' + windowLabel(data.stats_window)
+                        + ' · ' + countLabel(data.count_mode)
+                        + ' · 更新 ' + new Date().toLocaleString();
+                    document.title = '小组热力图 ' + (data.date || '');
+                    const ok = window.CnoLaborGroupHeatmap.render(elGrid, data, {});
+                    setStatus(ok ? '数据已加载' : '暂无数据', ok ? 'ok' : 'err');
+                } catch (e) {
+                    elGrid.innerHTML = '<div class="err">' + (e.message || e) + '</div>';
+                    setStatus('加载失败', 'err');
+                }
+            }
+
+            document.getElementById('btnRefresh').addEventListener('click', loadData);
+            document.getElementById('btnOpenStats').addEventListener('click', function () {
+                window.location.href = buildStatsUrl();
+            });
+            document.getElementById('btnCopyLink').addEventListener('click', function () {
+                const url = buildShareUrl();
+                const done = function () { setStatus('链接已复制', 'ok'); };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(url).then(done).catch(function () {
+                        window.prompt('复制链接', url);
+                    });
+                } else {
+                    window.prompt('复制链接', url);
+                }
+            });
+
+            loadData();
+        })();
+    </script>
+</body>
+
+</html>
