@@ -113,6 +113,13 @@ def _apply_trusted_proxy_headers():
 
 _apply_trusted_proxy_headers()
 
+try:
+    from license_client import bootstrap_license_server_at_startup
+
+    bootstrap_license_server_at_startup()
+except Exception as _lic_boot_err:
+    print(f"[LICENSE] startup bootstrap skipped: {_lic_boot_err}", flush=True)
+
 
 def _license_request_exempt() -> bool:
     """不拦截的路径（健康检查、静态、登录、首次激活等）。"""
@@ -167,11 +174,28 @@ def _license_enforce_gate():
         ok, reason = False, str(e)
     if ok:
         return None
+    hint = ""
+    try:
+        from license_client import license_server_url_effective, probe_license_server
+
+        up, eff, err = probe_license_server()
+        eff = eff or license_server_url_effective() or base
+        if not up:
+            hint = (
+                f"<p>许可服务不可达。请运行 <code>run_license_server.bat</code>，"
+                f"或用 <code>start_with_monitor.bat</code>（已设 LICENSE_AUTO_START_SERVER 时会自动起 8088）。"
+                f"</p><p>配置: <code>{base}</code>"
+                f"{(' · 探测: ' + err) if err else ''}</p>"
+            )
+        elif eff and eff.rstrip('/') != (base or '').rstrip('/'):
+            hint = f"<p>实际连到: <code>{eff}</code>（内网 IP 已自动改用本机 127.0.0.1）</p>"
+    except Exception:
+        pass
     if request.path.startswith("/api/"):
         return jsonify({"ok": False, "error": "license", "reason": reason}), 403
     return (
         "<h1>许可证无效或已过期</h1><p>请检查 LICENSE_DEVICE_TOKEN 与许可服务状态。</p>"
-        f"<p>原因: {reason}</p>",
+        f"<p>原因: {reason}</p>{hint}",
         403,
         {"Content-Type": "text/html; charset=utf-8"},
     )
@@ -2180,6 +2204,15 @@ def api_statistics_daily_packing_split():
                     )
                 else:
                     sync_res = _dp_oper.read_daily_packing_operlog_anchor(d, window_mode)
+                    if (
+                        not sync_res.get('success')
+                        and count_mode in ('raw', 'deduped')
+                        and (os.environ.get('STATS_OPERLOG_AUTO_FILL') or '1').strip().lower()
+                        not in ('0', 'false', 'no', 'off')
+                    ):
+                        sync_res = _dp_oper.sync_daily_packing_operlog_anchor(
+                            d, window_mode, force=True
+                        )
                 if not sync_res.get('success'):
                     if not sync_operlog:
                         operlog_cache_misses += 1
@@ -2325,6 +2358,42 @@ def api_statistics_center_collect_sync_day():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e), 'date': date_str}), 500
+
+
+@app.route('/api/statistics/center_collect/sync_hour', methods=['POST'])
+def api_statistics_center_collect_sync_hour():
+    """统计页：拉取单个 LA 日历日某一整点的集包看板并入库。"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': '未登录'}), 401
+    if not check_page_permission('statistics'):
+        return jsonify({'success': False, 'error': '无权限'}), 403
+    data = request.get_json(silent=True) or {}
+    date_str = (data.get('date') or request.args.get('date') or '').strip()[:10]
+    if not date_str:
+        return jsonify({'success': False, 'error': '请提供 date (YYYY-MM-DD)'}), 400
+    hour_raw = data.get('hour')
+    try:
+        h = int(hour_raw)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'hour 必须是 0~23 的整数'}), 400
+    if not (0 <= h <= 23):
+        return jsonify({'success': False, 'error': 'hour 必须是 0~23 的整数'}), 400
+    try:
+        import sync_center_collect as _cc
+        result = _cc.fetch_center_collect_hour(date_str, h)
+        ok = bool(result.get('success'))
+        return jsonify({
+            'success': ok,
+            'date': date_str,
+            'hour': h,
+            'stored_rows': int(result.get('stored_rows') or 0),
+            'message': f"{date_str} {h:02d}:00 入库 {result.get('stored_rows', 0)} 行",
+            'detail': result,
+        }), (200 if ok else 500)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e), 'date': date_str, 'hour': h}), 500
 
 
 def _gofo_collect_biz_day_trunk_branch(

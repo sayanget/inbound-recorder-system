@@ -10,14 +10,19 @@
   LICENSE_GRACE_HOURS — 许可服务不可达时的宽限小时，默认 24（仅网络/超时类失败）
   LICENSE_NO_GRACE_ERRORS — 命中则不走宽限，默认 revoked,device_revoked,expired,invalid_token
   LICENSE_GRACE_ON_REVOKE — 1 时吊销/过期也允许宽限（旧行为），默认关
+  LICENSE_SERVER_PREFER_LOOPBACK — 默认 1：同机部署时若 URL 为内网 IP，自动再试 127.0.0.1
 """
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import os
 import socket
+import subprocess
+import sys
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse, urlunparse
 
 import requests
 
@@ -28,6 +33,7 @@ _verify_cache: Dict[str, Any] = {
     "checked_at": 0.0,
 }
 _last_ok_at: float = 0.0
+_last_working_base: str = ""
 
 
 def _cache_ttl() -> float:
@@ -62,6 +68,152 @@ def _grace_seconds() -> float:
     return max(0.0, hours) * 3600.0
 
 
+def _prefer_loopback_enabled() -> bool:
+    return (os.environ.get("LICENSE_SERVER_PREFER_LOOPBACK") or "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
+def _normalize_license_url(raw: str) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    if "://" not in s:
+        s = "http://" + s
+    return s.rstrip("/")
+
+
+def _is_loopback_host(host: str) -> bool:
+    h = (host or "").strip().lower()
+    if h in ("localhost", "127.0.0.1", "::1"):
+        return True
+    try:
+        return ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_private_lan_host(host: str) -> bool:
+    h = (host or "").strip().lower()
+    if not h or _is_loopback_host(h):
+        return False
+    try:
+        ip = ipaddress.ip_address(h)
+        return ip.is_private and not ip.is_loopback
+    except ValueError:
+        return False
+
+
+def _rewrite_license_url_host(raw: str, new_host: str) -> str:
+    parsed = urlparse(_normalize_license_url(raw))
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme == "https" else 8088
+    netloc = f"{new_host}:{port}" if port else new_host
+    return urlunparse(
+        (parsed.scheme or "http", netloc, parsed.path or "", "", parsed.query, "")
+    ).rstrip("/")
+
+
+def license_server_url_configured() -> str:
+    return _normalize_license_url(os.environ.get("LICENSE_SERVER_URL") or "")
+
+
+def license_server_url_candidates() -> List[str]:
+    """可尝试的许可服务根 URL（同机时内网 IP 会追加 127.0.0.1 / localhost）。"""
+    raw = license_server_url_configured()
+    if not raw:
+        return []
+    parsed = urlparse(raw)
+    host = (parsed.hostname or "").lower()
+    port = parsed.port or (443 if parsed.scheme == "https" else 8088)
+    scheme = parsed.scheme or "http"
+
+    out: List[str] = []
+
+    def add(u: str) -> None:
+        u = (u or "").rstrip("/")
+        if u and u not in out:
+            out.append(u)
+
+    add(raw)
+    if _prefer_loopback_enabled() and _is_private_lan_host(host):
+        add(_rewrite_license_url_host(raw, "127.0.0.1"))
+        add(_rewrite_license_url_host(raw, "localhost"))
+    elif _prefer_loopback_enabled() and host and not _is_loopback_host(host):
+        try:
+            infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+            local_ips = set()
+            for info in socket.getaddrinfo(socket.gethostname(), None):
+                try:
+                    local_ips.add(info[4][0])
+                except (IndexError, TypeError):
+                    pass
+            for info in infos:
+                try:
+                    resolved = info[4][0]
+                except (IndexError, TypeError):
+                    continue
+                if resolved in local_ips or resolved.startswith("127."):
+                    add(_rewrite_license_url_host(raw, "127.0.0.1"))
+                    add(_rewrite_license_url_host(raw, "localhost"))
+                    break
+        except OSError:
+            pass
+    return out
+
+
+def license_server_url_effective() -> str:
+    if _last_working_base:
+        return _last_working_base
+    cands = license_server_url_candidates()
+    return cands[0] if cands else ""
+
+
+def probe_license_server(timeout: float = 2.0) -> Tuple[bool, str, str]:
+    """GET /health；返回 (可达, 实际使用的 base, 错误说明)。"""
+    global _last_working_base
+    last_err = ""
+    for base in license_server_url_candidates():
+        try:
+            r = requests.get(f"{base}/health", timeout=timeout)
+            if r.status_code == 200:
+                try:
+                    js = r.json()
+                    if js.get("ok"):
+                        _last_working_base = base
+                        return True, base, ""
+                except Exception:
+                    _last_working_base = base
+                    return True, base, ""
+            last_err = f"http_{r.status_code} @ {base}"
+        except Exception as e:
+            last_err = f"{e} @ {base}"
+    return False, "", last_err or "no candidates"
+
+
+def _license_post(path: str, payload: dict, timeout: float) -> Tuple[requests.Response, str]:
+    global _last_working_base
+    last_exc: Optional[Exception] = None
+    for base in license_server_url_candidates():
+        try:
+            r = requests.post(
+                f"{base}{path}",
+                json=payload,
+                timeout=timeout,
+            )
+            _last_working_base = base
+            return r, base
+        except requests.RequestException as e:
+            last_exc = e
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("LICENSE_SERVER_URL not set")
+
+
 def device_fingerprint() -> str:
     """部署实例稳定指纹（非硬件序列号，用于绑定激活名额）。"""
     parts = [
@@ -89,18 +241,13 @@ def resolve_device_token() -> str:
         return ""
 
 
-def _license_server_url() -> str:
-    return (os.environ.get("LICENSE_SERVER_URL") or "").strip().rstrip("/")
-
-
 def _verify_remote(token: str) -> Tuple[bool, str, Dict[str, Any]]:
-    base = _license_server_url()
-    if not base or not token:
+    if not license_server_url_configured() or not token:
         return True, "unconfigured", {}
     try:
-        r = requests.post(
-            f"{base}/v1/verify",
-            json={"device_token": token},
+        r, _base = _license_post(
+            "/v1/verify",
+            {"device_token": token},
             timeout=15,
         )
         ct = r.headers.get("content-type") or ""
@@ -123,8 +270,7 @@ def verify_license() -> Tuple[bool, str]:
     global _last_ok_at, _verify_cache
 
     token = resolve_device_token()
-    base = _license_server_url()
-    if not base or not token:
+    if not license_server_url_configured() or not token:
         _verify_cache = {
             "ok": True,
             "reason": "unconfigured",
@@ -167,14 +313,13 @@ def activate_license(
     license_key: str, fingerprint: Optional[str] = None
 ) -> Tuple[bool, str, dict]:
     """首次/重新激活：成功时响应含 device_token。"""
-    base = _license_server_url()
-    if not base:
+    if not license_server_url_configured():
         return False, "LICENSE_SERVER_URL not set", {}
     fp = (fingerprint or device_fingerprint()).strip()
     try:
-        r = requests.post(
-            f"{base}/v1/activate",
-            json={
+        r, _base = _license_post(
+            "/v1/activate",
+            {
                 "license_key": license_key.strip(),
                 "device_fingerprint": fp[:128],
             },
@@ -208,10 +353,15 @@ def license_status() -> dict:
         "yes",
         "on",
     )
-    base = _license_server_url()
+    configured_url = license_server_url_configured()
     tok = resolve_device_token()
-    configured = bool(base and tok)
+    configured = bool(configured_url and tok)
     fp = device_fingerprint()
+    reachable, eff_url, probe_err = probe_license_server() if configured_url else (
+        False,
+        "",
+        "",
+    )
 
     if not configured:
         return {
@@ -224,6 +374,10 @@ def license_status() -> dict:
             "token_from_env": bool((os.environ.get("LICENSE_DEVICE_TOKEN") or "").strip()),
             "expires_at": None,
             "label": None,
+            "server_url": configured_url,
+            "server_url_effective": eff_url,
+            "server_reachable": reachable,
+            "server_probe_error": probe_err,
         }
 
     ok, reason = verify_license()
@@ -239,11 +393,17 @@ def license_status() -> dict:
         "expires_at": detail.get("expires_at"),
         "label": detail.get("label"),
         "cache_age_seconds": int(time.time() - float(_verify_cache.get("checked_at") or 0)),
+        "server_url": configured_url,
+        "server_url_effective": license_server_url_effective() or eff_url,
+        "server_reachable": reachable,
+        "server_probe_error": probe_err,
+        "server_url_candidates": license_server_url_candidates(),
         "policy": {
             "verify_cache_seconds": int(_cache_ttl()),
             "grace_hours": _grace_seconds() / 3600.0,
             "grace_on_revoke": _grace_on_revoke_enabled(),
             "no_grace_errors": sorted(_no_grace_errors()),
+            "prefer_loopback": _prefer_loopback_enabled(),
         },
     }
 
@@ -251,3 +411,86 @@ def license_status() -> dict:
 def invalidate_verify_cache() -> None:
     global _verify_cache
     _verify_cache["checked_at"] = 0.0
+
+
+def _license_bind_port() -> int:
+    try:
+        return int(os.environ.get("LICENSE_BIND_PORT", "8088"))
+    except (TypeError, ValueError):
+        return 8088
+
+
+def _license_auto_start_enabled() -> bool:
+    if (os.environ.get("LICENSE_AUTO_START_SERVER") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return True
+    return (os.environ.get("LICENSE_ENFORCE") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def is_license_server_port_open(port: Optional[int] = None) -> bool:
+    port = port if port is not None else _license_bind_port()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def ensure_license_server_running(wait_seconds: float = 15.0) -> bool:
+    """同机未监听 8088 时拉起 license_server.app（LICENSE_ENFORCE 或 LICENSE_AUTO_START_SERVER）。"""
+    port = _license_bind_port()
+    if not _license_auto_start_enabled():
+        return is_license_server_port_open(port)
+    if is_license_server_port_open(port):
+        return True
+    root = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(root, "license_server_stdout.log")
+    python_cmd = sys.executable or "python"
+    env = os.environ.copy()
+    env.setdefault("LICENSE_BIND_HOST", "0.0.0.0")
+    env["LICENSE_BIND_PORT"] = str(port)
+    env["PYTHONIOENCODING"] = "utf-8"
+    try:
+        with open(log_path, "a", encoding="utf-8") as logf:
+            logf.write(f"\n--- License server auto-start {time.ctime()} ---\n")
+            logf.flush()
+            flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            subprocess.Popen(
+                [python_cmd, "-m", "license_server.app"],
+                stdout=logf,
+                stderr=logf,
+                cwd=root,
+                env=env,
+                creationflags=flags,
+            )
+    except Exception:
+        return False
+    deadline = time.time() + max(1.0, wait_seconds)
+    while time.time() < deadline:
+        if is_license_server_port_open(port):
+            return True
+        time.sleep(0.5)
+    return is_license_server_port_open(port)
+
+
+def bootstrap_license_server_at_startup() -> bool:
+    """业务进程启动时调用一次；失败时打印提示，不阻断 import。"""
+    if not _license_auto_start_enabled():
+        return is_license_server_port_open()
+    if not (os.environ.get("LICENSE_SERVER_URL") or "").strip():
+        return False
+    ok = ensure_license_server_running()
+    if not ok:
+        print(
+            f"[LICENSE] 许可服务 127.0.0.1:{_license_bind_port()} 未就绪；"
+            "请运行 run_license_server.bat 或 start_with_monitor.bat",
+            flush=True,
+        )
+    return ok

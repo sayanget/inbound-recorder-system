@@ -872,7 +872,6 @@
                     data-lang="export_excel">导出表格</button>
                 </div>
             </div>
-            <div id="dailyPackingCountHint" style="display:none; margin:0 0 10px 0;"></div>
             <div id="dailyPackingOperlogSyncBar"
                 style="display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0 0 8px 0; padding:8px 10px; font-size:13px; background:var(--table-stripe,#f8f9fa); border:1px solid var(--border-color,#e9ecef); border-radius:6px;">
                 <span data-lang="daily_packing_operlog_sync_label" style="color:var(--text-muted,#666);">按运营日同步 operatelog（逐条，不去重）</span>
@@ -886,7 +885,6 @@
             <div id="dailyPackingOperlogSyncStatus" style="font-size:12px; min-height:18px; margin:0 0 8px 0; line-height:1.45;"></div>
             <div id="dailyPackingChartsRangeBar"
                 style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 10px 0; font-size:13px;">
-                <span data-lang="daily_packing_range_label" style="color:var(--text-muted, #555); max-width:420px; line-height:1.35;"></span>
                 <label style="display:inline-flex; align-items:center; gap:6px;">
                     <span data-lang="daily_packing_range_start">起</span>
                     <input type="date" id="dailyPackingChartsStart"
@@ -909,12 +907,8 @@
                 style="margin-top:14px;border:1px solid var(--border-color,#ddd);border-radius:6px;padding:8px 12px 12px;background:var(--card-bg,#fafafa);">
                 <summary style="cursor:pointer;font-weight:600;padding:4px 0;list-style-position:outside;"
                     data-lang="packing_manual_device_week_comparison_summary">（人工 / 设备）集包周环比</summary>
-                <p style="margin:8px 0 10px;font-size:12px;color:var(--text-muted,#666);line-height:1.4;"
-                    data-lang="packing_manual_device_wow_details_hint">自然周（周一至周日）；每日为 operatelog 逐条（不去重），与顶部统计窗口一致；缺缓存日为 0。</p>
                 <div id="packingMdWowWeekRangeBar"
                     style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 10px 0;font-size:13px;">
-                    <span data-lang="wow_week_range_label"
-                        style="color:var(--text-muted,#555);max-width:480px;line-height:1.35;"></span>
                     <label style="display:inline-flex;align-items:center;gap:6px;">
                         <span data-lang="wow_week_range_start">周区间起</span>
                         <input type="date" id="packingMdWowWeekStart"
@@ -953,9 +947,8 @@
             <div id="trunkBranchCollectSyncPanel" style="display:none; margin:0 0 10px 0; padding:10px 12px; background:var(--table-stripe,#f8f9fa); border-radius:6px; border:1px solid var(--border-color,#dee2e6);">
                 <div id="trunkBranchCollectSyncStatus" style="font-size:13px; line-height:1.45; color:var(--text-color,#333); min-height:18px;"></div>
                 <div style="margin-top:8px; height:8px; background:#e9ecef; border-radius:4px; overflow:hidden;">
-                    <div id="trunkBranchCollectSyncBar" style="height:100%; width:0%; background:#4361ee; transition:width 0.25s ease;"></div>
+                    <div id="trunkBranchCollectSyncBar" style="height:100%; width:0%; background:#4361ee; transition:width 0.12s linear;"></div>
                 </div>
-                <div id="trunkBranchCollectSyncDetail" style="font-size:11px; color:var(--text-muted,#666); margin-top:6px; line-height:1.4;"></div>
             </div>
             <div class="chart-container" style="height: 380px;">
                 <canvas id="dailyCenterCollectSplitChart"></canvas>
@@ -973,7 +966,6 @@
             </div>
             <div id="wowChartsWeekRangeBar"
                 style="display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:0 0 10px 0; font-size:13px;">
-                <span data-lang="wow_week_range_label" style="color:var(--text-muted, #555); max-width:480px; line-height:1.35;"></span>
                 <label style="display:inline-flex; align-items:center; gap:6px;">
                     <span data-lang="wow_week_range_start">周区间起</span>
                     <input type="date" id="wowChartsWeekStart"
@@ -1401,7 +1393,8 @@
                 daily_packing_operlog_sync_hint: "部分日期操作日志同步失败，已回退为看板分拣数据；请稍后重试或联系管理员补同步。",
                 daily_packing_incomplete_hours_hint: "部分日期小时槽不足 24 条，看板同步可能未齐全，可在管理端对区间执行 Gofo 分拣回填。",
                 daily_packing_operlog_raw_hint: "逐条：scan 217 不去重；服务每小时自动刷新当前运营日（17:00 窗口默认），无需每日手点同步。",
-                daily_packing_operlog_cache_hint: "部分日期尚无缓存（显示为 0）；系统每小时自动补当前运营日，历史日可点「同步该日」。",
+                daily_packing_operlog_cache_hint: "部分日期库内尚无 operlog（显示为 0）。打开页面会自动补拉；历史日可点「同步该日」。各电脑须统一顶部统计窗口（17:00/自然日）。",
+                stats_window_consistency_hint: "统计窗口按本机浏览器记忆，与其他电脑不一致时逐条数据会对不上，请统一点击顶部「统计窗口」。",
                 daily_packing_board_sync_btn: "同步看板",
                 daily_packing_board_cache_hint: "部分日期未缓存 Gofo 看板日汇总，当前为小时累加值，与看板人工/设备可能不一致；请点击「同步看板」。",
                 daily_packing_operlog_sync_label: "按运营日同步 operatelog（逐条，不去重）",
@@ -1427,16 +1420,19 @@
                 packing_manual: "人工集包",
                 packing_device: "设备集包",
                 daily_center_collect_split_chart: "每日集包（干线 / 支线）",
-                daily_center_collect_split_hint: "与顶部统计口径一致。默认 operatelog 逐条（不去重）合计 + 看板 package 占比拆分干线/支线；加载时自动重拉 operatelog 与集包看板。",
+                daily_center_collect_split_hint: "与顶部统计口径一致。默认 operatelog 逐条（不去重）合计 + 看板 package 占比拆分干线/支线；先显示库内数据，后台重拉完成后自动刷新。",
                 daily_center_collect_split_tooltip_footer: "（占比 = 分项 / 当日干线与支线合计；合计=人工+设备）",
                 collect_trunk_label: "干线",
                 collect_branch_label: "支线",
                 center_collect_week_comparison_chart: "干线/支线集包周环比",
-                center_collect_week_comparison_hint: "自然周（周一至周日）；日界与顶部统计口径一致；逐条 operatelog 合计 + package 占比；加载时自动重拉数据。",
+                center_collect_week_comparison_hint: "自然周（周一至周日）；日界与顶部统计口径一致；逐条 operatelog 合计 + package 占比；先显示库内数据，后台同步完成后刷新。",
                 trunk_branch_sync_title: "正在重拉干线/支线数据",
+                trunk_branch_sync_target: "目标：下方「每日集包（干线/支线）」与「干线/支线周环比」两张图",
+                trunk_branch_sync_scope: "范围：每日集包 {pack} · 周环比 {wow} · 共 {n} 个运营日",
+                trunk_branch_sync_prepare: "准备同步…",
                 trunk_branch_sync_operlog: "operatelog",
                 trunk_branch_sync_board: "集包看板",
-                trunk_branch_sync_done: "同步完成，正在绘制图表…",
+                trunk_branch_sync_done: "同步完成，已刷新图表",
                 trunk_branch_sync_fail: "同步失败",
                 trunk_branch_sync_summary: "完成 {done}/{total} 步 · operatelog 成功 {operlog} · 看板成功 {board}",
                 collect_waybills_wan_axis: "集包运单 (万)",
@@ -1735,9 +1731,12 @@
                 center_collect_week_comparison_chart: "Trunk/Branch collect — week over week",
                 center_collect_week_comparison_hint: "Calendar weeks; stats window aligned; per-scan operlog total + package share; reload re-fetches data.",
                 trunk_branch_sync_title: "Refreshing trunk/branch data",
+                trunk_branch_sync_target: "For: Daily packing (trunk/branch) and week-over-week charts below",
+                trunk_branch_sync_scope: "Scope: daily {pack} · WoW {wow} · {n} anchor day(s)",
+                trunk_branch_sync_prepare: "Preparing sync…",
                 trunk_branch_sync_operlog: "operlog",
                 trunk_branch_sync_board: "collect board",
-                trunk_branch_sync_done: "Sync done, rendering charts…",
+                trunk_branch_sync_done: "Sync done, charts refreshed",
                 trunk_branch_sync_fail: "Sync failed",
                 trunk_branch_sync_summary: "Done {done}/{total} · operlog ok {operlog} · board ok {board}",
                 collect_waybills_wan_axis: "Collect waybills (10k)",
@@ -2031,9 +2030,12 @@
                 center_collect_week_comparison_chart: "Empaque troncal/ramal — semana a semana",
                 center_collect_week_comparison_hint: "Semanas naturales; límite de día = ventana de estadísticas; total operlog por escaneo + proporción package; recarga vuelve a sincronizar.",
                 trunk_branch_sync_title: "Actualizando datos troncal/ramal",
+                trunk_branch_sync_target: "Objetivo: gráficos de empaque diario y semana a semana abajo",
+                trunk_branch_sync_scope: "Ámbito: diario {pack} · WoW {wow} · {n} día(s) ancla",
+                trunk_branch_sync_prepare: "Preparando sincronización…",
                 trunk_branch_sync_operlog: "operlog",
                 trunk_branch_sync_board: "tablero de empaque",
-                trunk_branch_sync_done: "Sincronización lista, dibujando gráficos…",
+                trunk_branch_sync_done: "Sincronización lista, gráficos actualizados",
                 trunk_branch_sync_fail: "Error de sincronización",
                 trunk_branch_sync_summary: "Hecho {done}/{total} · operlog ok {operlog} · tablero ok {board}",
                 collect_waybills_wan_axis: "Guías empaque (×10k)",
@@ -2455,8 +2457,9 @@
         function applyDailyPackingChartsRange() {
             const r = dailyPackingChartsParseRangeStrict();
             if (!r) return;
-            loadDailyPackingSplitData();
-            if (typeof loadTrunkBranchChartsWithSync === 'function') loadTrunkBranchChartsWithSync();
+            loadStatisticsPackingBundle({ forceSync: true }).catch(function (e) {
+                console.error('loadStatisticsPackingBundle', e);
+            });
         }
 
         const WOW_CHARTS_DEFAULT_WEEK_COUNT = 8;
@@ -2578,7 +2581,9 @@
                 if (pe && we) pe.value = we.value;
             })();
             loadWeekComparisonData();
-            if (typeof loadTrunkBranchChartsWithSync === 'function') loadTrunkBranchChartsWithSync();
+            loadStatisticsPackingBundle({ forceSync: true }).catch(function (e) {
+                console.error('loadStatisticsPackingBundle', e);
+            });
             if (typeof loadPackingManualDeviceWeekComparisonData === 'function') loadPackingManualDeviceWeekComparisonData();
         }
 
@@ -2593,7 +2598,9 @@
                 if (we && pe) we.value = pe.value;
             })();
             loadWeekComparisonData();
-            if (typeof loadTrunkBranchChartsWithSync === 'function') loadTrunkBranchChartsWithSync();
+            loadStatisticsPackingBundle({ forceSync: true }).catch(function (e) {
+                console.error('loadStatisticsPackingBundle', e);
+            });
             if (typeof loadPackingManualDeviceWeekComparisonData === 'function') loadPackingManualDeviceWeekComparisonData();
         }
 
@@ -3321,10 +3328,60 @@
             completionRateElement.textContent = completionRate + '%';
         }
 
+        /** 干线/支线每日+周环比：先读库出图，再后台同步（避免长时间同步导致图表一直空白） */
+        async function loadStatisticsPackingBundle(opts) {
+            opts = opts || {};
+            const reloadCharts = async function () {
+                const jobs = [];
+                if (typeof loadDailyCenterCollectSplitData === 'function') {
+                    jobs.push(loadDailyCenterCollectSplitData({ skipSync: true }));
+                }
+                if (typeof loadCenterCollectWeekComparisonData === 'function') {
+                    jobs.push(loadCenterCollectWeekComparisonData({ skipSync: true }));
+                }
+                if (typeof loadDailyPackingSplitData === 'function') {
+                    jobs.push(loadDailyPackingSplitData());
+                }
+                await Promise.all(jobs);
+            };
+            const runSyncThenRefresh = async function () {
+                if (typeof ensureTrunkBranchCollectSynced !== 'function') return;
+                try {
+                    if (opts.forceSync) {
+                        await ensureTrunkBranchCollectSynced(true, 'all');
+                        await reloadCharts();
+                        return;
+                    }
+                    await ensureTrunkBranchCollectSynced(false, 'pack');
+                    await reloadCharts();
+                    ensureTrunkBranchCollectSynced(false, 'wow_extra')
+                        .then(function () { return reloadCharts(); })
+                        .catch(function (e) {
+                            if (String(e && e.message) !== 'cancelled') {
+                                console.error('loadStatisticsPackingBundle wow sync', e);
+                            }
+                            return reloadCharts();
+                        });
+                } catch (e) {
+                    if (String(e && e.message) !== 'cancelled') {
+                        console.error('loadStatisticsPackingBundle sync', e);
+                    }
+                    await reloadCharts();
+                }
+            };
+            await reloadCharts();
+            if (opts.forceSync) {
+                await runSyncThenRefresh();
+            } else if (typeof ensureTrunkBranchCollectSynced === 'function') {
+                runSyncThenRefresh();
+            }
+        }
+
         // Load statistics data
         function loadData() {
-            if (typeof loadDailyPackingSplitData === 'function') loadDailyPackingSplitData();
-            if (typeof loadTrunkBranchChartsWithSync === 'function') loadTrunkBranchChartsWithSync();
+            loadStatisticsPackingBundle().catch(function (e) {
+                console.error('loadStatisticsPackingBundle', e);
+            });
             console.log('Loading data for date:', currentDate);
             const statsParams = currentDate ? { date: currentDate } : {};
             let url = withStatsWindowParams('/api/stats', statsParams);
@@ -6071,49 +6128,6 @@
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
             const t = translations[currentLang] || {};
-            const hintEl = document.getElementById('dailyPackingCountHint');
-            if (hintEl) {
-                hintEl.style.display = 'none';
-                hintEl.textContent = '';
-                const cm = (data && data.count_mode) || getDailyPackingCountMode();
-                const failures = Number(data && data.operlog_sync_failures) || 0;
-                const cacheMiss = Number(data && data.operlog_cache_misses) || 0;
-                const unsynced = (data && data.operlog_unsynced_dates) || [];
-                const boardFb = Number(data && data.board_fallback_days) || 0;
-                const boardMiss = Number(data && data.board_cache_misses) || 0;
-                const hourSlots = (data && data.hour_slots) || [];
-                let hintParts = [];
-                hintParts.push(t.daily_packing_count_mismatch_hint || '');
-                if (cm === 'board' && boardMiss > 0) {
-                    hintParts.push(t.daily_packing_board_cache_hint || '');
-                }
-                if (cm === 'raw') {
-                    if (failures > 0 || boardFb > 0) {
-                        hintParts.push(t.daily_packing_operlog_sync_hint || '');
-                    } else if (cacheMiss > 0) {
-                        hintParts.push(t.daily_packing_operlog_cache_hint || '');
-                        if (unsynced.length) {
-                            hintParts.push(
-                                (t.daily_packing_operlog_unsynced_hint || '') + unsynced.join(', ')
-                            );
-                        }
-                    } else {
-                        hintParts.push(t.daily_packing_operlog_raw_hint || '');
-                    }
-                } else if (hourSlots.some(function (n) { return Number(n) > 0 && Number(n) < 24; })) {
-                    hintParts.push(t.daily_packing_incomplete_hours_hint || '');
-                }
-                if (hintParts.length) {
-                    hintEl.style.display = 'block';
-                    hintEl.style.fontSize = '13px';
-                    hintEl.style.padding = '10px 12px';
-                    hintEl.style.borderRadius = '6px';
-                    hintEl.style.lineHeight = '1.45';
-                    hintEl.style.color = '#856404';
-                    hintEl.style.background = '#fff3cd';
-                    hintEl.textContent = hintParts.join(' ');
-                }
-            }
 
             if (window.dailyPackingSplitChart && typeof window.dailyPackingSplitChart.destroy === 'function') {
                 window.dailyPackingSplitChart.destroy();
@@ -6133,11 +6147,6 @@
             const manualRaw = (data.manual || []).map(v => Number(v) || 0);
             const deviceRaw = (data.device || []).map(v => Number(v) || 0);
             const isMobile = window.innerWidth < 768;
-            const cm = (data.count_mode === 'raw') ? 'raw' : 'board';
-            const modeLab = cm === 'raw'
-                ? (t.daily_packing_count_raw || '逐条（日志）')
-                : (t.daily_packing_count_board || '去重（看板）');
-            const chartTitle = (t.daily_packing_split_chart || '每日集包（人工 / 设备）') + ' · ' + modeLab;
 
             function dayTotal(i) {
                 return (manualRaw[i] || 0) + (deviceRaw[i] || 0);
@@ -6228,11 +6237,7 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { position: 'top' },
-                        title: {
-                            display: true,
-                            text: chartTitle,
-                            font: { size: isMobile ? 14 : 16 }
-                        },
+                        title: { display: false },
                         tooltip: {
                             mode: 'index',
                             intersect: false,
@@ -6249,9 +6254,6 @@
                                     const pct = t > 0 ? (raw / t) * 100 : 0;
                                     const name = context.dataset.label || '';
                                     return name + ': ' + pct.toFixed(1).replace(/\.0$/, '') + '% (' + raw.toLocaleString() + ')';
-                                },
-                                footer: function () {
-                                    return translations[currentLang].daily_packing_split_tooltip_footer || '';
                                 }
                             }
                         }
@@ -6324,15 +6326,31 @@
             return out;
         }
 
-        function collectTrunkBranchSyncPlan() {
+        function flushTrunkBranchSyncUi() {
+            return new Promise(function (resolve) {
+                requestAnimationFrame(function () {
+                    requestAnimationFrame(resolve);
+                });
+            });
+        }
+
+        function collectTrunkBranchSyncPlan(scope) {
+            scope = scope || 'all';
             const pack = dailyPackingChartsRangeForFetch();
             const wow = wowChartsWeekRangeForFetch();
             const anchorSet = new Set();
-            enumerateStatsDatesYmd(pack.start, pack.end).forEach(function (d) { anchorSet.add(d); });
-            if (wow.week_start && wow.week_end) {
-                enumerateStatsDatesYmd(wow.week_start, wow.week_end).forEach(function (d) { anchorSet.add(d); });
+            const packDates = enumerateStatsDatesYmd(pack.start, pack.end);
+            packDates.forEach(function (d) { anchorSet.add(d); });
+            if (scope === 'all' && wow.week_start && wow.week_end) {
+                enumerateStatsDatesYmd(wow.week_start, wow.week_end).forEach(function (d) {
+                    anchorSet.add(d);
+                });
+            } else if (scope === 'wow_extra' && wow.week_start && wow.week_end) {
+                enumerateStatsDatesYmd(wow.week_start, wow.week_end).forEach(function (d) {
+                    if (packDates.indexOf(d) < 0) anchorSet.add(d);
+                });
             }
-            // 从现在（最近日期）往前拉，优先 currentDate / 区间结束日
+            // 从现在（最近日期）往前拉
             const anchors = Array.from(anchorSet).sort(function (a, b) { return b.localeCompare(a); });
             const wm = statsWindowMode || 'seventeen';
             const steps = [];
@@ -6343,18 +6361,22 @@
                     steps.push({ kind: 'board', anchor: anchor, label: calDates[ci] });
                 }
             });
-            return { anchors: anchors, steps: steps };
+            return {
+                anchors: anchors,
+                steps: steps,
+                pack: { start: pack.start, end: pack.end },
+                wow: { week_start: wow.week_start, week_end: wow.week_end },
+            };
         }
 
         let _trunkBranchSyncRunId = 0;
         let _trunkBranchSyncPromise = null;
         let _trunkBranchSyncPlanKey = '';
 
-        function setTrunkBranchCollectSyncUi(visible, statusText, pct, detailText, tone) {
+        function setTrunkBranchCollectSyncUi(visible, statusText, pct, tone) {
             const panel = document.getElementById('trunkBranchCollectSyncPanel');
             const st = document.getElementById('trunkBranchCollectSyncStatus');
             const bar = document.getElementById('trunkBranchCollectSyncBar');
-            const det = document.getElementById('trunkBranchCollectSyncDetail');
             if (panel) panel.style.display = visible ? 'block' : 'none';
             if (st) {
                 st.textContent = statusText || '';
@@ -6363,7 +6385,6 @@
                 else st.style.color = 'var(--text-color,#333)';
             }
             if (bar) bar.style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
-            if (det) det.textContent = detailText || '';
         }
 
         function trunkBranchSyncPlanKey(plan) {
@@ -6372,9 +6393,9 @@
             }).join(',');
         }
 
-        async function ensureTrunkBranchCollectSynced(force) {
-            const plan = collectTrunkBranchSyncPlan();
-            const key = trunkBranchSyncPlanKey(plan);
+        async function ensureTrunkBranchCollectSynced(force, scope) {
+            const plan = collectTrunkBranchSyncPlan(scope);
+            const key = (scope || 'all') + '|' + trunkBranchSyncPlanKey(plan);
             if (!force && _trunkBranchSyncPromise && _trunkBranchSyncPlanKey === key) {
                 return _trunkBranchSyncPromise;
             }
@@ -6383,7 +6404,7 @@
             const t = translations[currentLang] || {};
             const total = plan.steps.length;
             if (!total) {
-                setTrunkBranchCollectSyncUi(false, '', 0, '', null);
+                setTrunkBranchCollectSyncUi(false, '', 0, null);
                 return { operlogOk: 0, boardOk: 0, total: 0 };
             }
 
@@ -6392,25 +6413,42 @@
                 let operlogOk = 0;
                 let boardOk = 0;
                 const wm = statsWindowMode || 'seventeen';
-                const logLines = [];
-                setTrunkBranchCollectSyncUi(true, (t.trunk_branch_sync_title || '正在重拉干线/支线数据') + '…', 0, '', null);
+                setTrunkBranchCollectSyncUi(
+                    true,
+                    (t.trunk_branch_sync_title || '正在重拉干线/支线数据') + '（0/' + total + '）…',
+                    0,
+                    null
+                );
+                await flushTrunkBranchSyncUi();
+
+                function stepLabel(step) {
+                    return step.label;
+                }
+
+                function renderProgress(step, stepIndex, elapsedSec) {
+                    const phase = step.kind === 'operlog'
+                        ? (t.trunk_branch_sync_operlog || 'operatelog')
+                        : (t.trunk_branch_sync_board || '集包看板');
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                    let status = phase + ' ' + (stepIndex + 1) + '/' + total + ' · ' + stepLabel(step);
+                    if (elapsedSec != null && elapsedSec >= 0) {
+                        status += ' (' + elapsedSec + 's)';
+                    }
+                    setTrunkBranchCollectSyncUi(true, status, pct, null);
+                }
 
                 for (let i = 0; i < plan.steps.length; i++) {
                     if (runId !== _trunkBranchSyncRunId) {
                         throw new Error('cancelled');
                     }
                     const step = plan.steps[i];
-                    const pct = Math.round(((i + 1) / total) * 100);
-                    const phase = step.kind === 'operlog'
-                        ? (t.trunk_branch_sync_operlog || 'operatelog')
-                        : (t.trunk_branch_sync_board || '集包看板');
-                    setTrunkBranchCollectSyncUi(
-                        true,
-                        phase + ' ' + (done + 1) + '/' + total + ' · ' + step.label,
-                        pct,
-                        logLines.slice(-4).join(' · '),
-                        null
-                    );
+                    let tick = null;
+                    const tStep0 = Date.now();
+                    renderProgress(step, i, 0);
+                    await flushTrunkBranchSyncUi();
+                    tick = setInterval(function () {
+                        renderProgress(step, i, Math.floor((Date.now() - tStep0) / 1000));
+                    }, 400);
                     try {
                         if (step.kind === 'operlog') {
                             const res = await fetch(withStatsWindowParams('/api/statistics/daily_packing_operlog/sync'), {
@@ -6422,9 +6460,6 @@
                             const js = await res.json().catch(function () { return {}; });
                             if (res.ok && js.success) {
                                 operlogOk += 1;
-                                logLines.push(step.label + ' op ' + (js.total != null ? js.total : 'ok'));
-                            } else {
-                                logLines.push(step.label + ' op ✗');
                             }
                         } else {
                             const res = await fetch('/api/statistics/center_collect/sync_day', {
@@ -6436,16 +6471,16 @@
                             const js = await res.json().catch(function () { return {}; });
                             if (res.ok && js.success) {
                                 boardOk += 1;
-                                logLines.push(step.label + ' bd ' + (js.stored_rows != null ? js.stored_rows : 'ok'));
-                            } else {
-                                logLines.push(step.label + ' bd ✗');
                             }
                         }
                     } catch (e) {
-                        logLines.push(step.label + ' err');
                         console.warn('[trunkBranchSync]', step, e);
+                    } finally {
+                        if (tick) clearInterval(tick);
                     }
                     done += 1;
+                    renderProgress(step, i, Math.floor((Date.now() - tStep0) / 1000));
+                    await flushTrunkBranchSyncUi();
                 }
 
                 const summaryTpl = t.trunk_branch_sync_summary
@@ -6457,9 +6492,8 @@
                     .replace('{board}', String(boardOk));
                 setTrunkBranchCollectSyncUi(
                     true,
-                    t.trunk_branch_sync_done || '同步完成，正在绘制图表…',
+                    (t.trunk_branch_sync_done || '同步完成') + ' · ' + summary,
                     100,
-                    summary,
                     'ok'
                 );
                 return { operlogOk: operlogOk, boardOk: boardOk, total: total, summary: summary };
@@ -6469,7 +6503,7 @@
                 return await _trunkBranchSyncPromise;
             } catch (e) {
                 if (String(e.message) !== 'cancelled') {
-                    setTrunkBranchCollectSyncUi(true, (t.trunk_branch_sync_fail || '同步失败') + ': ' + e.message, 0, '', 'err');
+                    setTrunkBranchCollectSyncUi(true, (t.trunk_branch_sync_fail || '同步失败') + ': ' + e.message, 0, 'err');
                 }
                 throw e;
             }
@@ -6567,16 +6601,9 @@
         }
 
         async function loadTrunkBranchChartsWithSync() {
-            try {
-                await ensureTrunkBranchCollectSynced(true);
-                await Promise.all([
-                    loadDailyCenterCollectSplitData({ skipSync: true }),
-                    loadCenterCollectWeekComparisonData({ skipSync: true }),
-                ]);
-            } catch (e) {
-                console.error('loadTrunkBranchChartsWithSync', e);
-            }
+            return loadStatisticsPackingBundle({ forceSync: true });
         }
+        window.loadTrunkBranchChartsWithSync = loadTrunkBranchChartsWithSync;
 
         function renderDailyCenterCollectSplitChart(data) {
             const canvas = document.getElementById('dailyCenterCollectSplitChart');
@@ -6705,9 +6732,6 @@
                                     const pct = t > 0 ? (raw / t) * 100 : 0;
                                     const name = context.dataset.label || '';
                                     return name + ': ' + pct.toFixed(1).replace(/\.0$/, '') + '% (' + raw.toLocaleString() + ')';
-                                },
-                                footer: function () {
-                                    return translations[currentLang].daily_center_collect_split_tooltip_footer || '';
                                 }
                             }
                         }
@@ -7829,7 +7853,6 @@
                 return (week.week_total_branch || 0) / tot * 100;
             }
 
-            const lastWeekIdx = data.length - 1;
             const trunkWan = data.map(w => (w.week_total_trunk || 0) / 10000);
             const branchWan = data.map(w => (w.week_total_branch || 0) / 10000);
 
@@ -7948,10 +7971,9 @@
                     datalabels: {
                         display: function (ctx) {
                             const i = ctx.dataIndex;
-                            if (i === lastWeekIdx) return false;
                             const p = Number(ctx.dataset.data[i]);
                             if (p === undefined || p === null || Number.isNaN(p)) return false;
-                            if (i === 0 && Number(p) === 0) return false;
+                            if (i === 0 && p === 0) return false;
                             return true;
                         },
                         anchor: 'end',
@@ -8068,22 +8090,8 @@
                                 padding: isMobile ? 5 : 10
                             }
                         },
-                        title: {
-                            display: true,
-                            text: t.center_collect_week_comparison_chart || '干线/支线集包周环比',
-                            font: { size: isMobile ? 14 : 16 },
-                            padding: {
-                                top: isMobile ? 2 : 4,
-                                bottom: isMobile ? 22 : 30
-                            }
-                        },
+                        title: { display: false },
                         tooltip: {
-                            filter: function (tooltipItem) {
-                                if (tooltipItem.datasetIndex === 2 && tooltipItem.dataIndex === lastWeekIdx) {
-                                    return false;
-                                }
-                                return true;
-                            },
                             callbacks: {
                                 title: function (context) {
                                     const weekIndex = context[0].dataIndex;
@@ -8122,12 +8130,10 @@
                                     const totalWan = (week.week_total / 10000).toFixed(2);
                                     let footer = `\n${t.week_total || '周总计'}: ${week.week_total.toLocaleString()} (${totalWan}${wanSuffix})`;
                                     footer += `\n${tl}: ${week.week_total_trunk.toLocaleString()} · ${bl}: ${week.week_total_branch.toLocaleString()}`;
-                                    if (weekIndex !== lastWeekIdx) {
-                                        const wow = activeCenterCollectWowPercent(weekIndex);
-                                        if (wow !== undefined && wow !== null && Number(wow) !== 0) {
-                                            const sign = Number(wow) >= 0 ? '+' : '';
-                                            footer += `\n${t.change_percent || '环比'}: ${sign}${wow}%`;
-                                        }
+                                    const wow = activeCenterCollectWowPercent(weekIndex);
+                                    if (wow !== undefined && wow !== null && !(weekIndex === 0 && Number(wow) === 0)) {
+                                        const sign = Number(wow) >= 0 ? '+' : '';
+                                        footer += `\n${t.change_percent || '环比'}: ${sign}${Number(wow).toFixed(1)}%`;
                                     }
                                     return footer;
                                 },
@@ -8289,7 +8295,6 @@
                 return (week.week_total_device || 0) / tot * 100;
             }
 
-            const lastWeekIdx = data.length - 1;
             const manualWan = data.map(w => (w.week_total_manual || 0) / 10000);
             const deviceWan = data.map(w => (w.week_total_device || 0) / 10000);
             const changePercentData = data.map(week => week.total_change_percent);
@@ -8407,10 +8412,9 @@
                     datalabels: {
                         display: function (ctx) {
                             const i = ctx.dataIndex;
-                            if (i === lastWeekIdx) return false;
                             const p = Number(ctx.dataset.data[i]);
                             if (p === undefined || p === null || Number.isNaN(p)) return false;
-                            if (i === 0 && Number(p) === 0) return false;
+                            if (i === 0 && p === 0) return false;
                             return true;
                         },
                         anchor: 'end',
@@ -8490,7 +8494,6 @@
             }
 
             const yBarTitle = (t.pieces || '件数') + ' (万)';
-            const chartTitle = t.packing_manual_device_week_comparison_summary || '（人工 / 设备）集包周环比';
 
             window.packingManualDeviceWeekComparisonChart = new Chart(ctx, {
                 type: 'bar',
@@ -8522,19 +8525,8 @@
                                 padding: isMobile ? 5 : 10
                             }
                         },
-                        title: {
-                            display: true,
-                            text: chartTitle,
-                            font: { size: isMobile ? 14 : 16 },
-                            padding: { top: isMobile ? 2 : 4, bottom: isMobile ? 22 : 30 }
-                        },
+                        title: { display: false },
                         tooltip: {
-                            filter: function (tooltipItem) {
-                                if (tooltipItem.datasetIndex === 2 && tooltipItem.dataIndex === lastWeekIdx) {
-                                    return false;
-                                }
-                                return true;
-                            },
                             callbacks: {
                                 title: function (context) {
                                     const weekIndex = context[0].dataIndex;
@@ -8573,12 +8565,10 @@
                                     const totalWan = (week.week_total / 10000).toFixed(2);
                                     let footer = `\n${t.week_total || '周总计'}: ${week.week_total.toLocaleString()} (${totalWan}${wanSuffix})`;
                                     footer += `\n${ml}: ${(week.week_total_manual || 0).toLocaleString()} · ${dl}: ${(week.week_total_device || 0).toLocaleString()}`;
-                                    if (weekIndex !== lastWeekIdx) {
-                                        const wow = activePackingMdWowPercent(weekIndex);
-                                        if (wow !== undefined && wow !== null && Number(wow) !== 0) {
-                                            const sign = Number(wow) >= 0 ? '+' : '';
-                                            footer += `\n${t.change_percent || '环比'}: ${sign}${wow}%`;
-                                        }
+                                    const wow = activePackingMdWowPercent(weekIndex);
+                                    if (wow !== undefined && wow !== null && !(weekIndex === 0 && Number(wow) === 0)) {
+                                        const sign = Number(wow) >= 0 ? '+' : '';
+                                        footer += `\n${t.change_percent || '环比'}: ${sign}${Number(wow).toFixed(1)}%`;
                                     }
                                     return footer;
                                 },

@@ -15,7 +15,8 @@ echo ========================================
 echo   Inbound Recorder - HA Monitor
 echo ========================================
 echo.
-echo Default ports: monitor 8081, app 8080 ^(override with MONITOR_PORT / PORT / APP_PORT^)
+echo Default ports: monitor 8081, app 8080, license 8088 ^(LICENSE_ENFORCE=1 时监控自动拉起许可服务^)
+echo Override: MONITOR_PORT / PORT / APP_PORT / LICENSE_BIND_PORT
 echo On Windows Hyper-V/WSL, 8057-8156 are often reserved — use e.g. MONITOR_PORT=18081 PORT=8780
 echo.
 

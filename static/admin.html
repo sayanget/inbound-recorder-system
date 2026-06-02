@@ -3014,8 +3014,20 @@
                 }
                 if (d.token_from_env) lines.push('Token 来源: 环境变量 LICENSE_DEVICE_TOKEN（优先）');
                 else if (d.configured) lines.push('Token 来源: 数据库 system_config');
-                if (!d.server_url_configured) {
+                if (d.server_url) {
+                    lines.push(`许可服务 URL: <code>${d.server_url}</code>`);
+                } else if (!d.server_url_configured) {
                     lines.push('<span style="color:#fd7e14">未设置 LICENSE_SERVER_URL</span>');
+                }
+                if (d.server_url_effective && d.server_url_effective !== d.server_url) {
+                    lines.push(`实际连接: <code>${d.server_url_effective}</code>（内网 IP 已回退本机）`);
+                }
+                if (d.configured && d.server_reachable === false) {
+                    lines.push(
+                        `<span style="color:#dc3545">许可服务不可达${d.server_probe_error ? '：' + d.server_probe_error : ''} — 请运行 run_license_server.bat 或 start_with_monitor.bat</span>`
+                    );
+                } else if (d.server_reachable === true) {
+                    lines.push('<span style="color:#28a745">许可服务 /health 可达</span>');
                 }
                 if (d.policy) {
                     const p = d.policy;

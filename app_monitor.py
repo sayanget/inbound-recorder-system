@@ -111,6 +111,49 @@ APP_PORT, MONITOR_PORT = _resolve_win32_listen_ports(MONITOR_HOST, APP_PORT, MON
 os.environ["PORT"] = str(APP_PORT)
 os.environ["MONITOR_PORT"] = str(MONITOR_PORT)
 
+LICENSE_PORT = _port_from_env("LICENSE_BIND_PORT", default=8088)
+
+
+def _license_auto_start_enabled() -> bool:
+    if (os.environ.get("LICENSE_AUTO_START_SERVER") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return True
+    return (os.environ.get("LICENSE_ENFORCE") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def ensure_license_server_running() -> bool:
+    """同机许可服务未监听时自动拉起（逻辑见 license_client.ensure_license_server_running）。"""
+    try:
+        from license_client import ensure_license_server_running as _ensure
+
+        os.environ.setdefault("LICENSE_BIND_PORT", str(LICENSE_PORT))
+        if not _license_auto_start_enabled():
+            return is_port_in_use(LICENSE_PORT)
+        if is_port_in_use(LICENSE_PORT):
+            return True
+        logger.info(
+            "License server not listening on 127.0.0.1:%s — starting license_server.app",
+            LICENSE_PORT,
+        )
+        ok = _ensure(wait_seconds=15.0)
+        if ok:
+            logger.info("License server is up on port %s", LICENSE_PORT)
+        else:
+            logger.warning("License server start timed out (port %s)", LICENSE_PORT)
+        return ok
+    except Exception as e:
+        logger.error("Failed to start license server: %s", e)
+        return False
+
 
 def rotate_plain_log_if_needed(path: str, max_bytes: int = LOG_MAX_BYTES, backup_count: int = LOG_BACKUP_COUNT) -> None:
     """Rotate non-logging plain text files (e.g. subprocess stdout capture) at size limit."""
@@ -192,6 +235,7 @@ class AppManager:
             if self.process and self.process.poll() is None:
                 return False, "Application is already running."
             
+            ensure_license_server_running()
             logger.info(f"Starting application: {APP_SCRIPT}")
             try:
                 env = os.environ.copy()
@@ -367,6 +411,7 @@ def supervisor_loop():
         time.sleep(10)
 
 if __name__ == '__main__':
+    ensure_license_server_running()
     threading.Thread(target=supervisor_loop, daemon=True).start()
     logger.info(
         "Monitor listening on %s:%s; managed app port=%s (set MONITOR_PORT / PORT / APP_PORT to override)",
