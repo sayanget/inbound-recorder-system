@@ -33,6 +33,159 @@ def fetch_feishu_sheet_data(token, spread_token, sheet_id):
     response.raise_for_status()
     return response.json().get('data', {}).get('valueRange', {}).get('values', [])
 
+
+def _norm_sheet_cell(cell) -> str:
+    if cell is None:
+        return ""
+    return str(cell).strip().replace("\ufeff", "").strip()
+
+
+def _is_name_header_cell(cell) -> bool:
+    u = _norm_sheet_cell(cell).upper()
+    return u in ("NAME", "姓名", "名字", "员工", "员工姓名", "OPERATOR", "操作员")
+
+
+def _find_labor_rate_col(row):
+    """返回 (列索引, 'Hourly'|'Piece')；列名不区分大小写，支持中英文。"""
+    for i, col in enumerate(row):
+        c = _norm_sheet_cell(col).lower().replace("_", " ")
+        if c in ("hourly rate", "hourlyrate", "时薪", "小时费率", "小时工资", "hourly"):
+            return i, "Hourly"
+        if c in ("price", "piece rate", "piecerate", "单价", "计件单价", "件价", "piece"):
+            return i, "Piece"
+    return -1, None
+
+
+def _find_labor_agency_col(row) -> int:
+    for i, col in enumerate(row):
+        c = _norm_sheet_cell(col).lower()
+        if c in ("agency", "agence", "company", "代理商", "劳务公司", "公司", "vendor"):
+            return i
+    return -1
+
+
+def _find_labor_name_col(row) -> int:
+    """姓名列索引（新表 A 列为考勤 ID 时 NAME 在 B 列）。"""
+    for i, col in enumerate(row):
+        if _is_name_header_cell(col):
+            return i
+    return 0
+
+
+_LABOR_NON_DATE_HEADERS = frozenset({
+    "total hours", "overtime", "cost", "hourly rate", "price",
+    "total cost aft tax", "total cost", "state", "job", "name",
+    "agency", "agence", "company", "站点/组别", "站点/枢纽", "站点", "枢纽",
+    "关联oa 流程单号", "考勤id", "考勤 id",
+})
+
+
+def _is_labor_date_header(val) -> bool:
+    s = _norm_sheet_cell(val)
+    if not s:
+        return False
+    low = s.lower()
+    if low in _LABOR_NON_DATE_HEADERS:
+        return False
+    if "total" in low and "hour" in low:
+        return False
+    if "hourly" in low and "rate" in low:
+        return False
+    if "/" in s and re.search(r"\d", s):
+        return True
+    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
+        return True
+    if re.match(r"^\d{1,2}-\d{1,2}(-\d{2,4})?$", s):
+        return True
+    return False
+
+
+def _parse_sheet_number(val) -> float:
+    """工时/费率：支持 11.50、11,50、$20.00。"""
+    s = _norm_sheet_cell(val).replace(",", ".")
+    for ch in ("$", "￥", "¥", " "):
+        s = s.replace(ch, "")
+    if not s or s in ("-", "—", "–"):
+        return 0.0
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    if s.replace(".", "", 1).isdigit():
+        return float(s)
+    return 0.0
+
+
+def _parse_labor_header_row(row):
+    """
+    识别排班表头行：含 NAME/姓名 与 Hourly Rate/Price（支持左侧新增考勤 ID 列）。
+    返回 (mode, rate_idx, agency_idx, name_idx, date_cols) 或 None。
+    """
+    if not row:
+        return None
+    name_idx = _find_labor_name_col(row)
+    if not _is_name_header_cell(row[name_idx] if name_idx < len(row) else ""):
+        if not any(_is_name_header_cell(row[i]) for i in range(min(8, len(row)))):
+            return None
+        name_idx = _find_labor_name_col(row)
+    rate_idx, mode = _find_labor_rate_col(row)
+    if rate_idx < 0 or not mode:
+        return None
+    agency_idx = _find_labor_agency_col(row)
+    date_cols = [
+        (i, _norm_sheet_cell(val))
+        for i, val in enumerate(row)
+        if _is_labor_date_header(val)
+    ]
+    return mode, rate_idx, agency_idx, name_idx, date_cols
+
+
+def _is_cno_worker_label(label: str) -> bool:
+    """(CNO…)、(CNO.H GF)…、（CNO.H）… 等劳务姓名行。"""
+    s = _norm_sheet_cell(label)
+    if not s:
+        return False
+    if re.search(r"[\(（]\s*CNO[\.\sHh]", s, re.I):
+        return True
+    if s.upper().startswith("(CNO") or s.startswith("（CNO"):
+        return True
+    return False
+
+
+def _is_cno_worker_row_at(row, name_idx: int) -> bool:
+    """数据行：按表头确定的姓名列识别 (CNO…（考勤 ID 在 A 列时不看 A 列）。"""
+    if name_idx >= 0 and name_idx < len(row) and _is_cno_worker_label(row[name_idx]):
+        return True
+    for i in range(min(5, len(row))):
+        if _is_cno_worker_label(row[i]):
+            return True
+    return False
+
+
+def _worker_label_at(row, name_idx: int) -> str:
+    if 0 <= name_idx < len(row):
+        lab = _norm_sheet_cell(row[name_idx])
+        if lab:
+            return lab
+    for i in range(min(8, len(row))):
+        if _is_cno_worker_label(row[i]):
+            return _norm_sheet_cell(row[i])
+    return _norm_sheet_cell(row[0]) if row else ""
+
+
+def _should_skip_hourly_worker(worker_label: str, row, job_idx: int) -> bool:
+    """仅跳过姓名里带 Sorter 的（计件分拣账号）；Job=SORTER 的工时行仍计入。"""
+    if re.search(r"\bSorter\b", worker_label, re.I):
+        return True
+    return False
+
+
+def _find_labor_job_col(row) -> int:
+    for i, col in enumerate(row):
+        if _norm_sheet_cell(col).lower() == "job":
+            return i
+    return -1
+
 def run_sync(link=None):
     print("--- 飞书排班数据成本核算 ---")
     
@@ -200,69 +353,58 @@ def run_sync(link=None):
     date_cols = []
     rate_idx = -1
     agency_idx = -1
-    
+    name_idx = 0
+    job_idx = -1
+    workers_parsed = 0
+    day_records = 0
+
     for row in sheet_values:
-        if not row: continue
-        
+        if not row:
+            continue
+
         row = [str(item) if item is not None else "" for item in row]
-        
-        # 1. 识别表头与计费模式
-        if len(row) > 0 and str(row[0]).strip().upper() == 'NAME':
-            # Identify rate column
-            rate_cols = [c.strip().lower() for c in row if isinstance(c, str)]
-            if 'hourly rate' in rate_cols:
-                current_mode = 'Hourly'
-                rate_idx = rate_cols.index('hourly rate')
-                date_cols = [(i, str(val).strip()) for i, val in enumerate(row) if isinstance(val, str) and '/' in val and val != '站点/枢纽']
-            elif 'price' in rate_cols:
-                current_mode = 'Piece'
-                rate_idx = rate_cols.index('price')
-                date_cols = [(i, str(val).strip()) for i, val in enumerate(row) if isinstance(val, str) and '/' in val and val != '站点/枢纽']
-            
-            for i, col in enumerate(row):
-                if isinstance(col, str) and col.strip().lower() in ['agency', 'agence', 'company']:
-                    agency_idx = i
-                    break
-        
-        # --- [NEW] 方案稳固化：在循环结束前或过程中增加校验 ---
-        elif current_mode == 'Hourly' and len(row) > 0 and (row[0].strip().startswith('(CNO') or row[0].strip().startswith('（CNO')):
-            if len(row) > rate_idx and row[rate_idx].replace('.', '', 1).isdigit():
-                rate = float(row[rate_idx])
-                agency = row[agency_idx].strip() if len(row) > agency_idx else 'Unknown'
-                if agency.upper() == 'STOX': agency = 'Storx'
-                if agency.strip() == '': agency = 'Unknown'
-                
-                for i, date_str in date_cols:
-                    hours = 0.0
-                    if i < len(row):
-                        val_str = row[i].strip()
-                        if val_str.replace('.', '', 1).isdigit():
-                            hours = float(val_str)
-                    
-                    if hours <= 0:
-                        continue 
-                        
-                    daily_regular = min(hours, 8.0)
-                    daily_ot = max(hours - 8.0, 0.0)
-                    
-                    # MATCHING FEISHU: The source sheet only calculates Daily OT (>8 hr)
-                    # Feishu formula: IF(MAX(F4:L4)>8,SUM(FILTER(F4:L4, F4:L4>8)-8),0)
-                    actual_daily_regular = daily_regular
-                    daily_cost = (actual_daily_regular * rate) + (daily_ot * rate * 1.5)
-                    
-                    if agency == 'AAS' and date_str == '3/1/26':
-                        print(f"DEBUG AAS 03-01: Name='{row[0]}', Cost={daily_cost}")
 
-                    # Skip Sorters in hourly calculation as they are piece-rate (handled by Gofo sync)
-                    if 'Sorter' in row[0]:
-                        # logging.info(f"Skipping Sorter: {row[0]}")
-                        continue
+        # 1. 识别表头（可重复出现；支持考勤 ID 列 + Hourly Rate 在 Total Hours/Overtime 之后）
+        parsed = _parse_labor_header_row(row)
+        if parsed:
+            current_mode, rate_idx, agency_idx, name_idx, date_cols = parsed
+            job_idx = _find_labor_job_col(row)
+            print(
+                f"✅ 识别表头: mode={current_mode}, name_col={name_idx}, "
+                f"rate_col={rate_idx}, agency_col={agency_idx}, job_col={job_idx}, "
+                f"dates={len(date_cols)} -> {[d[1] for d in date_cols[:5]]}..."
+            )
+            continue
 
-                    all_records.append({
-                        'Date': date_str, 'Agency': agency, 
-                        'Type': 'Hourly', 'Cost': daily_cost,
-                        'Headcount': 1
-                    })
+        elif current_mode == 'Hourly' and len(row) > 0 and _is_cno_worker_row_at(row, name_idx):
+            rate = _parse_sheet_number(row[rate_idx] if rate_idx < len(row) else "")
+            if rate <= 0:
+                continue
+            agency = row[agency_idx].strip() if agency_idx >= 0 and agency_idx < len(row) else 'Unknown'
+            if agency.upper() == 'STOX':
+                agency = 'Storx'
+            if agency.strip() == '':
+                agency = 'Unknown'
+            worker_label = _worker_label_at(row, name_idx)
+            if _should_skip_hourly_worker(worker_label, row, job_idx):
+                continue
+
+            workers_parsed += 1
+            for i, date_str in date_cols:
+                hours = _parse_sheet_number(row[i] if i < len(row) else "")
+                if hours <= 0:
+                    continue
+
+                daily_regular = min(hours, 8.0)
+                daily_ot = max(hours - 8.0, 0.0)
+                daily_cost = (daily_regular * rate) + (daily_ot * rate * 1.5)
+
+                all_records.append({
+                    'Date': date_str, 'Agency': agency,
+                    'Type': 'Hourly', 'Cost': daily_cost,
+                    'Headcount': 1
+                })
+                day_records += 1
                                 
         # 3. 计件成本核算 (Piece Rate) - DEPRECATED in favor of Gofo Sync
         elif False and current_mode == 'Piece' and len(row) > 0 and row[0].strip() == '':
@@ -286,18 +428,44 @@ def run_sync(link=None):
                                         'Headcount': 0
                                     })
 
-    # --- [NEW] 稳固化校验：如果没找到任何有效表头或日期列，中断并报错 ---
     if not current_mode:
-        return {"success": False, "error": "未能在表格中识别到必需的列 'NAME' 以及 'Hourly Rate' 或 'Price'，请检查工作表结构是否正确（需包含表头行）。"}
+        preview = []
+        for i, debug_row in enumerate(sheet_values[:8]):
+            cells = [_norm_sheet_cell(c) for c in (debug_row or [])[:12]]
+            preview.append(f"行{i + 1}: " + " | ".join(cells) if cells else f"行{i + 1}: (空)")
+        hint = "\n".join(preview)
+        return {
+            "success": False,
+            "error": (
+                "未能在表格中识别到表头行。需要包含：姓名列（NAME/姓名，可在考勤 ID 列右侧）、"
+                "费率列（Hourly Rate/时薪 或 Price/单价）、日期列（如 3/9/26 或 2026-03-09）、"
+                "代理商列（Agency/代理商）。请确认飞书链接的 sheet 与工作表一致。"
+                f"\n前 8 行预览：\n{hint}"
+            ),
+        }
     if not date_cols:
-        return {"success": False, "error": "在表头行中未识别到日期列（格式需如 3/9/26），请检查表头是否包含有效日期。"}
+        return {
+            "success": False,
+            "error": "在表头行中未识别到日期列（格式需如 3/9/26 或 2026-03-09），请检查表头是否包含有效日期。",
+        }
     if agency_idx == -1:
-        return {"success": False, "error": "未识别到代理商列（Agency/Agence/Company），请检查表头字段。"}
+        return {
+            "success": False,
+            "error": "未识别到代理商列（Agency/Agence/Company/代理商），请检查表头字段。",
+        }
 
     if not all_records:
-        msg = "未从表格中提取到有效排班数据。请确认：1. 表格包含 (CNO 开头的姓名行； 2. 对应的日期列下有工时数值。"
+        msg = (
+            "未从表格中提取到有效排班数据。请确认："
+            "1) 姓名列为 (CNO…)/(CNO.H GF)… 格式；"
+            "2) 日期列（如 5/4/26）下有工时；"
+            "3) Hourly Rate 列有费率。"
+            f"（已识别 mode={current_mode}，日期列 {len(date_cols)} 个）"
+        )
         print(msg)
         return {"success": False, "error": msg}
+
+    print(f"✅ 解析 {workers_parsed} 名员工、{day_records} 条日工时记录")
         
     df = pd.DataFrame(all_records)
     

@@ -2,8 +2,10 @@
 CNO 劳务公司 Sorter 分时产能（与 sync_cno_narrowbelt_hourly 同源 operatelog scan 217）。
 
 - 仅统计操作员名匹配「{劳务公司} Sorter {账号}」（排除 CNO 直线窄带分拣机等设备名）。
-- GF 公司：Sorter 编号 10/38/39/40 为计时 (hourly)，2/4/5 为计件 (piece)；其余劳务公司均为计件。
+- GF 公司：Sorter 编号 10/38/39/40 为计时 (hourly)，2/4/5 为计件 (piece)。
+- CNO.H 公司：Sorter 06 为计时；其余 Sorter 为计件。
 - DJ 公司：操作员「DJ storing 01」为计时组（非 Sorter 命名）。
+- 其余劳务公司 Sorter 均为计件。
 - 由窄带同步在同一时间窗拉取日志后调用 persist_hour_slot_from_rows，不重复请求 Gofo。
 """
 from __future__ import annotations
@@ -16,6 +18,8 @@ PAY_TYPE_HOURLY = "hourly"
 
 _GF_HOURLY_ACCOUNTS = frozenset({"10", "38", "39", "40"})
 _GF_PIECE_ACCOUNTS = frozenset({"2", "4", "5"})
+# 与 _norm_sorter_account 一致：「06」规范为「6」
+_CNOH_HOURLY_ACCOUNTS = frozenset({"6"})
 
 _LABOR_SORTER_RE = re.compile(r"^(.+?)\s+Sorter\s+(\S+)\s*$", re.IGNORECASE)
 
@@ -86,17 +90,24 @@ def _is_dj_company(company: str) -> bool:
     return (company or "").strip().upper() == "DJ"
 
 
+def _is_cno_h_company(company: str) -> bool:
+    c = (company or "").strip().upper()
+    return c in ("CNO.H", "CNOH") or c.replace(".", "") == "CNOH"
+
+
 def classify_labor_pay_type(company: str, account: str) -> str:
-    """GF：10/38/39/40 计时，2/4/5 计件；DJ storing 01 计时；其余均为计件。"""
+    """GF：10/38/39/40 计时，2/4/5 计件；CNO.H：06 计时；DJ storing 01 计时；其余计件。"""
     if _is_dj_company(company) and (account or "").strip().lower() == "storing 01":
         return PAY_TYPE_HOURLY
-    if not _is_gf_company(company):
-        return PAY_TYPE_PIECE
     acc = _norm_sorter_account(account)
-    if acc in _GF_HOURLY_ACCOUNTS:
-        return PAY_TYPE_HOURLY
-    if acc in _GF_PIECE_ACCOUNTS:
+    if _is_gf_company(company):
+        if acc in _GF_HOURLY_ACCOUNTS:
+            return PAY_TYPE_HOURLY
+        if acc in _GF_PIECE_ACCOUNTS:
+            return PAY_TYPE_PIECE
         return PAY_TYPE_PIECE
+    if _is_cno_h_company(company) and acc in _CNOH_HOURLY_ACCOUNTS:
+        return PAY_TYPE_HOURLY
     return PAY_TYPE_PIECE
 
 

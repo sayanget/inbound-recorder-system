@@ -728,7 +728,7 @@
                 <div style="flex:1; min-width:200px;">
                     <h3 style="margin:0;" data-lang="cno_labor_sorter_hourly_chart">CNO 劳务公司分时产能</h3>
                     <p style="margin:6px 0 0 0; font-size:12px; color:var(--text-muted,#888); line-height:1.45;"
-                        data-lang="cno_labor_sorter_hourly_sub">数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；统计劳务分拣账号扫描件数。GF：Sorter 10/38/39/40 计时，2/4/5 计件；DJ：「DJ storing 01」计时；其余公司 Sorter 均为计件。计数口径与窄带图右上角一致。</p>
+                        data-lang="cno_labor_sorter_hourly_sub">数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；统计劳务分拣账号扫描件数。GF：Sorter 10/38/39/40 计时，2/4/5 计件；CNO.H：Sorter 06 计时；DJ：「DJ storing 01」计时；其余公司 Sorter 均为计件。计数口径与窄带图右上角一致。</p>
                 </div>
                 <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
                     <button type="button" id="cnoLaborSorterSyncBtn" class="nav-btn"
@@ -1154,7 +1154,7 @@
                     <span id="tmsShuttlePivotMeta" style="font-size:12px; color:var(--text-muted, #666);"></span>
                     <button type="button" id="tmsShuttlePivotRefreshBtn" class="nav-btn"
                         style="padding:5px 12px; font-size:12px; cursor:pointer; background:#0d6efd; color:#fff; border:none; border-radius:4px;"
-                        data-lang="refresh">刷新</button>
+                        data-lang="tms_shuttle_pivot_sync_btn">同步并刷新</button>
                     <button type="button" id="tmsShuttlePivotExportCsvBtn" class="nav-btn"
                         style="padding:5px 12px; font-size:12px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;"
                         data-lang="center_collect_export_csv">导出 CSV</button>
@@ -1274,7 +1274,7 @@
                 cno_narrowbelt_stats_col_active_h: "有产时段(h)",
                 cno_narrowbelt_stats_col_mean_active: "件/h（有产）",
                 cno_labor_sorter_hourly_chart: "CNO 劳务公司分时产能",
-                cno_labor_sorter_hourly_sub: "数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；统计劳务分拣账号扫描件数。GF：Sorter 10/38/39/40 计时，2/4/5 计件；DJ：「DJ storing 01」计时；其余公司 Sorter 均为计件。计数口径与窄带图右上角一致。",
+                cno_labor_sorter_hourly_sub: "数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；统计劳务分拣账号扫描件数。GF：Sorter 10/38/39/40 计时，2/4/5 计件；CNO.H：Sorter 06 计时；DJ：「DJ storing 01」计时；其余公司 Sorter 均为计件。计数口径与窄带图右上角一致。",
                 cno_labor_sorter_hourly_title: "劳务公司 Sorter 分时件数（每小时产能）",
                 load_labor_sorter_error: "加载劳务公司分时数据出错:",
                 render_labor_sorter_error: "渲染劳务公司分时图表出错:",
@@ -1475,6 +1475,10 @@
                 center_collect_table_title: "累计数据（按目的中心 × 时段）",
                 tms_shuttle_pivot_title: "短驳发车累计（流向 × 实际发车时段）",
                 tms_shuttle_pivot_hint: "按所选日历日 00:00～23:59 的实际发车汇总到 0～23 点列（含可能落在前一日 record_date 的同步行）。业务窗 05:00～次日 04:59 见环境变量 GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1。",
+                tms_shuttle_pivot_sync_btn: "同步并刷新",
+                tms_shuttle_pivot_syncing: "正在从 TMS 同步短驳数据…",
+                tms_shuttle_pivot_sync_ok: "短驳已同步",
+                tms_shuttle_pivot_sync_fail: "短驳同步失败：",
                 center_collect_col_destin: "目的中心",
                 center_collect_col_total: "累计",
                 center_collect_row_sum: "合计",
@@ -1579,7 +1583,7 @@
                 cno_narrowbelt_stats_col_active_h: "Active slots (h)",
                 cno_narrowbelt_stats_col_mean_active: "pcs/h (active)",
                 cno_labor_sorter_hourly_chart: "CNO labor company hourly output",
-                cno_labor_sorter_hourly_sub: "Same source as narrow-belt chart (Gofo operatelog scan 217). GF: 10/38/39/40 hourly, 2/4/5 piece; DJ: \"DJ storing 01\" hourly; other Sorters piece-only.",
+                cno_labor_sorter_hourly_sub: "Same source as narrow-belt chart (Gofo operatelog scan 217). GF: 10/38/39/40 hourly, 2/4/5 piece; CNO.H: Sorter 06 hourly; DJ: \"DJ storing 01\" hourly; other Sorters piece-only.",
                 cno_labor_sorter_hourly_title: "Labor Sorter hourly output (pcs per hour)",
                 load_labor_sorter_error: "Error loading labor Sorter hourly data:",
                 render_labor_sorter_error: "Error rendering labor Sorter chart:",
@@ -1779,6 +1783,10 @@
                 center_collect_table_title: "Cumulative data (destination center × hour)",
                 tms_shuttle_pivot_title: "Shuttle dispatches (destination × actual departure hour)",
                 tms_shuttle_pivot_hint: "Calendar day 00:00–23:59 actual departures → columns 0–23h (includes rows under prior record_date). Business window: env GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1.",
+                tms_shuttle_pivot_sync_btn: "Sync & refresh",
+                tms_shuttle_pivot_syncing: "Syncing shuttle data from TMS…",
+                tms_shuttle_pivot_sync_ok: "Shuttle synced",
+                tms_shuttle_pivot_sync_fail: "Shuttle sync failed: ",
                 center_collect_col_destin: "Destination",
                 center_collect_col_total: "Total",
                 center_collect_row_sum: "Total",
@@ -1878,7 +1886,7 @@
                 cno_narrowbelt_stats_col_active_h: "Franjas activas (h)",
                 cno_narrowbelt_stats_col_mean_active: "pzas/h (activas)",
                 cno_labor_sorter_hourly_chart: "Capacidad horaria empresas laborales CNO",
-                cno_labor_sorter_hourly_sub: "Misma fuente (operatelog Gofo 217). GF: 10/38/39/40 horario, 2/4/5 pieza; DJ: \"DJ storing 01\" horario; demás Sorter pieza.",
+                cno_labor_sorter_hourly_sub: "Misma fuente (operatelog Gofo 217). GF: 10/38/39/40 horario, 2/4/5 pieza; CNO.H: Sorter 06 horario; DJ: \"DJ storing 01\" horario; demás Sorter pieza.",
                 cno_labor_sorter_hourly_title: "Sorter laboral: piezas por hora",
                 load_labor_sorter_error: "Error al cargar datos horarios Sorter laboral:",
                 render_labor_sorter_error: "Error al renderizar gráfico Sorter laboral:",
@@ -2074,6 +2082,10 @@
                 center_collect_table_title: "Datos acumulados (centro destino × hora)",
                 tms_shuttle_pivot_title: "Despachos de lanzadera (destino × hora real de salida)",
                 tms_shuttle_pivot_hint: "Día natural 00:00–23:59 salidas → columnas 0–23h. Ventana negocio: variable GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY=1.",
+                tms_shuttle_pivot_sync_btn: "Sincronizar y actualizar",
+                tms_shuttle_pivot_syncing: "Sincronizando lanzadera desde TMS…",
+                tms_shuttle_pivot_sync_ok: "Lanzadera sincronizada",
+                tms_shuttle_pivot_sync_fail: "Error de sincronización: ",
                 center_collect_col_destin: "Destino",
                 center_collect_col_total: "Total",
                 center_collect_row_sum: "Total",
@@ -9556,6 +9568,49 @@
             }
             window.loadTmsShuttlePivot = loadTmsShuttlePivot;
 
+            /** 与 outbound-stats「立即同步」相同：POST /api/tms/shuttle-completed/sync 后刷新 pivot */
+            async function syncAndLoadTmsShuttlePivot() {
+                const refreshBtn = document.getElementById('tmsShuttlePivotRefreshBtn');
+                const meta = document.getElementById('tmsShuttlePivotMeta');
+                const t = translations[currentLang] || {};
+                const d = currentDate
+                    || (document.getElementById('selectedDate') && document.getElementById('selectedDate').value)
+                    || '';
+                if (refreshBtn) refreshBtn.disabled = true;
+                if (meta) meta.textContent = t.tms_shuttle_pivot_syncing || '正在从 TMS 同步短驳数据…';
+                try {
+                    const resp = await fetch('/api/tms/shuttle-completed/sync', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(d ? { date: d } : {}),
+                    });
+                    const data = await resp.json().catch(function () { return {}; });
+                    if (!resp.ok || data.success === false) {
+                        const msg = (data && (data.error || data.msg)) || ('HTTP ' + resp.status);
+                        const full = (t.tms_shuttle_pivot_sync_fail || '短驳同步失败：') + msg;
+                        if (typeof showMessage === 'function') showMessage(full, 'error');
+                        if (meta) meta.textContent = full;
+                        return;
+                    }
+                    const synced = data.date || d;
+                    const fetched = data.fetched != null ? data.fetched : '?';
+                    const stored = data.stored != null ? data.stored : '?';
+                    const okMsg = (t.tms_shuttle_pivot_sync_ok || '短驳已同步') + ' ' + synced
+                        + '（抓取 ' + fetched + ' / 入表 ' + stored + '）';
+                    if (typeof showMessage === 'function') showMessage(okMsg, 'success');
+                } catch (err) {
+                    const full = (t.tms_shuttle_pivot_sync_fail || '短驳同步失败：') + (err.message || err);
+                    if (typeof showMessage === 'function') showMessage(full, 'error');
+                    if (meta) meta.textContent = full;
+                    console.error('tms shuttle sync failed:', err);
+                } finally {
+                    if (refreshBtn) refreshBtn.disabled = false;
+                    loadTmsShuttlePivot();
+                }
+            }
+            window.syncAndLoadTmsShuttlePivot = syncAndLoadTmsShuttlePivot;
+
             function renderTmsShuttlePivot(data) {
                 const table = document.getElementById('tmsShuttlePivotTable');
                 if (!table) return;
@@ -9648,7 +9703,7 @@
             // 绑定按钮 + 跟随 selectedDate 变化
             (function bindTmsShuttlePivot() {
                 const refreshBtn = document.getElementById('tmsShuttlePivotRefreshBtn');
-                if (refreshBtn) refreshBtn.addEventListener('click', loadTmsShuttlePivot);
+                if (refreshBtn) refreshBtn.addEventListener('click', syncAndLoadTmsShuttlePivot);
                 const exportBtn = document.getElementById('tmsShuttlePivotExportCsvBtn');
                 if (exportBtn) exportBtn.addEventListener('click', exportTmsShuttlePivotCsv);
             })();

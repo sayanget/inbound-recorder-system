@@ -1997,6 +1997,24 @@ def route_distribution_page():
     return f"File not found: {file_path}", 404
 
 
+@app.route('/route-map')
+def route_map_page():
+    """流向分布美国地图（Leaflet + OSM，复用 outbound-stats 权限与 records API）"""
+    if 'user_id' not in session:
+        return redirect('/login')
+
+    if not check_page_permission('outbound-stats'):
+        return redirect('/no_permission')
+
+    static_dir = get_static_dir()
+    file_path = os.path.join(static_dir, 'route-map.html')
+    if os.path.exists(file_path):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+    return f"File not found: {file_path}", 404
+
+
 @app.route('/schedule-packaging')
 def schedule_packaging_page():
     if 'user_id' not in session:
@@ -2842,6 +2860,16 @@ def _labor_pick_piece_count(cm, n_raw, n_dedup):
     return int(n_raw or 0), False
 
 
+def _labor_pay_type_for_account(company: str, account: str) -> str:
+    """与 sync_cno_labor_sorter_hourly 写入规则一致；读库时用当前规则覆盖历史 pay_type。"""
+    try:
+        from sync_cno_labor_sorter_hourly import classify_labor_pay_type
+
+        return classify_labor_pay_type(company or '', account or '')
+    except Exception:
+        return 'piece'
+
+
 def _build_cno_labor_sorter_group_summary(
     anchor_date, window_mode: str = 'calendar', count_mode: str = 'raw'
 ):
@@ -2863,64 +2891,12 @@ def _build_cno_labor_sorter_group_summary(
 
     clause, binds = _record_date_slot_window_sql_binds(window_mode, anchor_date)
 
-    # (company, account) -> pieces；company -> {piece|hourly: 24 整点件数}
+    # (company, account) -> pieces；company -> {piece|hourly: 24 整点件数}（计薪按当前规则从账号重算）
     account_agg = {}
     company_hourly = {}
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            convert_query_placeholders(
-                f"""
-                SELECT record_date, time_slot, company_code, pay_type, pieces, pieces_deduped
-                FROM cno_labor_sorter_hourly
-                WHERE {clause}
-                """
-            ),
-            binds,
-        )
-        for row in cursor.fetchall():
-            rd = _db_row_get(row, 'record_date', '') or _db_row_get(row, 0, '')
-            if hasattr(rd, 'strftime'):
-                rd = rd.strftime('%Y-%m-%d')
-            rd = str(rd)[:10]
-            slot = _norm_labor_time_slot(
-                _db_row_get(row, 'time_slot', '') or _db_row_get(row, 1, '')
-            )
-            company = str(
-                _db_row_get(row, 'company_code', '') or _db_row_get(row, 2, '')
-            ).strip()
-            pay_type = str(
-                _db_row_get(row, 'pay_type', '') or _db_row_get(row, 3, '')
-            ).strip().lower()
-            if pay_type not in ('piece', 'hourly'):
-                continue
-            if not company or not slot:
-                continue
-            if not _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
-                continue
-            try:
-                n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 4, 0) or 0)
-            except (TypeError, ValueError):
-                n_raw = 0
-            pd = _db_row_get(row, 'pieces_deduped', None)
-            if pd is None:
-                pd = _db_row_get(row, 5, None)
-            try:
-                n_dedup = int(pd) if pd is not None and pd != '' else None
-            except (TypeError, ValueError):
-                n_dedup = None
-            n, _ = _labor_pick_piece_count(cm, n_raw, n_dedup)
-            idx = slot_to_idx.get(slot)
-            if idx is None:
-                continue
-            if company not in company_hourly:
-                company_hourly[company] = {
-                    'piece': [0] * 24,
-                    'hourly': [0] * 24,
-                }
-            company_hourly[company][pay_type][idx] += int(n or 0)
-
         cursor.execute(
             convert_query_placeholders(
                 f"""
@@ -2946,9 +2922,7 @@ def _build_cno_labor_sorter_group_summary(
             account = str(
                 _db_row_get(row, 'account_label', '') or _db_row_get(row, 3, '')
             ).strip()
-            pay_type = str(
-                _db_row_get(row, 'pay_type', '') or _db_row_get(row, 4, '')
-            ).strip().lower()
+            pay_type = _labor_pay_type_for_account(company, account)
             if not company or not account or pay_type not in ('piece', 'hourly'):
                 continue
             if not slot or not _labor_row_in_stats_window(
@@ -2969,6 +2943,14 @@ def _build_cno_labor_sorter_group_summary(
             n, _ = _labor_pick_piece_count(cm, n_raw, n_dedup)
             if n <= 0:
                 continue
+            idx = slot_to_idx.get(slot)
+            if idx is not None:
+                if company not in company_hourly:
+                    company_hourly[company] = {
+                        'piece': [0] * 24,
+                        'hourly': [0] * 24,
+                    }
+                company_hourly[company][pay_type][idx] += int(n or 0)
             key = (company, account)
             if key not in account_agg:
                 account_agg[key] = {'pay_type': pay_type, 'pieces': 0}
@@ -3169,10 +3151,11 @@ def _build_cno_labor_sorter_hourly_series(
         cursor.execute(
             convert_query_placeholders(
                 f"""
-                SELECT record_date, time_slot, company_code, pay_type, pieces, pieces_deduped
-                FROM cno_labor_sorter_hourly
+                SELECT record_date, time_slot, company_code, account_label, pay_type,
+                       pieces, pieces_deduped
+                FROM cno_labor_sorter_account_hourly
                 WHERE {clause}
-                ORDER BY record_date, time_slot, company_code, pay_type
+                ORDER BY record_date, time_slot, company_code, account_label
                 """
             ),
             binds,
@@ -3188,24 +3171,25 @@ def _build_cno_labor_sorter_hourly_series(
             company = str(
                 _db_row_get(row, 'company_code', '') or _db_row_get(row, 2, '')
             ).strip()
-            pay_type = str(
-                _db_row_get(row, 'pay_type', '') or _db_row_get(row, 3, '')
-            ).strip().lower()
+            account = str(
+                _db_row_get(row, 'account_label', '') or _db_row_get(row, 3, '')
+            ).strip()
+            pay_type = _labor_pay_type_for_account(company, account)
             if pay_type not in ('piece', 'hourly'):
                 continue
             try:
-                n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 4, 0) or 0)
+                n_raw = int(_db_row_get(row, 'pieces', 0) or _db_row_get(row, 5, 0) or 0)
             except (TypeError, ValueError):
                 n_raw = 0
             pd = _db_row_get(row, 'pieces_deduped', None)
             if pd is None:
-                pd = _db_row_get(row, 5, None)
+                pd = _db_row_get(row, 6, None)
             try:
                 n_dedup = int(pd) if pd is not None and pd != '' else None
             except (TypeError, ValueError):
                 n_dedup = None
             n, used_dedup_fallback = _labor_pick_piece_count(cm, n_raw, n_dedup)
-            if not company or not slot:
+            if not company or not account or not slot:
                 continue
             if not _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
                 continue
@@ -3277,9 +3261,7 @@ def _backfill_cno_labor_group_hourly_from_account(cursor, anchor_date, window_mo
         group_no = str(
             _db_row_get(row, 'account_label', '') or _db_row_get(row, 3, '')
         ).strip()
-        pay_type = str(
-            _db_row_get(row, 'pay_type', '') or _db_row_get(row, 4, '')
-        ).strip().lower()
+        pay_type = _labor_pay_type_for_account(company, group_no)
         if not company or not group_no or pay_type not in ('piece', 'hourly') or not slot:
             continue
         anchor2 = la_record_slot_to_operating_anchor(rd, slot, window_mode)
@@ -3365,9 +3347,7 @@ def _aggregate_labor_group_hourly_from_account(
         group_no = str(
             _db_row_get(row, 'account_label', '') or _db_row_get(row, 3, '')
         ).strip()
-        pay_type = str(
-            _db_row_get(row, 'pay_type', '') or _db_row_get(row, 4, '')
-        ).strip().lower()
+        pay_type = _labor_pay_type_for_account(company, group_no)
         if not company or not group_no or pay_type not in ('piece', 'hourly') or not slot:
             continue
         if not _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
@@ -5322,12 +5302,20 @@ def _tms_shuttle_pivot_business_hour_index(full_hour: int, h0: int):
     return full_hour + (24 - h0)
 
 
+def _check_tms_shuttle_api_permission() -> bool:
+    """统计页短驳 pivot / outbound-stats 立即同步共用。"""
+    return bool(
+        check_page_permission('outbound-stats')
+        or check_page_permission('statistics')
+    )
+
+
 @app.route('/api/tms/shuttle-completed/pivot', methods=['GET'])
 def get_tms_shuttle_pivot():
     """短驳 pivot：默认自然日 00:00～23:59，列 00～23 点；可选业务窗见 GOFO_TMS_SHUTTLE_PIVOT_BUSINESS_DAY。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
-    if not check_page_permission('outbound-stats'):
+    if not _check_tms_shuttle_api_permission():
         return jsonify({'error': '无权限'}), 403
 
     date_str = (request.args.get('date') or '').strip()
@@ -5501,7 +5489,7 @@ def post_tms_shuttle_sync():
     """触发 TMS 短驳同步。Body/Query 可选 date=YYYY-MM-DD；省略则用洛杉矶当日（与 DMS 一致）。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
-    if not check_page_permission('outbound-stats'):
+    if not _check_tms_shuttle_api_permission():
         return jsonify({'error': '无权限'}), 403
     body = request.get_json(silent=True) or {}
     day = (body.get('date') or request.args.get('date') or '').strip()
@@ -5544,7 +5532,7 @@ def get_tms_shuttle_completed():
     """
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
-    if not check_page_permission('outbound-stats'):
+    if not _check_tms_shuttle_api_permission():
         return jsonify({'error': '无权限'}), 403
 
     date_str = (request.args.get('date') or '').strip()

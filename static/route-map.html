@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang="route_map_title">流向分布 · 美国地图</title>
+    <link rel="icon" type="image/x-icon" href="/static/in0.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <script src="/static/js/theme.js"></script>
+    <script src="/static/js/nav_component.js"></script>
+    <script src="/static/js/us_hub_coords.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: var(--body-bg);
+            color: var(--text-color);
+        }
+        .container {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+        }
+        h2 {
+            text-align: center;
+            margin: 0 0 0.35rem;
+            font-size: var(--font-size-xl);
+        }
+        .sub {
+            text-align: center;
+            color: var(--text-muted, #666);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 1rem;
+        }
+        .toolbar label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
+        .toolbar input[type="date"] {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--card-bg);
+            color: var(--text-color);
+        }
+        .btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-primary:hover { filter: brightness(1.08); }
+        .btn-outline {
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 16px;
+            min-height: 520px;
+        }
+        @media (max-width: 900px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+        #map {
+            height: min(72vh, 640px);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            z-index: 0;
+        }
+        .sidebar {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px;
+            overflow-y: auto;
+            max-height: min(72vh, 640px);
+            font-size: 0.85rem;
+        }
+        .sidebar h3 { margin: 0 0 8px; font-size: 0.95rem; }
+        .route-list { list-style: none; padding: 0; margin: 0; }
+        .route-list li {
+            padding: 8px 4px 10px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+        }
+        .route-list li:hover { background: var(--table-header-bg); }
+        .legend-row-head {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 5px;
+            font-size: 0.82rem;
+        }
+        .legend-row-head .code {
+            font-weight: 700;
+            min-width: 2.5em;
+        }
+        .legend-row-head .count {
+            margin-left: auto;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-muted, #666);
+        }
+        .legend-bar-track {
+            height: 10px;
+            border-radius: 5px;
+            background: var(--table-header-bg);
+            overflow: hidden;
+        }
+        .legend-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            min-width: 2px;
+            transition: width 0.35s ease;
+        }
+        .legend-bar-fill.zero {
+            min-width: 0;
+            width: 0 !important;
+        }
+        .unmapped { color: #b45309; margin-top: 12px; }
+        .unmapped ul { margin: 4px 0 0; padding-left: 1.2rem; }
+        .status { font-size: 0.85rem; color: var(--text-muted, #666); margin-top: 8px; }
+        .err {
+            display: none;
+            color: #c62828;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .leaflet-popup-content { margin: 8px 12px; font-size: 13px; line-height: 1.45; }
+        .hub-origin .leaflet-div-icon { background: transparent; border: none; }
+
+        /* Leaflet 控件 / 弹窗跟随全站 data-theme */
+        [data-theme="dark"] #map {
+            background: #0f172a;
+        }
+        [data-theme="dark"] .leaflet-control-zoom a,
+        [data-theme="dark"] .leaflet-control-attribution {
+            background: var(--card-bg) !important;
+            color: var(--text-color) !important;
+            border-color: var(--border-color) !important;
+        }
+        [data-theme="dark"] .leaflet-control-zoom a:hover {
+            background: var(--table-header-bg) !important;
+        }
+        [data-theme="dark"] .leaflet-popup-content-wrapper,
+        [data-theme="dark"] .leaflet-popup-tip {
+            background: var(--card-bg);
+            color: var(--text-color);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+        }
+        [data-theme="dark"] .leaflet-popup-content a {
+            color: #93c5fd;
+        }
+        [data-theme="dark"] .err {
+            background: #450a0a;
+            color: #fecaca;
+        }
+        [data-theme="dark"] .unmapped {
+            color: #fbbf24;
+        }
+
+        /* 流向弧线：虚线流动，间距收紧 */
+        .route-flow-line {
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-dasharray: 6 10;
+            animation: route-dash-flow var(--flow-dur, 1.2s) linear infinite;
+            animation-delay: var(--flow-delay, 0s);
+        }
+        @keyframes route-dash-flow {
+            to { stroke-dashoffset: -32; }
+        }
+
+        .route-dest-label.leaflet-tooltip {
+            background: var(--card-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+            font-weight: 700;
+            font-size: 11px;
+            line-height: 1.2;
+            padding: 2px 7px;
+            pointer-events: none;
+        }
+        .route-dest-label.leaflet-tooltip::before {
+            border-top-color: var(--border-color);
+        }
+        [data-theme="dark"] .route-dest-label.leaflet-tooltip {
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+        }
+        .route-dest-label.hub-label {
+            font-size: 12px;
+            padding: 3px 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="nav-container"></div>
+    <div class="container">
+        <h2 data-lang="route_map_title">流向分布 · 美国地图</h2>
+        <p class="sub" data-lang="route_map_sub">与出库统计「流向分布」相同口径：默认上一周（周一至周日，LA）发车数；连线自 CNO 枢纽。</p>
+
+        <div class="toolbar">
+            <div>
+                <label data-lang="start_date">开始日期</label>
+                <input type="date" id="startDate" />
+            </div>
+            <div>
+                <label data-lang="end_date">结束日期</label>
+                <input type="date" id="endDate" />
+            </div>
+            <button type="button" class="btn btn-primary" id="btnReload">
+                <i class="fas fa-sync-alt"></i> <span data-lang="reload">刷新</span>
+            </button>
+            <a href="/outbound-stats" class="btn btn-outline">
+                <i class="fas fa-chart-bar"></i> <span data-lang="back_outbound">出库统计</span>
+            </a>
+            <a href="/route-distribution" class="btn btn-outline">
+                <i class="fas fa-table"></i> <span data-lang="back_table">流向数据表</span>
+            </a>
+        </div>
+
+        <div id="errBox" class="err"></div>
+        <p class="status" id="statusText"></p>
+
+        <div class="layout">
+            <div id="map"></div>
+            <aside class="sidebar">
+                <h3 data-lang="route_legend">流向图例</h3>
+                <ul class="route-list" id="routeList"></ul>
+                <div class="unmapped" id="unmappedBox" style="display:none;">
+                    <strong data-lang="unmapped_title">未映射坐标</strong>
+                    <ul id="unmappedList" class="route-list"></ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+
+        const COLORS = [
+            '#e11d48', '#2563eb', '#ca8a04', '#059669', '#7c3aed',
+            '#ea580c', '#0891b2', '#be123c', '#4f46e5', '#65a30d',
+            '#db2777', '#0d9488', '#9333ea', '#c2410c', '#1d4ed8'
+        ];
+
+        const CNO = resolveUsHub('CNO');
+        const MAP_ZOOM = 6;
+        const MAP_CENTER = [39.5, -98.35];
+
+        function normalizeRoute(route) {
+            if (!route) return 'Unknown';
+            let r = String(route).toUpperCase().trim();
+            if (r.endsWith('.H') || r.endsWith('.G')) r = r.substring(0, r.length - 2);
+            const u = r.replace(/\s+/g, ' ').trim();
+            if (u.length === 0) return 'Unknown';
+            const cnoMatch = u.match(/CNO-([A-Z0-9]{3})\b/);
+            if (cnoMatch) return cnoMatch[1];
+            return u.length >= 3 ? u.slice(0, 3) : u;
+        }
+
+        function formatLocalDateISO(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function todayInLA() {
+            try {
+                return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+            } catch (e) {
+                return new Date();
+            }
+        }
+
+        /** 上一自然周：周一至周日（按洛杉矶日历日） */
+        function defaultRange() {
+            const today = todayInLA();
+            const day = today.getDay();
+            const daysSinceMonday = (day + 6) % 7;
+            const thisMonday = new Date(today);
+            thisMonday.setDate(today.getDate() - daysSinceMonday);
+            const lastMonday = new Date(thisMonday);
+            lastMonday.setDate(thisMonday.getDate() - 7);
+            const lastSunday = new Date(lastMonday);
+            lastSunday.setDate(lastMonday.getDate() + 6);
+            return {
+                start: formatLocalDateISO(lastMonday),
+                end: formatLocalDateISO(lastSunday)
+            };
+        }
+
+        let map = null;
+        let layerGroup = null;
+        let markersByCode = {};
+        let tileLight = null;
+        let tileDark = null;
+        let hubMarker = null;
+
+        const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+        function isDarkTheme() {
+            return document.documentElement.getAttribute('data-theme') === 'dark';
+        }
+
+        function applyMapBasemap() {
+            if (!map || !tileLight || !tileDark) return;
+            const dark = isDarkTheme();
+            if (dark) {
+                if (map.hasLayer(tileLight)) map.removeLayer(tileLight);
+                if (!map.hasLayer(tileDark)) tileDark.addTo(map);
+            } else {
+                if (map.hasLayer(tileDark)) map.removeLayer(tileDark);
+                if (!map.hasLayer(tileLight)) tileLight.addTo(map);
+            }
+            if (hubMarker) {
+                hubMarker.setStyle({
+                    color: dark ? '#e2e8f0' : '#1e293b',
+                    fillColor: '#f59e0b',
+                });
+            }
+        }
+
+        function initMap() {
+            if (map) return;
+            map = L.map('map', { scrollWheelZoom: true }).setView(MAP_CENTER, MAP_ZOOM);
+            tileLight = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: TILE_ATTR
+            });
+            tileDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19,
+                subdomains: 'abcd',
+                attribution: TILE_ATTR
+            });
+            applyMapBasemap();
+            layerGroup = L.layerGroup().addTo(map);
+            if (CNO) {
+                hubMarker = L.circleMarker([CNO.lat, CNO.lng], {
+                    radius: 10,
+                    color: isDarkTheme() ? '#e2e8f0' : '#1e293b',
+                    fillColor: '#f59e0b',
+                    fillOpacity: 0.95,
+                    weight: 2
+                }).addTo(map).bindPopup(`<b>${CNO.name}</b><br>出库枢纽（连线起点）`);
+                bindDestLabel(hubMarker, 'CNO', 10, 'hub-label');
+            }
+            window.addEventListener('themeChanged', () => {
+                applyMapBasemap();
+                loadData();
+            });
+        }
+
+        function markerRadius(count, max) {
+            const t = max > 0 ? count / max : 0;
+            return 5 + Math.round(t * 9);
+        }
+
+        /** 自 CNO 指向目的地的方位角（度，0=北） */
+        function routeBearing(lat1, lng1, lat2, lng2) {
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δλ = (lng2 - lng1) * Math.PI / 180;
+            const y = Math.sin(Δλ) * Math.cos(φ2);
+            const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+            return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+
+        function bearingDelta(a, b) {
+            const d = Math.abs(a - b) % 360;
+            return d > 180 ? 360 - d : d;
+        }
+
+        /** 相近方位的流向分到一组，组内分配不同弧高，减少重叠 */
+        function assignCurveSlots(rows, bearingTolDeg) {
+            const sorted = [...rows].sort((a, b) => a._bearing - b._bearing);
+            const groups = [];
+            sorted.forEach(row => {
+                let g = null;
+                for (let i = 0; i < groups.length; i++) {
+                    if (bearingDelta(row._bearing, groups[i].center) <= bearingTolDeg) {
+                        g = groups[i];
+                        break;
+                    }
+                }
+                if (!g) {
+                    g = { center: row._bearing, items: [] };
+                    groups.push(g);
+                }
+                g.items.push(row);
+                g.center = g.items.reduce((s, x) => s + x._bearing, 0) / g.items.length;
+            });
+            groups.forEach(g => {
+                const n = g.items.length;
+                g.items.forEach((row, idx) => {
+                    row._curveIndex = idx;
+                    row._curveTotal = n;
+                });
+            });
+            return rows;
+        }
+
+        /** 二次贝塞尔弧线采样，控制点沿垂线偏移以错开平行线 */
+        function buildCurvedLatLngs(lat1, lng1, lat2, lng2, curveIndex, curveTotal) {
+            const dLat = lat2 - lat1;
+            const dLng = lng2 - lng1;
+            const dist = Math.hypot(dLat, dLng) || 0.01;
+            const perpLat = -dLng / dist;
+            const perpLng = dLat / dist;
+            if (curveTotal <= 1) {
+                return [[lat1, lng1], [lat2, lng2]];
+            }
+            const tier = curveIndex - (curveTotal - 1) / 2;
+            const spread = 0.014 + Math.min(curveTotal * 0.006, 0.04);
+            const offset = tier * spread * dist;
+            const cLat = (lat1 + lat2) / 2 + perpLat * offset;
+            const cLng = (lng1 + lng2) / 2 + perpLng * offset;
+            const steps = Math.max(12, Math.min(24, Math.round(dist * 2)));
+            const pts = [];
+            for (let s = 0; s <= steps; s++) {
+                const t = s / steps;
+                const u = 1 - t;
+                pts.push([
+                    u * u * lat1 + 2 * u * t * cLat + t * t * lat2,
+                    u * u * lng1 + 2 * u * t * cLng + t * t * lng2
+                ]);
+            }
+            return pts;
+        }
+
+        function lineWeight(count, max) {
+            return Math.max(1.5, Math.min(4, 1.5 + (count / Math.max(1, max)) * 2.5));
+        }
+
+        function bindDestLabel(marker, code, radiusPx, extraClass) {
+            marker.bindTooltip(code, {
+                permanent: true,
+                direction: 'top',
+                offset: [0, -(radiusPx + 8)],
+                opacity: 1,
+                className: 'route-dest-label' + (extraClass ? ' ' + extraClass : '')
+            });
+        }
+
+        function addAnimatedRouteLine(latlngs, color, count, max, animIndex) {
+            const w = lineWeight(count, max);
+            const dur = (1 + animIndex * 0.04).toFixed(2) + 's';
+            const delay = (animIndex * 0.05).toFixed(2) + 's';
+            const opacity = isDarkTheme() ? 0.58 : 0.48;
+
+            const line = L.polyline(latlngs, {
+                color,
+                weight: w,
+                opacity,
+                className: 'route-flow-line',
+                interactive: false,
+                smoothFactor: 1.2
+            }).addTo(layerGroup);
+
+            const path = line.getElement();
+            if (path) {
+                path.style.setProperty('--flow-dur', dur);
+                path.style.setProperty('--flow-delay', delay);
+            }
+        }
+
+        function renderSidebar(entries, unmapped, maxCount) {
+            const list = document.getElementById('routeList');
+            list.innerHTML = '';
+            const max = maxCount > 0 ? maxCount : 1;
+            entries.forEach((e) => {
+                const pct = Math.round((e.count / max) * 100);
+                const li = document.createElement('li');
+                li.innerHTML =
+                    `<div class="legend-row-head">` +
+                    `<span class="code">${e.code}</span>` +
+                    `<span class="count">${e.count}</span>` +
+                    `</div>` +
+                    `<div class="legend-bar-track">` +
+                    `<div class="legend-bar-fill${e.count ? '' : ' zero'}" style="width:${pct}%;background:${e.color}"></div>` +
+                    `</div>`;
+                li.title = (e.hub ? e.hub.name : e.code) + ' · ' + e.count + ' 车次';
+                li.addEventListener('click', () => {
+                    const m = markersByCode[e.code];
+                    if (m && map) {
+                        map.setView(m.getLatLng(), MAP_ZOOM);
+                        m.openPopup();
+                    }
+                });
+                list.appendChild(li);
+            });
+            const box = document.getElementById('unmappedBox');
+            const ul = document.getElementById('unmappedList');
+            if (unmapped.length) {
+                const umax = Math.max(...unmapped.map(u => u.count), 1);
+                box.style.display = 'block';
+                ul.innerHTML = unmapped.map(u => {
+                    const pct = Math.round((u.count / umax) * 100);
+                    return `<li title="${u.code} · ${u.count} 车次">` +
+                        `<div class="legend-row-head"><span class="code">${u.code}</span><span class="count">${u.count}</span></div>` +
+                        `<div class="legend-bar-track"><div class="legend-bar-fill" style="width:${pct}%;background:#b45309"></div></div>` +
+                        `</li>`;
+                }).join('');
+            } else {
+                box.style.display = 'none';
+                ul.innerHTML = '';
+            }
+        }
+
+        function clearLayers() {
+            if (layerGroup) layerGroup.clearLayers();
+            markersByCode = {};
+        }
+
+        async function loadData() {
+            const status = document.getElementById('statusText');
+            const errBox = document.getElementById('errBox');
+            errBox.style.display = 'none';
+            status.textContent = '加载中…';
+            clearLayers();
+
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            if (!start || !end) {
+                errBox.textContent = '请选择日期范围';
+                errBox.style.display = 'block';
+                status.textContent = '';
+                return;
+            }
+
+            let records = [];
+            try {
+                const url = `/api/outbound/records?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`;
+                const resp = await fetch(url, { credentials: 'same-origin' });
+                if (!resp.ok) {
+                    const j = await resp.json().catch(() => ({}));
+                    throw new Error(j.error || `HTTP ${resp.status}`);
+                }
+                const payload = await resp.json();
+                records = Array.isArray(payload) ? payload : [];
+            } catch (e) {
+                errBox.textContent = '加载失败: ' + (e.message || e);
+                errBox.style.display = 'block';
+                status.textContent = '';
+                return;
+            }
+
+            const counts = {};
+            records.forEach(r => {
+                const code = normalizeRoute(r.route_code);
+                if (code === 'Unknown') return;
+                counts[code] = (counts[code] || 0) + 1;
+            });
+
+            const mapped = [];
+            const unmapped = [];
+            Object.keys(counts).sort().forEach(code => {
+                if (code === 'CNO') return;
+                const hub = resolveUsHub(code);
+                const row = { code, count: counts[code], hub, color: '' };
+                if (hub) mapped.push(row);
+                else unmapped.push({ code, count: counts[code] });
+            });
+            mapped.sort((a, b) => b.count - a.count);
+            unmapped.sort((a, b) => b.count - a.count);
+
+            const max = mapped.length ? Math.max(...mapped.map(m => m.count)) : 0;
+
+            mapped.forEach((row, i) => {
+                row.color = COLORS[i % COLORS.length];
+                if (CNO) {
+                    row._bearing = routeBearing(CNO.lat, CNO.lng, row.hub.lat, row.hub.lng);
+                }
+            });
+            if (CNO) assignCurveSlots(mapped, 10);
+
+            // 先画弧线（底层），再画节点，避免遮挡
+            let animIdx = 0;
+            mapped.forEach((row) => {
+                const { lat, lng } = row.hub;
+                if (CNO && row.code !== 'CNO') {
+                    const latlngs = buildCurvedLatLngs(
+                        CNO.lat, CNO.lng, lat, lng,
+                        row._curveIndex != null ? row._curveIndex : 0,
+                        row._curveTotal != null ? row._curveTotal : 1
+                    );
+                    addAnimatedRouteLine(latlngs, row.color, row.count, max, animIdx++);
+                }
+            });
+
+            mapped.forEach((row) => {
+                const { lat, lng, name } = row.hub;
+                const r = markerRadius(row.count, max);
+                const m = L.circleMarker([lat, lng], {
+                    radius: r,
+                    color: row.color,
+                    fillColor: row.color,
+                    fillOpacity: isDarkTheme() ? 0.82 : 0.75,
+                    weight: isDarkTheme() ? 2.5 : 2
+                });
+                m.bindPopup(`<b>${row.code}</b> — ${name}<br>发车数: <b>${row.count}</b><br>${start} ~ ${end}`);
+                bindDestLabel(m, row.code, r);
+                m.addTo(layerGroup);
+                markersByCode[row.code] = m;
+            });
+            renderSidebar(mapped, unmapped, max);
+
+            const total = Object.values(counts).reduce((a, b) => a + b, 0);
+            status.textContent = `${start} ~ ${end} · 共 ${total} 车次 · 地图 ${mapped.length} 个目的地` +
+                (unmapped.length ? ` · ${unmapped.length} 个未映射` : '');
+
+            if (map) {
+                map.setView(MAP_CENTER, MAP_ZOOM);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            initMap();
+            const dr = defaultRange();
+            document.getElementById('startDate').value = dr.start;
+            document.getElementById('endDate').value = dr.end;
+            document.getElementById('btnReload').addEventListener('click', loadData);
+            loadData();
+        });
+    })();
+    </script>
+</body>
+</html>
