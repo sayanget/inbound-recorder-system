@@ -186,12 +186,11 @@
             fill: none;
             stroke-linecap: round;
             stroke-linejoin: round;
-            stroke-dasharray: 6 10;
             animation: route-dash-flow var(--flow-dur, 1.2s) linear infinite;
             animation-delay: var(--flow-delay, 0s);
         }
         @keyframes route-dash-flow {
-            to { stroke-dashoffset: -32; }
+            to { stroke-dashoffset: var(--flow-offset, -48); }
         }
 
         .route-dest-label.leaflet-tooltip {
@@ -222,7 +221,7 @@
     <div id="nav-container"></div>
     <div class="container">
         <h2 data-lang="route_map_title">流向分布 · 美国地图</h2>
-        <p class="sub" data-lang="route_map_sub">与出库统计「流向分布」相同口径：默认上一周（周一至周日，LA）发车数；连线自 CNO 枢纽。</p>
+        <p class="sub" data-lang="route_map_sub">发车数与「流向分布」相同数据源（Google Sheet / 可切换）；票数来自飞书 feishu_raw_data；默认上一周（周一至周日，LA）。</p>
 
         <div class="toolbar">
             <div>
@@ -273,6 +272,12 @@
         const CNO = resolveUsHub('CNO');
         const MAP_ZOOM = 6;
         const MAP_CENTER = [39.5, -98.35];
+        /** 直线里程 × 系数 ≈ 公路里程；平均行车速度用于估算时长 */
+        const DRIVE_ROAD_FACTOR = 1.12;
+        const DRIVE_AVG_MPH = 52;
+        const FLOW_ANIM_MIN_S = 1.2;
+        const FLOW_ANIM_MAX_S = 8.5;
+        const FLOW_REF_DRIVE_HOURS = 46;
 
         function normalizeRoute(route) {
             if (!route) return 'Unknown';
@@ -383,6 +388,43 @@
             return 5 + Math.round(t * 9);
         }
 
+        function haversineMiles(lat1, lng1, lat2, lng2) {
+            const R = 3958.8;
+            const p = Math.PI / 180;
+            const a = (lat2 - lat1) * p;
+            const b = (lng2 - lng1) * p;
+            const s1 = Math.sin(a / 2);
+            const s2 = Math.sin(b / 2);
+            const h = s1 * s1 + Math.cos(lat1 * p) * Math.cos(lat2 * p) * s2 * s2;
+            return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+        }
+
+        /** CNO → 目的地估算行车时长（小时） */
+        function estimateDriveHours(lat1, lng1, lat2, lng2) {
+            const miles = haversineMiles(lat1, lng1, lat2, lng2) * DRIVE_ROAD_FACTOR;
+            return miles / DRIVE_AVG_MPH;
+        }
+
+        function formatDriveTime(hours) {
+            if (!Number.isFinite(hours) || hours < 0.05) return '—';
+            if (hours < 1) return `约 ${Math.round(hours * 60)} 分钟`;
+            const h = Math.floor(hours);
+            const m = Math.round((hours - h) * 60);
+            if (h >= 24) {
+                const d = Math.floor(h / 24);
+                const rh = h % 24;
+                return m > 0 ? `约 ${d} 天 ${rh} 小时` : `约 ${d} 天 ${rh} 小时`;
+            }
+            return m > 0 ? `约 ${h} 小时 ${m} 分` : `约 ${h} 小时`;
+        }
+
+        /** 动画周期与行车时长成正比（同屏可比较的绝对比例尺） */
+        function driveHoursToFlowDuration(hours) {
+            const t = Math.min(1, Math.max(0, hours / FLOW_REF_DRIVE_HOURS));
+            const sec = FLOW_ANIM_MIN_S + t * (FLOW_ANIM_MAX_S - FLOW_ANIM_MIN_S);
+            return Math.max(FLOW_ANIM_MIN_S, sec);
+        }
+
         /** 自 CNO 指向目的地的方位角（度，0=北） */
         function routeBearing(lat1, lng1, lat2, lng2) {
             const φ1 = lat1 * Math.PI / 180;
@@ -469,10 +511,11 @@
             });
         }
 
-        function addAnimatedRouteLine(latlngs, color, count, max, animIndex) {
+        function addAnimatedRouteLine(latlngs, color, count, max, driveHours, animIndex) {
             const w = lineWeight(count, max);
-            const dur = (1 + animIndex * 0.04).toFixed(2) + 's';
-            const delay = (animIndex * 0.05).toFixed(2) + 's';
+            const durSec = driveHoursToFlowDuration(driveHours);
+            const dur = durSec.toFixed(2) + 's';
+            const delay = (animIndex * 0.06).toFixed(2) + 's';
             const opacity = isDarkTheme() ? 0.58 : 0.48;
 
             const line = L.polyline(latlngs, {
@@ -484,11 +527,22 @@
                 smoothFactor: 1.2
             }).addTo(layerGroup);
 
-            const path = line.getElement();
-            if (path) {
+            const applyFlowStyle = () => {
+                const path = line.getElement();
+                if (!path) return;
+                const len = path.getTotalLength();
+                const dash = Math.max(6, Math.min(14, len / 18));
                 path.style.setProperty('--flow-dur', dur);
                 path.style.setProperty('--flow-delay', delay);
-            }
+                path.style.setProperty('--flow-offset', String(-len));
+                path.style.strokeDasharray = `${dash} ${dash * 1.4}`;
+            };
+            applyFlowStyle();
+            line.on('add', () => {
+                applyFlowStyle();
+                requestAnimationFrame(applyFlowStyle);
+            });
+            setTimeout(applyFlowStyle, 80);
         }
 
         function renderSidebar(entries, unmapped, maxCount) {
@@ -506,7 +560,9 @@
                     `<div class="legend-bar-track">` +
                     `<div class="legend-bar-fill${e.count ? '' : ' zero'}" style="width:${pct}%;background:${e.color}"></div>` +
                     `</div>`;
-                li.title = (e.hub ? e.hub.name : e.code) + ' · ' + e.count + ' 车次';
+                const tkHint = e.tickets != null ? ' · 票数 ' + e.tickets : '';
+                const driveHint = e._driveHours != null ? ' · ' + formatDriveTime(e._driveHours) : '';
+                li.title = (e.hub ? e.hub.name : e.code) + ' · ' + e.count + ' 车次' + tkHint + driveHint;
                 li.addEventListener('click', () => {
                     const m = markersByCode[e.code];
                     if (m && map) {
@@ -556,20 +612,43 @@
             }
 
             let records = [];
+            let ticketsByCode = {};
+            let ticketsNote = '';
             try {
-                const url = `/api/outbound/records?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`;
-                const resp = await fetch(url, { credentials: 'same-origin' });
-                if (!resp.ok) {
-                    const j = await resp.json().catch(() => ({}));
-                    throw new Error(j.error || `HTTP ${resp.status}`);
+                const q = `start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`;
+                const [recResp, tktResp] = await Promise.all([
+                    fetch(`/api/route-distribution/outbound/records?${q}`, { credentials: 'same-origin' }),
+                    fetch(`/api/route-map/tickets-by-destination?${q}`, { credentials: 'same-origin' }),
+                ]);
+                let payload = [];
+                if (recResp.ok) {
+                    payload = await recResp.json();
+                } else {
+                    const fallback = await fetch(`/api/outbound/records?${q}`, { credentials: 'same-origin' });
+                    if (!fallback.ok) {
+                        const j = await recResp.json().catch(() => ({}));
+                        throw new Error(j.error || `HTTP ${recResp.status}`);
+                    }
+                    payload = await fallback.json();
+                    ticketsNote = (ticketsNote ? ticketsNote + ' · ' : '') + '发车数据来自本地库（Sheet 不可用）';
                 }
-                const payload = await resp.json();
                 records = Array.isArray(payload) ? payload : [];
+                if (tktResp.ok) {
+                    const tData = await tktResp.json();
+                    ticketsByCode = (tData && tData.by_destination) || {};
+                    ticketsNote = (tData && tData.note) || '';
+                }
             } catch (e) {
                 errBox.textContent = '加载失败: ' + (e.message || e);
                 errBox.style.display = 'block';
                 status.textContent = '';
                 return;
+            }
+
+            function ticketsForCode(code) {
+                if (ticketsByCode[code] != null) return ticketsByCode[code];
+                if (code === 'LAV' && ticketsByCode.LAX != null) return ticketsByCode.LAX;
+                return null;
             }
 
             const counts = {};
@@ -584,9 +663,10 @@
             Object.keys(counts).sort().forEach(code => {
                 if (code === 'CNO') return;
                 const hub = resolveUsHub(code);
-                const row = { code, count: counts[code], hub, color: '' };
+                const tk = ticketsForCode(code);
+                const row = { code, count: counts[code], tickets: tk, hub, color: '' };
                 if (hub) mapped.push(row);
-                else unmapped.push({ code, count: counts[code] });
+                else unmapped.push({ code, count: counts[code], tickets: tk });
             });
             mapped.sort((a, b) => b.count - a.count);
             unmapped.sort((a, b) => b.count - a.count);
@@ -599,7 +679,14 @@
                     row._bearing = routeBearing(CNO.lat, CNO.lng, row.hub.lat, row.hub.lng);
                 }
             });
-            if (CNO) assignCurveSlots(mapped, 10);
+            if (CNO) {
+                assignCurveSlots(mapped, 10);
+                mapped.forEach((row) => {
+                    row._driveHours = estimateDriveHours(
+                        CNO.lat, CNO.lng, row.hub.lat, row.hub.lng
+                    );
+                });
+            }
 
             // 先画弧线（底层），再画节点，避免遮挡
             let animIdx = 0;
@@ -611,7 +698,11 @@
                         row._curveIndex != null ? row._curveIndex : 0,
                         row._curveTotal != null ? row._curveTotal : 1
                     );
-                    addAnimatedRouteLine(latlngs, row.color, row.count, max, animIdx++);
+                    addAnimatedRouteLine(
+                        latlngs, row.color, row.count, max,
+                        row._driveHours != null ? row._driveHours : 1,
+                        animIdx++
+                    );
                 }
             });
 
@@ -625,7 +716,18 @@
                     fillOpacity: isDarkTheme() ? 0.82 : 0.75,
                     weight: isDarkTheme() ? 2.5 : 2
                 });
-                m.bindPopup(`<b>${row.code}</b> — ${name}<br>发车数: <b>${row.count}</b><br>${start} ~ ${end}`);
+                const driveTxt = row._driveHours != null ? formatDriveTime(row._driveHours) : '';
+                const tk = row.tickets;
+                const ticketsLine = tk != null
+                    ? `票数: <b>${Number(tk).toLocaleString()}</b>（飞书）<br>`
+                    : (ticketsNote ? `票数: —<br>` : '');
+                m.bindPopup(
+                    `<b>${row.code}</b> — ${name}<br>` +
+                    `${start} ~ ${end}<br>` +
+                    `发车数: <b>${row.count}</b><br>` +
+                    ticketsLine +
+                    (driveTxt ? `行车约: ${driveTxt}` : '')
+                );
                 bindDestLabel(m, row.code, r);
                 m.addTo(layerGroup);
                 markersByCode[row.code] = m;
@@ -633,11 +735,21 @@
             renderSidebar(mapped, unmapped, max);
 
             const total = Object.values(counts).reduce((a, b) => a + b, 0);
-            status.textContent = `${start} ~ ${end} · 共 ${total} 车次 · 地图 ${mapped.length} 个目的地` +
-                (unmapped.length ? ` · ${unmapped.length} 个未映射` : '');
+            const totalTickets = Object.values(ticketsByCode).reduce((a, b) => a + (Number(b) || 0), 0);
+            status.textContent = `${start} ~ ${end} · 发车 ${total} · 票数 ${totalTickets.toLocaleString()} · 目的地 ${mapped.length}` +
+                (unmapped.length ? ` · ${unmapped.length} 未映射` : '') +
+                (ticketsNote ? ` · ${ticketsNote}` : '');
 
             if (map) {
                 map.setView(MAP_CENTER, MAP_ZOOM);
+                map.once('moveend', () => {
+                    layerGroup.eachLayer((layer) => {
+                        const el = layer.getElement && layer.getElement();
+                        if (!el || !el.classList.contains('route-flow-line')) return;
+                        const len = el.getTotalLength();
+                        if (len > 0) el.style.setProperty('--flow-offset', String(-len));
+                    });
+                });
             }
         }
 

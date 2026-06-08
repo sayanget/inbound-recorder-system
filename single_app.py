@@ -34,6 +34,7 @@ from openpyxl import Workbook
 import json
 from queue import Queue
 import calc_outsource_finance # 导入生产人工同步逻辑
+import route_distribution_backend as route_dist_backend
 import requests
 import feishu_auth
 
@@ -563,7 +564,17 @@ def initialize_app():
             print("[应用初始化] 开始初始化数据库...")
             init_db()
             print("[应用初始化] 数据库初始化完成")
-            
+            try:
+                route_dist_backend.configure(
+                    get_db,
+                    convert_query_placeholders,
+                    _fetch_outbound_records_for_route_dist,
+                    USE_POSTGRES,
+                )
+                route_dist_backend.ensure_default_config()
+            except Exception as _rd_init_err:
+                print(f"[应用初始化] route-distribution backend init: {_rd_init_err}")
+
             # 启动后台线程
             # 仅在非开发重新加载环境下启动, 或强制在生产环境下启动
             if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
@@ -1979,22 +1990,128 @@ def outbound_stats():
         return f"File not found: {file_path}", 404
 
 
+def _check_route_distribution_permission():
+    return check_page_permission('outbound-stats')
+
+
 @app.route('/route-distribution')
 def route_distribution_page():
-    """流向分布数据表（独立页面，复用 /api/outbound/records 数据源 + outbound-stats 权限）"""
+    """流向分布数据表（standalone 方案：Google Sheet / API 可切换）"""
     if 'user_id' not in session:
         return redirect('/login')
 
-    if not check_page_permission('outbound-stats'):
+    if not _check_route_distribution_permission():
         return redirect('/no_permission')
 
     static_dir = get_static_dir()
     file_path = os.path.join(static_dir, 'route-distribution.html')
     if os.path.exists(file_path):
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        content = route_dist_backend.render_route_distribution_html(file_path)
         return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
     return f"File not found: {file_path}", 404
+
+
+@app.route('/route-distribution/setup')
+def route_distribution_setup_page():
+    if 'user_id' not in session:
+        return redirect('/login')
+    if not _check_route_distribution_permission():
+        return redirect('/no_permission')
+    return route_dist_backend.get_setup_html(), 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+
+@app.route('/api/route-distribution/outbound/records', methods=['GET'])
+def route_distribution_outbound_records():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not _check_route_distribution_permission():
+        return jsonify({'error': '无权限'}), 403
+    start = request.args.get('start_date')
+    end = request.args.get('end_date')
+    try:
+        records = route_dist_backend.fetch_records(start, end, request.host)
+        return jsonify(records)
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'请求失败: {e}', 'backend': route_dist_backend.get_backend()}), 502
+    except Exception as e:
+        return jsonify({'error': str(e), 'backend': route_dist_backend.get_backend()}), 502
+
+
+@app.route('/api/route-distribution/current-backend', methods=['GET'])
+def route_distribution_current_backend():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not _check_route_distribution_permission():
+        return jsonify({'error': '无权限'}), 403
+    url = route_dist_backend.get_backend()
+    info = route_dist_backend.probe_backend(url, timeout=1.5) if url else {'ok': False}
+    return jsonify({
+        'backend': url,
+        'source': route_dist_backend.get_backend_source(),
+        'kind': route_dist_backend.get_backend_kind(),
+        'year': route_dist_backend.get_year_override(),
+        'reachable': bool(info.get('ok')),
+        'is_inbound_app': bool(info.get('is_inbound_app')),
+    })
+
+
+@app.route('/api/route-distribution/probe', methods=['GET'])
+def route_distribution_probe():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not _check_route_distribution_permission():
+        return jsonify({'error': '无权限'}), 403
+    url = request.args.get('url', '')
+    return jsonify(route_dist_backend.probe_backend(url))
+
+
+@app.route('/api/route-distribution/set-backend', methods=['POST'])
+def route_distribution_set_backend():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not _check_route_distribution_permission():
+        return jsonify({'error': '无权限'}), 403
+    data = request.get_json(silent=True) or {}
+    url = route_dist_backend._standalone_module().normalize_url(data.get('url', ''))
+    if not url:
+        return jsonify({'ok': False, 'error': 'URL 为空'}), 400
+    year = data.get('year')
+    try:
+        year_int = int(year) if year not in (None, '', 0, '0') else None
+    except (TypeError, ValueError):
+        year_int = None
+    info = route_dist_backend.probe_backend(url)
+    if not info.get('ok'):
+        return jsonify({'ok': False, 'error': info.get('message', '不可达')}), 400
+    route_dist_backend.set_backend(url, source='设置页', year=year_int)
+    return jsonify({'ok': True, 'backend': url, 'kind': info.get('kind'), 'probe': info})
+
+
+@app.route('/api/route-distribution/lan-scan', methods=['GET'])
+def route_distribution_lan_scan():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not _check_route_distribution_permission():
+        return jsonify({'error': '无权限'}), 403
+    ports = request.args.get('ports')
+    port_list = None
+    if ports:
+        try:
+            port_list = [int(x) for x in ports.split(',') if x.strip()]
+        except ValueError:
+            port_list = None
+    results, subnets = route_dist_backend.lan_scan(port_list)
+    return jsonify({'results': results, 'scanned_subnets': subnets})
+
+
+@app.route('/api/route-distribution/refresh', methods=['POST'])
+def route_distribution_refresh_sheet():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not _check_route_distribution_permission():
+        return jsonify({'error': '无权限'}), 403
+    route_dist_backend.invalidate_sheet_cache()
+    return jsonify({'ok': True})
 
 
 @app.route('/route-map')
@@ -2013,6 +2130,94 @@ def route_map_page():
             content = f.read()
         return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
     return f"File not found: {file_path}", 404
+
+
+def _normalize_route_map_code(route):
+    """与 static/route-map.html、outbound-stats 的 normalizeRoute 一致。"""
+    if route is None or not str(route).strip():
+        return 'Unknown'
+    r = str(route).upper().strip()
+    if r.endswith('.H') or r.endswith('.G'):
+        r = r[:-2]
+    u = re.sub(r'\s+', ' ', r).strip()
+    if not u:
+        return 'Unknown'
+    m = re.search(r'CNO-([A-Z0-9]{3})\b', u)
+    if m:
+        code = m.group(1)
+    else:
+        code = u[:3] if len(u) >= 3 else u
+    if code == 'LAX':
+        code = 'LAV'
+    return code
+
+
+@app.route('/api/route-map/tickets-by-destination', methods=['GET'])
+def api_route_map_tickets_by_destination():
+    """选定日期区间内飞书 feishu_raw_data 票数，按流向地图规范化目的地汇总。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+
+    start_s = (request.args.get('start_date') or '').strip()
+    end_s = (request.args.get('end_date') or '').strip()
+    if not start_s or not end_s:
+        return jsonify({'error': '请提供 start_date 与 end_date（YYYY-MM-DD）'}), 400
+    try:
+        start_date = datetime.strptime(start_s, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_s, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': '日期格式无效'}), 400
+    if start_date > end_date:
+        return jsonify({'error': '开始日期不能晚于结束日期'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(convert_query_placeholders("""
+            SELECT destination, SUM(tickets_count) AS total_tickets
+            FROM feishu_raw_data
+            WHERE record_date >= ? AND record_date <= ?
+            GROUP BY destination
+        """), (str(start_date), str(end_date)))
+        rows = cursor.fetchall()
+    except Exception as e:
+        msg = str(e)
+        if 'no such table' in msg.lower() or 'does not exist' in msg.lower() or 'undefinedtable' in msg.lower():
+            return jsonify({
+                'start_date': start_s,
+                'end_date': end_s,
+                'by_destination': {},
+                'total': 0,
+                'note': '表 feishu_raw_data 不存在，请先同步飞书运单',
+            })
+        return jsonify({'error': msg}), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    by_dest = {}
+    for row in rows:
+        if USE_POSTGRES:
+            dest = row['destination']
+            tickets = row['total_tickets']
+        else:
+            dest = row[0]
+            tickets = row[1]
+        code = _normalize_route_map_code(dest)
+        if code == 'Unknown':
+            continue
+        by_dest[code] = by_dest.get(code, 0) + int(tickets or 0)
+
+    return jsonify({
+        'start_date': start_s,
+        'end_date': end_s,
+        'by_destination': by_dest,
+        'total': sum(by_dest.values()),
+    })
 
 
 @app.route('/schedule-packaging')
@@ -12024,6 +12229,44 @@ def save_outbound_record():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+def _fetch_outbound_records_for_route_dist(start_date_str, end_date_str):
+    """本地 DB 出库记录，字段形状与 standalone Sheet 模式一致。"""
+    if not start_date_str or not end_date_str:
+        return []
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(convert_query_placeholders("""
+            SELECT record_date, route_code, vehicle_count, cost
+            FROM outbound_records
+            WHERE record_date >= ? AND record_date <= ?
+            ORDER BY record_date ASC, id ASC
+        """), (start_date_str, end_date_str))
+        rows = cursor.fetchall()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    out = []
+    for row in rows:
+        if USE_POSTGRES:
+            out.append({
+                'record_date': _format_outbound_record_date(row['record_date']),
+                'route_code': row['route_code'],
+                'vehicle_count': row['vehicle_count'] if row['vehicle_count'] is not None else 1,
+                'cost': float(row['cost']) if row['cost'] else 0.0,
+            })
+        else:
+            out.append({
+                'record_date': _format_outbound_record_date(row[0]),
+                'route_code': row[1],
+                'vehicle_count': row[2] if row[2] is not None else 1,
+                'cost': float(row[3]) if row[3] else 0.0,
+            })
+    return out
 
 
 def _format_outbound_record_date(val):
