@@ -370,6 +370,72 @@ def _db_row_get(row, key, default=None):
     return default if v is None else v
 
 
+def _table_exists(cursor, table_name: str) -> bool:
+    """检测表是否存在（兼容 SQLite / PostgreSQL）。"""
+    if USE_POSTGRES:
+        cursor.execute(
+            """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = %s
+            LIMIT 1
+            """,
+            (table_name.lower(),),
+        )
+    else:
+        cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            (table_name,),
+        )
+    return cursor.fetchone() is not None
+
+
+def _can_access_cost_accounting(cursor) -> bool:
+    """运营指标/成本核算页权限：admin/boss 或已授权 cost_accounting。"""
+    if session.get('role') in ('admin', 'boss'):
+        return True
+    cursor.execute(
+        convert_query_placeholders(
+            "SELECT can_view FROM user_permissions WHERE user_id = ? AND page_name = ?"
+        ),
+        (session['user_id'], 'cost_accounting'),
+    )
+    row = cursor.fetchone()
+    return bool(_db_row_get(row, 'can_view', _db_row_get(row, 0, False)))
+
+
+def _labor_summary_field(row, *names):
+    """从 daily_cost_summary 行按多种列名读取（兼容 PG 小写 / SQLite 原样）。"""
+    if row is None:
+        return None
+    if hasattr(row, 'keys'):
+        lower_map = {str(k).lower(): k for k in row.keys()}
+        for name in names:
+            key = lower_map.get(str(name).lower())
+            if key is not None:
+                return row[key]
+        return None
+    if isinstance(names[0], int):
+        try:
+            return row[names[0]]
+        except (KeyError, IndexError, TypeError):
+            return None
+    return None
+
+
+def _normalize_labor_summary_item(row) -> dict:
+    """统一 labor API 返回字段名，供 cost_accounting 前端使用。"""
+    return {
+        'Record_Date': _labor_summary_field(row, 'Record_Date', 'record_date'),
+        'Agency_Name': _labor_summary_field(row, 'Agency_Name', 'agency_name'),
+        'Hourly_Cost_USD': float(_labor_summary_field(row, 'Hourly_Cost_USD', 'hourly_cost_usd') or 0),
+        'Piece_Cost_USD': float(_labor_summary_field(row, 'Piece_Cost_USD', 'piece_cost_usd') or 0),
+        'Total_Cost_USD': float(_labor_summary_field(row, 'Total_Cost_USD', 'total_cost_usd') or 0),
+        'Headcount': int(_labor_summary_field(row, 'Headcount', 'headcount') or 0),
+        'Total_Pieces': _labor_summary_field(row, 'Total_Pieces', 'total_pieces'),
+        'Corrected_Pieces': _labor_summary_field(row, 'Corrected_Pieces', 'corrected_pieces'),
+    }
+
+
 # 入库录入件数 → 实到件数（统计、对比、与分拣对齐等统一口径；装载量 load_amount 不乘系数）
 INBOUND_PIECES_ACTUAL_FACTOR = float(os.environ.get("INBOUND_PIECES_ACTUAL_FACTOR", "0.76"))
 # CBS/CBT：仅按托盘数 × 本系数核算货量（默认 300 件/托，与 GOFO 托盘 344 系数分离）
@@ -13697,7 +13763,7 @@ def export_gofo_data():
 def get_cost_accounting_preview():
     if 'user_id' not in session: return jsonify({'error': '未登录', 'success': False}), 401
     conn = get_db(); cursor = conn.cursor()
-    if not require_admin(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
+    if not _can_access_cost_accounting(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
     
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
@@ -13809,9 +13875,8 @@ def get_cost_accounting_preview():
                          FROM daily_cost_summary 
                          WHERE Agency_Name != '【当日总计】'"""
             
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='daily_cost_summary'")
-            if cursor.fetchone():
-                cursor.execute(l_query)
+            if _table_exists(cursor, 'daily_cost_summary'):
+                cursor.execute(convert_query_placeholders(l_query))
                 l_rows = cursor.fetchall()
             else:
                 l_rows = []
@@ -13820,14 +13885,20 @@ def get_cost_accounting_preview():
             s_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None
             e_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None
             
-            for rdate_str, agency, h_cost, p_cost in l_rows:
+            for lrow in l_rows:
+                rdate_str = _labor_summary_field(lrow, 'Record_Date', 'record_date')
+                agency = _labor_summary_field(lrow, 'Agency_Name', 'agency_name')
+                h_cost = float(_labor_summary_field(lrow, 'Hourly_Cost_USD', 'hourly_cost_usd') or 0)
+                p_cost = float(_labor_summary_field(lrow, 'Piece_Cost_USD', 'piece_cost_usd') or 0)
+                if not rdate_str or not agency:
+                    continue
                 # Date format normalization
                 try:
-                    dt = datetime.datetime.strptime(rdate_str, '%m/%d/%y').date()
-                except:
+                    dt = datetime.datetime.strptime(str(rdate_str), '%m/%d/%y').date()
+                except Exception:
                     try:
-                        dt = datetime.datetime.strptime(rdate_str, '%Y-%m-%d').date()
-                    except:
+                        dt = datetime.datetime.strptime(str(rdate_str)[:10], '%Y-%m-%d').date()
+                    except Exception:
                         continue
                         
                 if s_date and dt < s_date: continue
@@ -14209,7 +14280,7 @@ def get_labor_last_link():
         return jsonify({'error': '未登录', 'success': False}), 401
     conn = get_db()
     cursor = conn.cursor()
-    if not require_admin(cursor):
+    if not _can_access_cost_accounting(cursor):
         conn.close()
         return jsonify({'error': '无权访问', 'success': False}), 403
     try:
@@ -14225,7 +14296,7 @@ def get_labor_last_link():
 def sync_labor_data():
     if 'user_id' not in session: return jsonify({'error': '未登录', 'success': False}), 401
     conn = get_db(); cursor = conn.cursor()
-    if not require_admin(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
+    if not _can_access_cost_accounting(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
     
     data = request.json or {}
     link = (data.get('link') or '').strip()
@@ -14239,9 +14310,10 @@ def sync_labor_data():
             pass
     conn.close()
     
-    # 调用 calc_outsource_finance 中的 run_sync
-    # 注意: run_sync 内部会打印日志并返回 dict
     try:
+        import calc_outsource_finance
+        import importlib
+        importlib.reload(calc_outsource_finance)
         res = calc_outsource_finance.run_sync(link=link)
         if res.get('success'):
             return jsonify({'success': True, 'message': res.get('message', '同步成功')})
@@ -14256,7 +14328,7 @@ def sync_labor_data():
 def get_labor_data():
     if 'user_id' not in session: return jsonify({'error': '未登录', 'success': False}), 401
     conn = get_db(); cursor = conn.cursor()
-    if not require_admin(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
+    if not _can_access_cost_accounting(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
     
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
@@ -14270,8 +14342,10 @@ def get_labor_data():
     query += " ORDER BY Record_Date DESC, Agency_Name ASC"
     
     try:
+        if not _table_exists(cursor, 'daily_cost_summary'):
+            return jsonify({'success': True, 'data': [], 'note': '尚未同步生产人工数据，请先点击「同步人工」'})
         cursor.execute(convert_query_placeholders(query), tuple(params))
-        items = [dict(row) for row in cursor.fetchall()]
+        items = [_normalize_labor_summary_item(row) for row in cursor.fetchall()]
         return jsonify({'success': True, 'data': items})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -14284,9 +14358,12 @@ def get_weekly_labor_summary():
     """获取每周人工成本汇总 (按公司堆叠)"""
     if 'user_id' not in session: return jsonify({'error': '未登录', 'success': False}), 401
     conn = get_db(); cursor = conn.cursor()
-    if not require_admin(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
+    if not _can_access_cost_accounting(cursor): conn.close(); return jsonify({'error': '无权访问', 'success': False}), 403
     
     try:
+        if not _table_exists(cursor, 'daily_cost_summary'):
+            conn.close()
+            return jsonify({'labels': [], 'datasets': []})
         # 查询日常成本摘要中的人工数据，排除占比很小的 OTHERS 和 Unknown
         query = "SELECT Record_Date, Agency_Name, Total_Cost_USD FROM daily_cost_summary WHERE Agency_Name NOT IN ('【当日总计】', 'OTHERS', 'Unknown', 'Others', 'UNKNOWN') ORDER BY Record_Date ASC"
         cursor.execute(convert_query_placeholders(query))

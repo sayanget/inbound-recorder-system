@@ -600,7 +600,7 @@
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                 <div>
                     <h3 data-lang="route_distribution" style="margin: 0 0 4px 0;">流向分布</h3>
-                    <p data-lang="route_distribution_range" style="margin: 0; font-size: 13px; color: var(--text-muted, #666);">近 2 周（按日）</p>
+                    <p data-lang="route_distribution_range" style="margin: 0; font-size: 13px; color: var(--text-muted, #666);">近 2 周（按日）· 与流向分布表同源（Google Sheet）</p>
                 </div>
                 <div class="btn-group" role="group" style="display: flex; gap: 5px; flex-wrap: wrap;">
                     <a href="/route-map" class="btn btn-outline-primary"
@@ -765,7 +765,7 @@
                 total_cost: "总成本",
                 route_distribution: "流向分布",
                 route_map_link: "美国地图",
-                route_distribution_range: "近 2 周（按日）",
+                route_distribution_range: "近 2 周（按日）· 与流向分布表同源（Google Sheet）",
                 route_distribution_export_title: "流向分布（近14日每日发车数，规范化目的地）",
                 no_data: "暂无数据",
                 logout: "登出",
@@ -858,7 +858,7 @@
                 total_cost: "Total Cost",
                 route_distribution: "Route Distribution",
                 route_map_link: "US Map",
-                route_distribution_range: "Last 2 weeks (daily)",
+                route_distribution_range: "Last 2 weeks (daily) · same source as Route Distribution (Google Sheet)",
                 route_distribution_export_title: "Route distribution (daily departures, 14 days, normalized destinations)",
                 no_data: "No data",
                 logout: "Logout",
@@ -951,7 +951,7 @@
                 total_cost: "Costo Total",
                 route_distribution: "Distribución de Rutas",
                 route_map_link: "Mapa EE.UU.",
-                route_distribution_range: "Últimas 2 semanas (por día)",
+                route_distribution_range: "Últimas 2 semanas (por día) · misma fuente que Distribución de Rutas (Google Sheet)",
                 route_distribution_export_title: "Distribución de rutas (salidas diarias, 14 días, destinos normalizados)",
                 no_data: "Sin datos",
                 logout: "Cerrar sesión",
@@ -1065,6 +1065,31 @@
             const cnoMatch = u.match(/CNO-([A-Z0-9]{3})\b/);
             if (cnoMatch) return cnoMatch[1];
             return u.length >= 3 ? u.slice(0, 3) : u;
+        }
+
+        /** 与 /route-distribution 同源（Google Sheet / 可切换）；失败时回退本地 outbound_records */
+        async function fetchOutboundDistributionRecords(startDate, endDate) {
+            if (!startDate || !endDate) return [];
+            const q = `start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+            try {
+                const dist = await fetch(`/api/route-distribution/outbound/records?${q}`, { credentials: 'same-origin' });
+                if (dist.ok) {
+                    const payload = await dist.json();
+                    if (Array.isArray(payload)) return payload;
+                }
+            } catch (e) {
+                console.warn('Route-distribution records API failed, fallback to local DB', e);
+            }
+            try {
+                const local = await fetch(`/api/outbound/records?${q}`, { credentials: 'same-origin' });
+                if (local.ok) {
+                    const payload = await local.json();
+                    return Array.isArray(payload) ? payload : [];
+                }
+            } catch (e) {
+                console.error('Local outbound records API failed', e);
+            }
+            return [];
         }
 
         document.addEventListener('DOMContentLoaded', function () {
@@ -2356,18 +2381,12 @@
                 dates.push(formatLocalDateISO(d));
             }
 
-            // Fetch 2-week window from API
+            // 与流向分布页同源（调度 Google Sheet），避免本地库未同步导致图表缺数
             let allRecords = [];
             try {
-                const url = `/api/outbound/records?start_date=${dates[0]}&end_date=${dates[dates.length - 1]}`;
-                const response = await fetch(url);
-                if (response.ok) {
-                    const payload = await response.json();
-                    allRecords = Array.isArray(payload) ? payload : [];
-                    if (!Array.isArray(payload)) {
-                        console.error('Route chart: expected JSON array from /api/outbound/records, got:', payload);
-                    }
-                }
+                allRecords = await fetchOutboundDistributionRecords(
+                    dates[0], dates[dates.length - 1]
+                );
             } catch (err) {
                 console.error('Failed to load 2-week route data:', err);
             }
@@ -2385,10 +2404,11 @@
             });
 
             allRecords.forEach(r => {
-                const rd = r.record_date;
+                const rd = String(r.record_date || '').substring(0, 10);
                 const normRC = normalizeRoute(r.route_code);
                 if (dateRouteMap[rd] && routeCodes.includes(normRC)) {
-                    dateRouteMap[rd][normRC] += 1;
+                    const n = Number(r.vehicle_count);
+                    dateRouteMap[rd][normRC] += (Number.isFinite(n) && n >= 1) ? n : 1;
                 }
             });
 
@@ -3527,25 +3547,18 @@ ${WEEKLY_TB_EXPORT_BOOTSTRAP}
                     endDateStr = ends.reduce((a, b) => (a > b ? a : b));
                 }
 
-                const url = `/api/outbound/records?start_date=${startDateStr}&end_date=${endDateStr}`;
-                console.log(`Fetching weekly data: ${url}`);
-
-                const response = await fetch(url);
-                if (response.ok) {
-                    const payload = await response.json();
-                    if (!Array.isArray(payload)) {
-                        console.error('Weekly trend: expected JSON array from /api/outbound/records, got:', payload);
-                        return;
-                    }
-                    console.log(`Loaded ${payload.length} weekly records`);
-                    lastOutboundWeeklyWeekFilter = weekFilter;
-                    lastOutboundWeeklyTbWeekFilter = tbWeekFilter;
-                    currentWeeklyData = payload;
-                    updateWeeklyChart(payload, weekFilter);
-                    updateWeeklyTrunkBranchSplitChart(payload, tbWeekFilter);
-                } else {
-                    console.error('Failed to load weekly data');
+                console.log(`Fetching weekly data: ${startDateStr} ~ ${endDateStr}`);
+                const payload = await fetchOutboundDistributionRecords(startDateStr, endDateStr);
+                if (!Array.isArray(payload)) {
+                    console.error('Weekly trend: expected array from distribution records API');
+                    return;
                 }
+                console.log(`Loaded ${payload.length} weekly records`);
+                lastOutboundWeeklyWeekFilter = weekFilter;
+                lastOutboundWeeklyTbWeekFilter = tbWeekFilter;
+                currentWeeklyData = payload;
+                updateWeeklyChart(payload, weekFilter);
+                updateWeeklyTrunkBranchSplitChart(payload, tbWeekFilter);
             } catch (error) {
                 console.error('Error loading weekly data:', error);
             }

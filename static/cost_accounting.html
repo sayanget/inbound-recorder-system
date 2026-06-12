@@ -1238,6 +1238,7 @@
             saveLaborSheetLinkToStorage();
             fetch('/api/admin/labor/sync', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ link: link })
             })
@@ -1446,17 +1447,25 @@
                 url += `?start_date=${startStr}&end_date=${endStr}`;
             }
 
-            fetch(url)
+            fetch(url, { credentials: 'same-origin' })
                 .then(r => r.json())
                 .then(res => {
-                    if (res.success) {
-                        let data = res.data || [];
-                        currentLaborData = data;
-                        const s = startStr || (data.length ? data[data.length - 1].Record_Date : '-');
-                        const e = endStr || (data.length ? data[0].Record_Date : '-');
-                        renderLaborTable(data, s, e);
+                    if (!res.success) {
+                        showMessage(res.error || '生产人工数据加载失败', 'error');
+                        return;
                     }
-                }).catch(err => console.error('Error fetching labor data:', err));
+                    let data = res.data || [];
+                    currentLaborData = data;
+                    const s = startStr || (data.length ? data[data.length - 1].Record_Date : '-');
+                    const e = endStr || (data.length ? data[0].Record_Date : '-');
+                    renderLaborTable(data, s, e);
+                    if (res.note && !data.length) {
+                        showMessage(res.note, 'error');
+                    }
+                }).catch(err => {
+                    console.error('Error fetching labor data:', err);
+                    showMessage('生产人工数据请求失败，请检查登录状态或网络', 'error');
+                });
         }
 
         function renderLaborTable(data, start, end) {

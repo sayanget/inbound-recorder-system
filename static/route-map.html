@@ -215,6 +215,26 @@
             font-size: 12px;
             padding: 3px 8px;
         }
+
+        .route-hover-popup .leaflet-popup-content-wrapper {
+            background: var(--card-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+        }
+        .route-hover-popup .leaflet-popup-tip {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+        }
+        .route-hover-popup .leaflet-popup-content {
+            margin: 10px 12px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        [data-theme="dark"] .route-hover-popup .leaflet-popup-content-wrapper {
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+        }
     </style>
 </head>
 <body>
@@ -272,12 +292,11 @@
         const CNO = resolveUsHub('CNO');
         const MAP_ZOOM = 6;
         const MAP_CENTER = [39.5, -98.35];
-        /** 直线里程 × 系数 ≈ 公路里程；平均行车速度用于估算时长 */
+        /** 里程估算兜底；优先用 us_hub_coords 中的 transitH（运营到达时效） */
         const DRIVE_ROAD_FACTOR = 1.12;
         const DRIVE_AVG_MPH = 52;
-        const FLOW_ANIM_MIN_S = 1.2;
-        const FLOW_ANIM_MAX_S = 8.5;
-        const FLOW_REF_DRIVE_HOURS = 46;
+        /** 动画周期(秒) = 运输时效(小时) × 该系数，保持线路间严格同比 */
+        const FLOW_SEC_PER_TRANSIT_H = 0.42;
 
         function normalizeRoute(route) {
             if (!route) return 'Unknown';
@@ -374,7 +393,8 @@
                     fillColor: '#f59e0b',
                     fillOpacity: 0.95,
                     weight: 2
-                }).addTo(map).bindPopup(`<b>${CNO.name}</b><br>出库枢纽（连线起点）`);
+                }).addTo(map);
+                bindHoverInfo(hubMarker, `<b>${CNO.name}</b><br>出库枢纽（连线起点）`);
                 bindDestLabel(hubMarker, 'CNO', 10, 'hub-label');
             }
             window.addEventListener('themeChanged', () => {
@@ -399,8 +419,10 @@
             return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
         }
 
-        /** CNO → 目的地估算行车时长（小时） */
-        function estimateDriveHours(lat1, lng1, lat2, lng2) {
+        /** CNO → 目的地到达时效（小时）：运营表 transitH 优先，否则里程估算 */
+        function estimateDriveHours(lat1, lng1, lat2, lng2, destCode) {
+            const th = typeof transitHoursFromCno === 'function' ? transitHoursFromCno(destCode) : null;
+            if (th != null && th > 0) return th;
             const miles = haversineMiles(lat1, lng1, lat2, lng2) * DRIVE_ROAD_FACTOR;
             return miles / DRIVE_AVG_MPH;
         }
@@ -418,11 +440,13 @@
             return m > 0 ? `约 ${h} 小时 ${m} 分` : `约 ${h} 小时`;
         }
 
-        /** 动画周期与行车时长成正比（同屏可比较的绝对比例尺） */
+        /**
+         * 动画周期与运输时效成正比（不做 min-max 压缩，避免长短线路视觉速度趋同）。
+         * 虚线每周期沿 SVG 路径走完整一圈，故长线且时效长 → 更慢像素速度。
+         */
         function driveHoursToFlowDuration(hours) {
-            const t = Math.min(1, Math.max(0, hours / FLOW_REF_DRIVE_HOURS));
-            const sec = FLOW_ANIM_MIN_S + t * (FLOW_ANIM_MAX_S - FLOW_ANIM_MIN_S);
-            return Math.max(FLOW_ANIM_MIN_S, sec);
+            if (!Number.isFinite(hours) || hours <= 0) return FLOW_SEC_PER_TRANSIT_H;
+            return hours * FLOW_SEC_PER_TRANSIT_H;
         }
 
         /** 自 CNO 指向目的地的方位角（度，0=北） */
@@ -511,11 +535,42 @@
             });
         }
 
-        function addAnimatedRouteLine(latlngs, color, count, max, driveHours, animIndex) {
+        function bindHoverInfo(marker, html) {
+            marker.bindPopup(html, {
+                closeButton: false,
+                autoPan: false,
+                maxWidth: 300,
+                className: 'route-hover-popup',
+            });
+            marker.on('mouseover', function () {
+                this.openPopup();
+            });
+            marker.on('mouseout', function () {
+                this.closePopup();
+            });
+        }
+
+        function buildDestInfoHtml(row, name, start, end, ticketsNote) {
+            const driveTxt = row._driveHours != null ? formatDriveTime(row._driveHours) : '';
+            const tk = row.tickets;
+            const ticketsLine = tk != null
+                ? `票数: <b>${Number(tk).toLocaleString()}</b>（飞书）<br>`
+                : (ticketsNote ? '票数: —<br>' : '');
+            const addr = row.hub && row.hub.address;
+            return (
+                `<b>${row.code}</b> — ${name}<br>` +
+                (addr ? `${addr}<br>` : '') +
+                `${start} ~ ${end}<br>` +
+                `发车数: <b>${row.count}</b><br>` +
+                ticketsLine +
+                (driveTxt ? `到达约: ${driveTxt}` : '')
+            );
+        }
+
+        function addAnimatedRouteLine(latlngs, color, count, max, driveHours) {
             const w = lineWeight(count, max);
             const durSec = driveHoursToFlowDuration(driveHours);
             const dur = durSec.toFixed(2) + 's';
-            const delay = (animIndex * 0.06).toFixed(2) + 's';
             const opacity = isDarkTheme() ? 0.58 : 0.48;
 
             const line = L.polyline(latlngs, {
@@ -531,11 +586,13 @@
                 const path = line.getElement();
                 if (!path) return;
                 const len = path.getTotalLength();
-                const dash = Math.max(6, Math.min(14, len / 18));
+                if (len <= 0) return;
+                const dash = Math.max(8, Math.min(18, len / 14));
+                const gap = dash * 1.2;
                 path.style.setProperty('--flow-dur', dur);
-                path.style.setProperty('--flow-delay', delay);
-                path.style.setProperty('--flow-offset', String(-len));
-                path.style.strokeDasharray = `${dash} ${dash * 1.4}`;
+                path.style.setProperty('--flow-delay', '0s');
+                path.style.setProperty('--flow-offset', String(-(len + gap)));
+                path.style.strokeDasharray = `${dash} ${gap}`;
             };
             applyFlowStyle();
             line.on('add', () => {
@@ -654,14 +711,15 @@
             const counts = {};
             records.forEach(r => {
                 const code = normalizeRoute(r.route_code);
-                if (code === 'Unknown') return;
-                counts[code] = (counts[code] || 0) + 1;
+                if (code === 'Unknown' || code === 'CNO') return;
+                const n = Number(r.vehicle_count);
+                counts[code] = (counts[code] || 0) + ((Number.isFinite(n) && n >= 1) ? n : 1);
             });
 
             const mapped = [];
             const unmapped = [];
             Object.keys(counts).sort().forEach(code => {
-                if (code === 'CNO') return;
+                if (code === 'CNO' || !counts[code]) return;
                 const hub = resolveUsHub(code);
                 const tk = ticketsForCode(code);
                 const row = { code, count: counts[code], tickets: tk, hub, color: '' };
@@ -683,16 +741,14 @@
                 assignCurveSlots(mapped, 10);
                 mapped.forEach((row) => {
                     row._driveHours = estimateDriveHours(
-                        CNO.lat, CNO.lng, row.hub.lat, row.hub.lng
+                        CNO.lat, CNO.lng, row.hub.lat, row.hub.lng, row.code
                     );
                 });
             }
-
             // 先画弧线（底层），再画节点，避免遮挡
-            let animIdx = 0;
             mapped.forEach((row) => {
                 const { lat, lng } = row.hub;
-                if (CNO && row.code !== 'CNO') {
+                if (CNO && row.code !== 'CNO' && row.count > 0) {
                     const latlngs = buildCurvedLatLngs(
                         CNO.lat, CNO.lng, lat, lng,
                         row._curveIndex != null ? row._curveIndex : 0,
@@ -700,8 +756,7 @@
                     );
                     addAnimatedRouteLine(
                         latlngs, row.color, row.count, max,
-                        row._driveHours != null ? row._driveHours : 1,
-                        animIdx++
+                        row._driveHours != null ? row._driveHours : 1
                     );
                 }
             });
@@ -716,18 +771,7 @@
                     fillOpacity: isDarkTheme() ? 0.82 : 0.75,
                     weight: isDarkTheme() ? 2.5 : 2
                 });
-                const driveTxt = row._driveHours != null ? formatDriveTime(row._driveHours) : '';
-                const tk = row.tickets;
-                const ticketsLine = tk != null
-                    ? `票数: <b>${Number(tk).toLocaleString()}</b>（飞书）<br>`
-                    : (ticketsNote ? `票数: —<br>` : '');
-                m.bindPopup(
-                    `<b>${row.code}</b> — ${name}<br>` +
-                    `${start} ~ ${end}<br>` +
-                    `发车数: <b>${row.count}</b><br>` +
-                    ticketsLine +
-                    (driveTxt ? `行车约: ${driveTxt}` : '')
-                );
+                bindHoverInfo(m, buildDestInfoHtml(row, name, start, end, ticketsNote));
                 bindDestLabel(m, row.code, r);
                 m.addTo(layerGroup);
                 markersByCode[row.code] = m;

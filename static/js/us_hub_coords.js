@@ -1,29 +1,31 @@
 /**
- * US hub / airport coordinates for route codes (3-letter IATA-style).
+ * US hub coordinates for route codes (3-letter IATA-style).
+ * Primary destinations use warehouse addresses; others remain airport/city approximations.
  * Used by /route-map — extend when new destinations appear in 流向分布.
  */
 (function (global) {
     const H = {
         CNO: { lat: 34.0122, lng: -117.6889, name: 'Chino (CNO 枢纽)' },
-        LAV: { lat: 33.9425, lng: -118.4081, name: 'Los Angeles (LAV)' },
-        LAX: { lat: 33.9425, lng: -118.4081, name: 'Los Angeles (LAX)' },
-        IAH: { lat: 29.9844, lng: -95.3414, name: 'Houston (IAH)' },
-        MCO: { lat: 28.4312, lng: -81.3081, name: 'Orlando (MCO)' },
-        MIA: { lat: 25.7959, lng: -80.2870, name: 'Miami (MIA)' },
-        ATL: { lat: 33.6407, lng: -84.4277, name: 'Atlanta (ATL)' },
-        ATLG: { lat: 33.6407, lng: -84.4277, name: 'Atlanta (ATLG)' },
-        DFW: { lat: 32.8998, lng: -97.0403, name: 'Dallas (DFW)' },
-        ORD: { lat: 41.9742, lng: -87.9073, name: 'Chicago (ORD)' },
-        CVG: { lat: 39.0489, lng: -84.6619, name: 'Cincinnati (CVG)' },
-        EWR: { lat: 40.6895, lng: -74.1745, name: 'Newark (EWR)' },
-        JFK: { lat: 40.6413, lng: -73.7781, name: 'New York (JFK)' },
-        CLT: { lat: 35.2144, lng: -80.9473, name: 'Charlotte (CLT)' },
-        SFO: { lat: 37.6213, lng: -122.3790, name: 'San Francisco (SFO)' },
-        SEA: { lat: 47.4502, lng: -122.3088, name: 'Seattle (SEA)' },
-        DEN: { lat: 39.8561, lng: -104.6737, name: 'Denver (DEN)' },
-        MOD: { lat: 37.6391, lng: -120.9969, name: 'Modesto (MOD)' },
-        PHX: { lat: 33.4352, lng: -112.0101, name: 'Phoenix (PHX)' },
-        LAS: { lat: 36.0840, lng: -115.1537, name: 'Las Vegas (LAS)' },
+        LAV: { lat: 33.9962, lng: -118.2130, name: 'Los Angeles (LAV) · Vernon, CA', address: '5215 S Boyle Ave, Vernon, CA 90058', transitH: 1.5 },
+        LAX: { lat: 33.9962, lng: -118.2130, name: 'Los Angeles (LAX) · Vernon, CA', address: '5215 S Boyle Ave, Vernon, CA 90058', transitH: 1.5 },
+        IAH: { lat: 29.7770, lng: -95.8613, name: 'Houston (IAH) · Katy, TX', address: '28347 Katy Fwy, Katy, TX 77494', transitH: 26 },
+        MCO: { lat: 28.5752, lng: -81.4304, name: 'Orlando (MCO) · Orlando, FL', address: '3702 Mercy Star Ct, Suite 110, Orlando, FL 32808', transitH: 38 },
+        MIA: { lat: 25.8187, lng: -80.2605, name: 'Miami (MIA) · Hialeah, FL', address: '1080 SE 5th St #300, Hialeah, FL 33010', transitH: 40 },
+        ATL: { lat: 33.6162, lng: -84.3902, name: 'Atlanta (ATL) · Forest Park, GA', address: '16 Overmeyer Way Unit B, Forest Park, GA 30297', transitH: 32 },
+        ATLG: { lat: 33.6162, lng: -84.3902, name: 'Atlanta (ATLG) · Forest Park, GA', address: '16 Overmeyer Way Unit B, Forest Park, GA 30297', transitH: 32 },
+        PDK: { lat: 33.8756, lng: -84.3020, name: 'Atlanta DeKalb-Peachtree (PDK)', transitH: 32 },
+        DFW: { lat: 32.9477, lng: -97.0108, name: 'Dallas (DFW) · Coppell, TX', address: '925 Freeport Pkwy #200, Coppell, TX 75019', transitH: 22 },
+        ORD: { lat: 41.9446, lng: -87.9177, name: 'Chicago (ORD) · Franklin Park, IL', address: '1055 Sesame St, Franklin Park, IL 60131', transitH: 30 },
+        CVG: { lat: 39.2625, lng: -84.4607, name: 'Cincinnati (CVG) · Woodlawn, OH', address: '660 Redna Terrace, Woodlawn, OH 45215', transitH: 34 },
+        EWR: { lat: 40.5957, lng: -74.2261, name: 'Newark (EWR) · Carteret, NJ', address: '400 Salt Meadow Rd Unit B, Carteret, NJ', transitH: 44 },
+        JFK: { lat: 40.6560, lng: -73.7648, name: 'New York (JFK) · Jamaica, NY', address: '182-30 150th Rd, Jamaica, NY 11413', transitH: 46 },
+        CLT: { lat: 35.2673, lng: -80.8714, name: 'Charlotte (CLT) · Charlotte, NC', address: '724 Montana Dr Unit C, Charlotte, NC 28216', transitH: 34 },
+        SFO: { lat: 37.6131, lng: -122.0526, name: 'San Francisco (SFO) · Hayward, CA', address: '30991 San Clemente St, Hayward, CA 94544', transitH: 7 },
+        SEA: { lat: 47.4298, lng: -122.3231, name: 'Seattle (SEA) · SeaTac, WA', address: '835 S 192nd St Suite 1200, SeaTac, WA 98148', transitH: 18 },
+        DEN: { lat: 39.7638, lng: -104.8443, name: 'Denver (DEN) · Aurora, CO', address: '3250 Quentin St Suite 122, Aurora, CO 80011', transitH: 14 },
+        MOD: { lat: 37.6391, lng: -120.9969, name: 'Modesto (MOD)', transitH: 6 },
+        PHX: { lat: 33.4352, lng: -112.0101, name: 'Phoenix (PHX)', transitH: 7 },
+        LAS: { lat: 36.1353, lng: -115.1994, name: 'Las Vegas (LAS) · Las Vegas, NV', address: '5275 S Arville St Suites 152/200, Las Vegas, NV 89118', transitH: 5 },
         SJU: { lat: 18.4394, lng: -66.0018, name: 'San Juan (SJU)' },
         IND: { lat: 39.7173, lng: -86.2944, name: 'Indianapolis (IND)' },
         PHL: { lat: 39.8744, lng: -75.2424, name: 'Philadelphia (PHL)' },
@@ -60,6 +62,9 @@
         TUC: 'PHX',
     };
 
+    /** 与主枢纽重合的代号，地图上只保留 canonical 节点 */
+    const MAP_SKIP_CODES = new Set(['CNO', 'LAX', 'ATLG', 'TUC']);
+
     function resolveHub(code) {
         if (!code) return null;
         const u = String(code).toUpperCase().trim();
@@ -72,6 +77,19 @@
         }
         return null;
     }
+
+    /** CNO 出库至该流向的参考到达时效（小时），用于地图动画比例 */
+    function transitHoursFromCno(code) {
+        const hub = resolveHub(code);
+        return hub && hub.transitH != null ? hub.transitH : null;
+    }
+
+    function listMapHubCodes() {
+        return Object.keys(H).filter((k) => !MAP_SKIP_CODES.has(k)).sort();
+    }
+
+    global.transitHoursFromCno = transitHoursFromCno;
+    global.listMapHubCodes = listMapHubCodes;
 
     global.US_HUB_COORDS = H;
     global.resolveUsHub = resolveHub;

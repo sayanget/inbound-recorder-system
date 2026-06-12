@@ -1,10 +1,19 @@
 import os
-import requests
-import pandas as pd
-import sqlite3
 import re
 import pytz
 from datetime import datetime, timedelta
+
+import pandas as pd
+import requests
+
+try:
+    from database import USE_POSTGRES, DATABASE_URL, get_sqlite_db_path
+except ImportError:
+    USE_POSTGRES = False
+    DATABASE_URL = None
+
+    def get_sqlite_db_path():
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inbound.db')
 
 # --- 飞书 API 配置 ---
 FEISHU_APP_ID = os.getenv('FEISHU_APP_ID', 'cli_a9fc1c1c0bb8dbcb')
@@ -14,6 +23,115 @@ SHEET_ID_DEFAULT = 'V2dsq4'
 
 # 与 single_app 一致：入库实到件数 = (录入 − excluded_pieces) × 系数；53+G 为 0
 INBOUND_PIECES_ACTUAL_FACTOR = float(os.environ.get("INBOUND_PIECES_ACTUAL_FACTOR", "0.76"))
+
+
+def _open_labor_db():
+    """与 single_app 使用同一数据库（SQLite 或 PostgreSQL）。"""
+    if USE_POSTGRES and DATABASE_URL:
+        import psycopg2
+        from psycopg2.extras import DictCursor
+        return psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor), True
+    import sqlite3
+    conn = sqlite3.connect(get_sqlite_db_path(), timeout=30)
+    conn.row_factory = sqlite3.Row
+    return conn, False
+
+
+def _q(sql: str, is_pg: bool) -> str:
+    return sql.replace('?', '%s') if is_pg else sql
+
+
+def _tbl(is_pg: bool) -> str:
+    return 'daily_cost_summary'
+
+
+def _cols(is_pg: bool) -> dict:
+    if is_pg:
+        return {
+            'date': 'record_date',
+            'agency': 'agency_name',
+            'hourly': 'hourly_cost_usd',
+            'piece': 'piece_cost_usd',
+            'total': 'total_cost_usd',
+            'headcount': 'headcount',
+            'total_pieces': 'total_pieces',
+            'corrected_pieces': 'corrected_pieces',
+        }
+    return {
+        'date': 'Record_Date',
+        'agency': 'Agency_Name',
+        'hourly': 'Hourly_Cost_USD',
+        'piece': 'Piece_Cost_USD',
+        'total': 'Total_Cost_USD',
+        'headcount': 'Headcount',
+        'total_pieces': 'Total_Pieces',
+        'corrected_pieces': 'Corrected_Pieces',
+    }
+
+
+def _ensure_daily_cost_table(cur, is_pg: bool) -> None:
+    c = _cols(is_pg)
+    if is_pg:
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS {_tbl(is_pg)} (
+                {c['date']} TEXT NOT NULL,
+                {c['agency']} TEXT NOT NULL,
+                {c['hourly']} REAL DEFAULT 0,
+                {c['piece']} REAL DEFAULT 0,
+                {c['total']} REAL DEFAULT 0,
+                {c['headcount']} INTEGER DEFAULT 0,
+                {c['total_pieces']} INTEGER DEFAULT 0,
+                {c['corrected_pieces']} INTEGER DEFAULT 0,
+                PRIMARY KEY ({c['date']}, {c['agency']})
+            )
+        """)
+    else:
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS {_tbl(is_pg)} (
+                {c['date']} TEXT NOT NULL,
+                {c['agency']} TEXT NOT NULL,
+                {c['hourly']} REAL DEFAULT 0,
+                {c['piece']} REAL DEFAULT 0,
+                {c['total']} REAL DEFAULT 0,
+                {c['headcount']} INTEGER DEFAULT 0,
+                {c['total_pieces']} INTEGER DEFAULT 0,
+                {c['corrected_pieces']} INTEGER DEFAULT 0,
+                PRIMARY KEY ({c['date']}, {c['agency']})
+            )
+        """)
+
+
+def _insert_ignore_daily_row(cur, is_pg: bool, rdate: str, agency: str) -> None:
+    c = _cols(is_pg)
+    t = _tbl(is_pg)
+    if is_pg:
+        cur.execute(
+            _q(
+                f"INSERT INTO {t} ({c['date']}, {c['agency']}) VALUES (?, ?) "
+                f"ON CONFLICT ({c['date']}, {c['agency']}) DO NOTHING",
+                is_pg,
+            ),
+            (rdate, agency),
+        )
+    else:
+        cur.execute(
+            _q(f"INSERT OR IGNORE INTO {t} ({c['date']}, {c['agency']}) VALUES (?, ?)", is_pg),
+            (rdate, agency),
+        )
+
+
+def _parse_feishu_sheet_link(link: str):
+    """解析飞书表格链接，返回 (spread_token, sheet_id) 或 None。"""
+    if not link:
+        return None
+    token_m = re.search(r'(?:sheets|wiki)/([a-zA-Z0-9]+)', link, re.I)
+    if not token_m:
+        return None
+    sheet_m = re.search(r'[?&]sheet(?:Id)?=([a-zA-Z0-9]+)', link, re.I)
+    if not sheet_m:
+        return None
+    return token_m.group(1), sheet_m.group(1)
+
 
 def get_feishu_tenant_token():
     url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
@@ -186,123 +304,348 @@ def _find_labor_job_col(row) -> int:
             return i
     return -1
 
+
+def _row_val(row, key_or_idx, default=None):
+    try:
+        if isinstance(key_or_idx, int):
+            return row[key_or_idx]
+        return row[key_or_idx]
+    except (KeyError, IndexError, TypeError):
+        return default
+
+
+def _sync_gofo_daily_cost(cur, is_pg: bool, d, d_str: str) -> None:
+    """将 Gofo 计件与当日件数写入 daily_cost_summary（与主库同源）。"""
+    import pytz
+
+    c = _cols(is_pg)
+    t = _tbl(is_pg)
+    _ensure_daily_cost_table(cur, is_pg)
+
+    cur.execute(
+        _q(
+            f"""
+            SELECT
+                CASE
+                    WHEN Operator_Name LIKE 'AAS%' THEN 'AAS'
+                    WHEN Operator_Name LIKE 'UNS%' THEN 'A-SHARE'
+                    ELSE 'OTHERS'
+                END as Agency,
+                SUM(Wages) as Piece_Wages,
+                COUNT(DISTINCT Operator_Name) as Headcount
+            FROM gofo_piece_rate_summary
+            WHERE Record_Date = ?
+            GROUP BY Agency
+            """,
+            is_pg,
+        ),
+        (d_str,),
+    )
+    for row in cur.fetchall():
+        agency = _row_val(row, 'Agency', _row_val(row, 0))
+        wages = _row_val(row, 'Piece_Wages', _row_val(row, 1))
+        hc = _row_val(row, 'Headcount', _row_val(row, 2))
+        _insert_ignore_daily_row(cur, is_pg, d_str, agency)
+        cur.execute(
+            _q(
+                f"""
+                UPDATE {t}
+                SET {c['piece']} = ?, {c['headcount']} = COALESCE({c['headcount']}, 0) + ?
+                WHERE {c['date']} = ? AND {c['agency']} = ?
+                """,
+                is_pg,
+            ),
+            (round(wages or 0, 2), hc, d_str, agency),
+        )
+
+    cur.execute(
+        _q("SELECT SUM(tickets_count), SUM(boxes_count) FROM feishu_raw_data WHERE record_date = ?", is_pg),
+        (d_str,),
+    )
+    f_row = cur.fetchone()
+    f_pieces = _row_val(f_row, 0, 0) if f_row else 0
+    if f_pieces and f_pieces > 0:
+        total_p = int(f_pieces)
+        print(f"   - Using Feishu pieces for {d_str}: {total_p}")
+    else:
+        la_tz = pytz.timezone('America/Los_Angeles')
+        next_date = d + timedelta(days=1)
+        t_start = la_tz.localize(datetime.combine(d, datetime.min.time().replace(hour=5)))
+        t_end = la_tz.localize(datetime.combine(next_date, datetime.min.time().replace(hour=5)))
+        cur.execute(
+            _q(
+                f"""
+                SELECT SUM(CASE
+                    WHEN vehicle_type = '53英尺' AND vehicle_no = 'G' THEN 0
+                    ELSE ((pieces - COALESCE(excluded_pieces, 0)) * {INBOUND_PIECES_ACTUAL_FACTOR})
+                END) as total_pieces
+                FROM inbound_records
+                WHERE created_at >= ? AND created_at < ?
+                """,
+                is_pg,
+            ),
+            (t_start.strftime('%Y-%m-%d %H:%M:%S'), t_end.strftime('%Y-%m-%d %H:%M:%S')),
+        )
+        p_row = cur.fetchone()
+        total_p = int(round(float(_row_val(p_row, 'total_pieces', _row_val(p_row, 0, 0)) or 0)))
+        print(f"   - Using System pieces for {d_str}: {total_p}")
+
+    _insert_ignore_daily_row(cur, is_pg, d_str, '【当日总计】')
+    cur.execute(
+        _q(
+            f"""
+            UPDATE {t}
+            SET {c['total_pieces']} = ?, {c['corrected_pieces']} = ?
+            WHERE {c['date']} = ? AND {c['agency']} = '【当日总计】'
+            """,
+            is_pg,
+        ),
+        (total_p, total_p, d_str),
+    )
+    cur.execute(
+        _q(
+            f"""
+            UPDATE {t}
+            SET {c['total']} = COALESCE({c['hourly']}, 0) + COALESCE({c['piece']}, 0)
+            WHERE {c['date']} = ?
+            """,
+            is_pg,
+        ),
+        (d_str,),
+    )
+    cur.execute(
+        _q(
+            f"""
+            SELECT SUM(COALESCE({c['hourly']}, 0)), SUM(COALESCE({c['piece']}, 0)),
+                   SUM(COALESCE({c['total']}, 0)), SUM(COALESCE({c['headcount']}, 0))
+            FROM {t}
+            WHERE {c['date']} = ? AND {c['agency']} != '【当日总计】'
+            """,
+            is_pg,
+        ),
+        (d_str,),
+    )
+    totals = cur.fetchone()
+    if totals:
+        th = _row_val(totals, 0)
+        tp = _row_val(totals, 1)
+        tt = _row_val(totals, 2)
+        thc = _row_val(totals, 3)
+        cur.execute(
+            _q(
+                f"""
+                UPDATE {t}
+                SET {c['hourly']} = ?, {c['piece']} = ?, {c['total']} = ?, {c['headcount']} = ?
+                WHERE {c['date']} = ? AND {c['agency']} = '【当日总计】'
+                """,
+                is_pg,
+            ),
+            (th or 0, tp or 0, tt or 0, thc or 0, d_str),
+        )
+
+
+def _persist_labor_combined(combined) -> dict:
+    """将飞书解析结果写入 daily_cost_summary。"""
+    conn, is_pg = _open_labor_db()
+    c = _cols(is_pg)
+    t = _tbl(is_pg)
+    try:
+        cur = conn.cursor()
+        _ensure_daily_cost_table(cur, is_pg)
+        dates_to_refresh = set()
+        upsert_count = 0
+
+        for _, row in combined.iterrows():
+            rdate = row['Record_Date']
+            agency = row['Agency_Name']
+            if not rdate:
+                continue
+            dates_to_refresh.add(rdate)
+            _insert_ignore_daily_row(cur, is_pg, rdate, agency)
+            if agency != '【当日总计】':
+                cur.execute(
+                    _q(
+                        f"""
+                        UPDATE {t}
+                        SET {c['hourly']} = ?, {c['headcount']} = ?
+                        WHERE {c['date']} = ? AND {c['agency']} = ?
+                        """,
+                        is_pg,
+                    ),
+                    (row['Hourly_Cost_USD'], row['Headcount'], rdate, agency),
+                )
+                upsert_count += 1
+
+        print("🔄 正在同步 Gofo 计件数据至汇总表...")
+        for rdate_feishu in dates_to_refresh:
+            if not rdate_feishu:
+                continue
+            cur.execute(
+                _q(
+                    f"""
+                    SELECT
+                        CASE
+                            WHEN Operator_Name LIKE 'AAS%' THEN 'AAS'
+                            WHEN Operator_Name LIKE 'UNS%' THEN 'A-SHARE'
+                            ELSE 'OTHERS'
+                        END as Agency,
+                        SUM(Wages) as Piece_Wages
+                    FROM gofo_piece_rate_summary
+                    WHERE Record_Date = ?
+                    GROUP BY Agency
+                    """,
+                    is_pg,
+                ),
+                (rdate_feishu,),
+            )
+            for prow in cur.fetchall():
+                agency_mapped = _row_val(prow, 'Agency', _row_val(prow, 0))
+                piece_wages = _row_val(prow, 'Piece_Wages', _row_val(prow, 1))
+                if agency_mapped == 'OTHERS':
+                    continue
+                _insert_ignore_daily_row(cur, is_pg, rdate_feishu, agency_mapped)
+                cur.execute(
+                    _q(
+                        f"""
+                        UPDATE {t}
+                        SET {c['piece']} = ?
+                        WHERE {c['date']} = ? AND {c['agency']} = ?
+                        """,
+                        is_pg,
+                    ),
+                    (piece_wages, rdate_feishu, agency_mapped),
+                )
+
+        print("🧮 正在重新计算总额与当日汇总...")
+        for rdate_feishu in dates_to_refresh:
+            cur.execute(
+                _q(
+                    f"""
+                    UPDATE {t}
+                    SET {c['total']} = COALESCE({c['hourly']}, 0) + COALESCE({c['piece']}, 0)
+                    WHERE {c['date']} = ? AND {c['agency']} != '【当日总计】'
+                    """,
+                    is_pg,
+                ),
+                (rdate_feishu,),
+            )
+            if is_pg:
+                cur.execute(
+                    f"""
+                    INSERT INTO {t} ({c['date']}, {c['agency']}, {c['hourly']}, {c['piece']}, {c['total']}, {c['headcount']})
+                    SELECT
+                        {c['date']},
+                        '【当日总计】',
+                        SUM(COALESCE({c['hourly']}, 0)),
+                        SUM(COALESCE({c['piece']}, 0)),
+                        SUM(COALESCE({c['total']}, 0)),
+                        SUM(COALESCE({c['headcount']}, 0))
+                    FROM {t}
+                    WHERE {c['date']} = %s AND {c['agency']} != '【当日总计】'
+                    GROUP BY {c['date']}
+                    ON CONFLICT ({c['date']}, {c['agency']}) DO UPDATE SET
+                        {c['hourly']} = EXCLUDED.{c['hourly']},
+                        {c['piece']} = EXCLUDED.{c['piece']},
+                        {c['total']} = EXCLUDED.{c['total']},
+                        {c['headcount']} = EXCLUDED.{c['headcount']}
+                    """,
+                    (rdate_feishu,),
+                )
+            else:
+                cur.execute(
+                    _q(
+                        f"""
+                        INSERT OR REPLACE INTO {t}
+                            ({c['date']}, {c['agency']}, {c['hourly']}, {c['piece']}, {c['total']}, {c['headcount']})
+                        SELECT
+                            {c['date']},
+                            '【当日总计】',
+                            SUM(COALESCE({c['hourly']}, 0)),
+                            SUM(COALESCE({c['piece']}, 0)),
+                            SUM(COALESCE({c['total']}, 0)),
+                            SUM(COALESCE({c['headcount']}, 0))
+                        FROM {t}
+                        WHERE {c['date']} = ? AND {c['agency']} != '【当日总计】'
+                        GROUP BY {c['date']}
+                        """,
+                        is_pg,
+                    ),
+                    (rdate_feishu,),
+                )
+
+            try:
+                la_tz = pytz.timezone('America/Los_Angeles')
+                rd = datetime.strptime(rdate_feishu, '%Y-%m-%d').date()
+                nd = rd + timedelta(days=1)
+                range_start = la_tz.localize(datetime.combine(rd, datetime.min.time().replace(hour=5)))
+                range_end = la_tz.localize(datetime.combine(nd, datetime.min.time().replace(hour=5)))
+                cur.execute(
+                    _q(
+                        f"""
+                        SELECT SUM(CASE
+                            WHEN vehicle_type = '53英尺' AND vehicle_no = 'G' THEN 0
+                            ELSE ((pieces - COALESCE(excluded_pieces, 0)) * {INBOUND_PIECES_ACTUAL_FACTOR})
+                        END) as total_pieces
+                        FROM inbound_records
+                        WHERE created_at >= ? AND created_at < ?
+                        """,
+                        is_pg,
+                    ),
+                    (
+                        range_start.strftime('%Y-%m-%d %H:%M:%S'),
+                        range_end.strftime('%Y-%m-%d %H:%M:%S'),
+                    ),
+                )
+                p_r = cur.fetchone()
+                tp = int(round(float(_row_val(p_r, 'total_pieces', _row_val(p_r, 0, 0)) or 0)))
+                cur.execute(
+                    _q(
+                        f"""
+                        UPDATE {t}
+                        SET {c['total_pieces']} = ?, {c['corrected_pieces']} = ?
+                        WHERE {c['date']} = ? AND {c['agency']} = '【当日总计】'
+                        """,
+                        is_pg,
+                    ),
+                    (tp, tp, rdate_feishu),
+                )
+            except Exception as e:
+                print(f"   ⚠️ Volume Update failed for {rdate_feishu}: {e}")
+
+        conn.commit()
+        msg = f"✅ 数据同步与汇总计算完成！已刷新 {len(dates_to_refresh)} 天的完整人工成本。"
+        print(msg)
+        return {"success": True, "message": msg, "upsert_count": upsert_count}
+    except Exception as e:
+        conn.rollback()
+        msg = f"数据库写入失败: {e}"
+        print(f"❌ {msg}")
+        return {"success": False, "error": msg}
+    finally:
+        conn.close()
+
+
 def run_sync(link=None):
     print("--- 飞书排班数据成本核算 ---")
     
     # --- [FIX] Gofo Sync Refactoring ---
     # Make sync synchronous for the last 3 days to avoid UI race conditions
     today = datetime.now().date()
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inbound.db')
-    
+
     import batch_gofo_sync_ultrafast
-    import sqlite3
-    import pytz
-    
+
     for i in range(3):
         d = today - timedelta(days=i)
         d_str = d.strftime("%Y-%m-%d")
         print(f"[Sync] -> Syncing Gofo for {d_str}...")
         try:
             batch_gofo_sync_ultrafast.sync_day_fast(d_str)
-            
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            
-            # 1. Update Piece Cost AND Headcount from gofo_piece_rate_summary
-            cur.execute("""
-                SELECT 
-                    CASE 
-                        WHEN Operator_Name LIKE 'AAS%' THEN 'AAS'
-                        WHEN Operator_Name LIKE 'UNS%' THEN 'A-SHARE'
-                        ELSE 'OTHERS'
-                    END as Agency,
-                    SUM(Wages) as Piece_Wages,
-                    COUNT(DISTINCT Operator_Name) as Headcount
-                FROM gofo_piece_rate_summary
-                WHERE Record_Date = ?
-                GROUP BY Agency
-            """, (d_str,))
-            piece_data = cur.fetchall()
-            
-            for row in piece_data:
-                agency = row['Agency']
-                wages = row['Piece_Wages']
-                hc = row['Headcount']
-                
-                # Ensure row exists
-                cur.execute("INSERT OR IGNORE INTO daily_cost_summary (Record_Date, Agency_Name) VALUES (?, ?)", (d_str, agency))
-                # Update piece wages and headcount
-                cur.execute("""
-                    UPDATE daily_cost_summary 
-                    SET Piece_Cost_USD = ?, Headcount = COALESCE(Headcount, 0) + ? 
-                    WHERE Record_Date = ? AND Agency_Name = ?
-                """, (round(wages or 0, 2), hc, d_str, agency))
-            
-            # 2. Update Volume Stats for the day (05:00 boundary)
-            # [REFINEMENT] Prioritize feishu_raw_data for pieces if available (e.g. manual entries for Sundays)
-            cur.execute("SELECT SUM(tickets_count), SUM(boxes_count) FROM feishu_raw_data WHERE record_date = ?", (d_str,))
-            f_row = cur.fetchone()
-            f_pieces = f_row[0] if f_row and f_row[0] else 0
-            
-            if f_pieces > 0:
-                total_p = int(f_pieces)
-                print(f"   - Using Feishu pieces for {d_str}: {total_p}")
-            else:
-                la_tz = pytz.timezone('America/Los_Angeles')
-                request_date = d
-                next_date = request_date + timedelta(days=1)
-                req_5am_la = la_tz.localize(datetime.combine(request_date, datetime.min.time().replace(hour=5)))
-                next_5am_la = la_tz.localize(datetime.combine(next_date, datetime.min.time().replace(hour=5)))
-                t_start = req_5am_la.astimezone(la_tz)
-                t_end = next_5am_la.astimezone(la_tz)
-                
-                cur.execute(f"""
-                    SELECT SUM(CASE 
-                        WHEN vehicle_type = '53英尺' AND vehicle_no = 'G' THEN 0 
-                        ELSE ((pieces - COALESCE(excluded_pieces, 0)) * {INBOUND_PIECES_ACTUAL_FACTOR})
-                    END) as total_pieces 
-                FROM inbound_records 
-                WHERE created_at >= ? AND created_at < ?
-                """, (t_start.strftime('%Y-%m-%d %H:%M:%S'), t_end.strftime('%Y-%m-%d %H:%M:%S')))
-                p_row = cur.fetchone()
-                total_p = int(round(float(p_row[0]))) if p_row and p_row[0] is not None else 0
-                print(f"   - Using System pieces for {d_str}: {total_p}")
-                
-            corrected_p = total_p
-            
-            cur.execute("INSERT OR IGNORE INTO daily_cost_summary (Record_Date, Agency_Name) VALUES (?, ?)", (d_str, '【当日总计】'))
-            cur.execute("""
-                UPDATE daily_cost_summary 
-                SET Total_Pieces = ?, Corrected_Pieces = ? 
-                WHERE Record_Date = ? AND Agency_Name = '【当日总计】'
-            """, (total_p, corrected_p, d_str))
-            
-            # 3. Update Total Costs using COALESCE to prevent NULL values
-            cur.execute("""
-                UPDATE daily_cost_summary 
-                SET Total_Cost_USD = COALESCE(Hourly_Cost_USD, 0) + COALESCE(Piece_Cost_USD, 0) 
-                WHERE Record_Date = ?
-            """, (d_str,))
-            
-            # 4. Recalculate Grand Totals
-            cur.execute("""
-                SELECT SUM(COALESCE(Hourly_Cost_USD, 0)), SUM(COALESCE(Piece_Cost_USD, 0)), 
-                       SUM(COALESCE(Total_Cost_USD, 0)), SUM(COALESCE(Headcount, 0))
-                FROM daily_cost_summary 
-                WHERE Record_Date = ? AND Agency_Name != '【当日总计】'
-            """, (d_str,))
-            totals = cur.fetchone()
-            if totals:
-                th, tp, tt, thc = totals
-                cur.execute("""
-                    UPDATE daily_cost_summary 
-                    SET Hourly_Cost_USD = ?, Piece_Cost_USD = ?, Total_Cost_USD = ?, Headcount = ?
-                    WHERE Record_Date = ? AND Agency_Name = '【当日总计】'
-                """, (th or 0, tp or 0, tt or 0, thc or 0, d_str))
-            
-            conn.commit()
-            conn.close()
+            conn, is_pg = _open_labor_db()
+            try:
+                _sync_gofo_daily_cost(conn.cursor(), is_pg, d, d_str)
+                conn.commit()
+            finally:
+                conn.close()
         except Exception as e:
             print(f"   ⚠️ Sync loop failed for {d_str}: {e}")
     # --- END [FIX] ---
@@ -312,10 +655,9 @@ def run_sync(link=None):
     sheet_id = SHEET_ID_DEFAULT
     
     if link:
-        match = re.search(r'sheets/([a-zA-Z0-9]+)\?sheet=([a-zA-Z0-9]+)', link)
-        if match:
-            spread_token = match.group(1)
-            sheet_id = match.group(2)
+        parsed_link = _parse_feishu_sheet_link(link)
+        if parsed_link:
+            spread_token, sheet_id = parsed_link
         else:
             print("⚠️ 链接解析失败，将使用默认 Token。")
 
@@ -517,146 +859,9 @@ def run_sync(link=None):
     if not debug_match.empty:
         print(f"DEBUG COMBINED AAS 03-01: {debug_match.iloc[0].to_dict()}")
     
-    # --- 4. 本地 SQLite 数据库归档 ---
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'inbound.db')
-    table_name = 'daily_cost_summary'
-    
-    print(f"⏳ 正在将核算结果保存至本地数据库: {db_path} -> 表: {table_name}")
-    try:
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        
-        # Create table if not exists (preserves all historical data)
-        cur.execute(f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
-                Record_Date        TEXT NOT NULL,
-                Agency_Name        TEXT NOT NULL,
-                Hourly_Cost_USD    REAL DEFAULT 0,
-                Piece_Cost_USD     REAL DEFAULT 0,
-                Total_Cost_USD     REAL DEFAULT 0,
-                Headcount          INTEGER DEFAULT 0,
-                PRIMARY KEY (Record_Date, Agency_Name)
-            )
-        """)
-        
-        # Non-destructive upsert: update only hourly cost and headcount
-        upsert_count = 0
-        dates_to_refresh = set()
-        
-        for _, row in combined.iterrows():
-            rdate = row['Record_Date']
-            agency = row['Agency_Name']
-            dates_to_refresh.add(rdate)
-            
-            # 1. Ensure the row exists
-            cur.execute(f"INSERT OR IGNORE INTO {table_name} (Record_Date, Agency_Name) VALUES (?, ?)", (rdate, agency))
-            
-            # 2. Update Hourly Part (only for non-total rows, total is handled at the end)
-            if agency != '【当日总计】':
-                cur.execute(f"""
-                    UPDATE {table_name}
-                    SET Hourly_Cost_USD = ?, Headcount = ?
-                    WHERE Record_Date = ? AND Agency_Name = ?
-                """, (row['Hourly_Cost_USD'], row['Headcount'], rdate, agency))
-                upsert_count += 1
-
-        # --- 5. Sync Piece-Rate Data from Gofo into Summary ---
-        print("🔄 正在同步 Gofo 计件数据至汇总表...")
-        for rdate_feishu in dates_to_refresh:
-            # Note: rdate_feishu is already in YYYY-MM-DD
-            rdate_gofo = rdate_feishu
-            if not rdate_gofo:
-                continue
-                
-            # Aggregate from gofo_piece_rate_summary
-            # Mapping logic: AAS Sorters -> AAS, UNS Sorters -> UNS
-            cur.execute("""
-                SELECT 
-                    CASE 
-                        WHEN Operator_Name LIKE 'AAS%' THEN 'AAS'
-                        WHEN Operator_Name LIKE 'UNS%' THEN 'A-SHARE'
-                        ELSE 'OTHERS'
-                    END as Agency,
-                    SUM(Wages) as Piece_Wages
-                FROM gofo_piece_rate_summary
-                WHERE Record_Date = ?
-                GROUP BY Agency
-            """, (rdate_gofo,))
-            
-            piece_data = cur.fetchall()
-            for agency_mapped, piece_wages in piece_data:
-                if agency_mapped == 'OTHERS': continue
-                
-                # Ensure row exists for this agency (e.g. UNS might not be in Feishu)
-                cur.execute(f"INSERT OR IGNORE INTO {table_name} (Record_Date, Agency_Name) VALUES (?, ?)", (rdate_feishu, agency_mapped))
-                
-                # Update Piece Cost
-                cur.execute(f"""
-                    UPDATE {table_name}
-                    SET Piece_Cost_USD = ?
-                    WHERE Record_Date = ? AND Agency_Name = ?
-                """, (piece_wages, rdate_feishu, agency_mapped))
-
-        # --- 6. Recalculate Total_Cost_USD and 【当日总计】 ---
-        print("🧮 正在重新计算总额与当日汇总...")
-        for rdate_feishu in dates_to_refresh:
-            # Update individual totals: Total = Hourly + Piece
-            cur.execute(f"""
-                UPDATE {table_name}
-                SET Total_Cost_USD = COALESCE(Hourly_Cost_USD, 0) + COALESCE(Piece_Cost_USD, 0)
-                WHERE Record_Date = ? AND Agency_Name != '【当日总计】'
-            """, (rdate_feishu,))
-            
-            # Recalculate 【当日总计】 (Cost parts)
-            cur.execute(f"""
-                INSERT OR REPLACE INTO {table_name} (Record_Date, Agency_Name, Hourly_Cost_USD, Piece_Cost_USD, Total_Cost_USD, Headcount)
-                SELECT 
-                    Record_Date, 
-                    '【当日总计】',
-                    SUM(COALESCE(Hourly_Cost_USD, 0)),
-                    SUM(COALESCE(Piece_Cost_USD, 0)),
-                    SUM(COALESCE(Total_Cost_USD, 0)),
-                    SUM(COALESCE(Headcount, 0))
-                FROM {table_name}
-                WHERE Record_Date = ? AND Agency_Name != '【当日总计】'
-                GROUP BY Record_Date
-            """, (rdate_feishu,))
-
-            # Update Volume Stats on the total row
-            try:
-                la_tz = pytz.timezone('America/Los_Angeles')
-                # rdate_feishu is in YYYY-MM-DD
-                rd = datetime.strptime(rdate_feishu, '%Y-%m-%d').date()
-                nd = rd + timedelta(days=1)
-                range_start = la_tz.localize(datetime.combine(rd, datetime.min.time().replace(hour=5))).astimezone(la_tz)
-                range_end = la_tz.localize(datetime.combine(nd, datetime.min.time().replace(hour=5))).astimezone(la_tz)
-                
-                cur.execute(f"""
-                    SELECT SUM(CASE 
-                        WHEN vehicle_type = '53英尺' AND vehicle_no = 'G' THEN 0 
-                        ELSE ((pieces - COALESCE(excluded_pieces, 0)) * {INBOUND_PIECES_ACTUAL_FACTOR})
-                    END) as total_pieces 
-                    FROM inbound_records 
-                    WHERE created_at >= ? AND created_at < ?
-                """, (range_start.strftime('%Y-%m-%d %H:%M:%S'), 
-                      range_end.strftime('%Y-%m-%d %H:%M:%S')))
-                p_r = cur.fetchone()
-                tp = int(round(float(p_r[0]))) if p_r and p_r[0] is not None else 0
-                cp = tp
-                
-                cur.execute(f"UPDATE {table_name} SET Total_Pieces = ?, Corrected_Pieces = ? WHERE Record_Date = ? AND Agency_Name = '【当日总计】'", (tp, cp, rdate_feishu))
-            except Exception as e:
-                print(f"   ⚠️ Volume Update failed for {rdate_feishu}: {e}")
-
-        conn.commit()
-        conn.close()
-        msg = f"✅ 数据同步与汇总计算完成！已刷新 {len(dates_to_refresh)} 天的完整人工成本。"
-        print(msg)
-        return {"success": True, "message": msg}
-    except Exception as e:
-        msg = f"数据库写入失败: {e}"
-        print(f"❌ {msg}")
-        return {"success": False, "error": msg}
+    db_kind = 'PostgreSQL' if USE_POSTGRES else 'SQLite'
+    print(f"⏳ 正在将核算结果保存至 {db_kind} -> 表: daily_cost_summary")
+    return _persist_labor_combined(combined)
 
 if __name__ == '__main__':
     run_sync()
