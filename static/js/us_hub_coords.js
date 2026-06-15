@@ -24,6 +24,7 @@
         SEA: { lat: 47.4298, lng: -122.3231, name: 'Seattle (SEA) · SeaTac, WA', address: '835 S 192nd St Suite 1200, SeaTac, WA 98148', transitH: 18 },
         DEN: { lat: 39.7638, lng: -104.8443, name: 'Denver (DEN) · Aurora, CO', address: '3250 Quentin St Suite 122, Aurora, CO 80011', transitH: 14 },
         MOD: { lat: 37.6391, lng: -120.9969, name: 'Modesto (MOD)', transitH: 6 },
+        PLM: { lat: 33.8297, lng: -116.5067, name: 'Palm Springs (PLM) · Palm Springs, CA', transitH: 4 },
         PHX: { lat: 33.4352, lng: -112.0101, name: 'Phoenix (PHX)', transitH: 7 },
         LAS: { lat: 36.1353, lng: -115.1994, name: 'Las Vegas (LAS) · Las Vegas, NV', address: '5275 S Arville St Suites 152/200, Las Vegas, NV 89118', transitH: 5 },
         SJU: { lat: 18.4394, lng: -66.0018, name: 'San Juan (SJU)' },

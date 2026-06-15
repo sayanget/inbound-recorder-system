@@ -47,13 +47,23 @@
             } catch (_) { /* 某些沙箱里 EventTarget 只读，忽略 */ }
         })();
     </script>
-    <!-- Chart.js 3.x 与 chartjs-plugin-datalabels@2 配套；勿用无版本号 chart.js@4 会导致插件不兼容、图表空白 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <!-- Chart.js 3.x + datalabels：使用本地静态资源，避免内网/其他电脑无法访问 CDN 导致图表空白 -->
+    <script src="/static/js/vendor/chart.min.js"></script>
+    <script src="/static/js/vendor/chartjs-plugin-datalabels.min.js"></script>
     <script>
-        if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
-            Chart.register(ChartDataLabels);
-        }
+        (function () {
+            function registerChartPlugins() {
+                if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+                    Chart.register(ChartDataLabels);
+                    window.__chartLibsReady = true;
+                    return true;
+                }
+                return false;
+            }
+            if (!registerChartPlugins()) {
+                console.error('[statistics] Chart.js 或 datalabels 插件未加载');
+            }
+        })();
     </script>
     <link rel="stylesheet" href="/static/css/theme.css">
     <script src="/static/js/theme.js"></script>
@@ -1397,6 +1407,7 @@
                 stats_window_consistency_hint: "统计窗口按本机浏览器记忆，与其他电脑不一致时逐条数据会对不上，请统一点击顶部「统计窗口」。",
                 daily_packing_board_sync_btn: "同步看板",
                 daily_packing_board_cache_hint: "部分日期未缓存 Gofo 看板日汇总，当前为小时累加值，与看板人工/设备可能不一致；请点击「同步看板」。",
+                daily_packing_board_sync_fail_hint: "部分日期 Gofo 看板拉取失败，当前为小时累加兜底，请检查 Token 后点「同步看板」",
                 daily_packing_operlog_sync_label: "按运营日同步 operatelog（逐条，不去重）",
                 daily_packing_operlog_sync_one_btn: "同步该日",
                 daily_packing_operlog_sync_one_running: "正在拉取该日 operatelog…",
@@ -1408,6 +1419,8 @@
                 daily_packing_operlog_unsynced_hint: "以下运营日尚未逐条同步（显示为 0）：",
                 daily_packing_count_mismatch_hint: "「去重（看板）」与「逐条（日志）」数字不同属正常，勿混用对比。",
                 daily_packing_chart_loading: "加载中…",
+                chart_lib_missing: "图表库未加载，请硬刷新或联系管理员",
+                render_packing_error: "渲染集包图表出错:",
                 daily_packing_split_hint: "按顶部所选统计口径（本地）统计最近 14 天；柱高为当日总单量（人工+设备），段内标签为占比。",
                 daily_packing_split_tooltip_footer: "（占比 = 分项 / 当日人工与设备集包合计）",
                 daily_packing_range_label: "显示区间（与顶部统计口径一致的锚点日，含首尾；下图「干线/支线」同步）",
@@ -1716,6 +1729,8 @@
                 daily_packing_operlog_unsynced_hint: "Anchor days not synced yet (shown as 0): ",
                 daily_packing_count_mismatch_hint: "Board (deduped) vs per-log counts differ by design; do not compare across modes.",
                 daily_packing_chart_loading: "Loading…",
+                chart_lib_missing: "Chart library failed to load — hard refresh or contact admin",
+                render_packing_error: "Packing chart render error:",
                 daily_packing_split_hint: "Uses the selected stats window (local), last 14 days; bar height = daily total (manual+device); segment labels show share.",
                 daily_packing_split_tooltip_footer: "(Share = segment / daily manual+device total)",
                 daily_packing_range_label: "Range (anchor dates per stats window, inclusive; trunk/branch chart below matches)",
@@ -2353,6 +2368,40 @@
         }
 
         let loadedStatsData = null;
+
+        /** 图表 canvas 居中绘制提示（避免默认 width=0 时文字不可见） */
+        function chartCanvasBox(canvas) {
+            const parent = canvas && canvas.parentElement;
+            const w = (parent && parent.clientWidth) || canvas.width || 320;
+            const h = (parent && parent.clientHeight) || canvas.height || 180;
+            return { w: Math.max(w, 120), h: Math.max(h, 80) };
+        }
+
+        function drawChartCanvasMessage(canvas, text, color) {
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const box = chartCanvasBox(canvas);
+            ctx.clearRect(0, 0, box.w, box.h);
+            ctx.font = '14px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = color || '#6c757d';
+            const lines = String(text || '').split('\n');
+            const lineH = 18;
+            const y0 = box.h / 2 - ((lines.length - 1) * lineH) / 2;
+            lines.forEach(function (line, i) {
+                ctx.fillText(line, box.w / 2, y0 + i * lineH);
+            });
+        }
+
+        function ensureChartJsReady() {
+            if (typeof Chart === 'undefined') {
+                throw new Error('Chart.js 未加载（请硬刷新页面；内网环境已改用本地 chart 库）');
+            }
+            if (typeof ChartDataLabels === 'undefined') {
+                throw new Error('chartjs-plugin-datalabels 未加载');
+            }
+        }
 
         function dailyPackingChartsDefaultRange(anchorYmd) {
             const end = anchorYmd || getDefaultStatsAnchorYmd();
@@ -3069,6 +3118,18 @@
             // Enhanced BroadcastChannel for real-time updates
             let broadcastChannel = null;
             let pollingInterval = null;
+            let hourlyRefreshInterval = null;
+
+            function setupHourlyRefreshPolling() {
+                if (hourlyRefreshInterval) clearInterval(hourlyRefreshInterval);
+                // 整点同步可能需数分钟；每 5 分钟刷新分时图（含 11:00 等最近整点）
+                hourlyRefreshInterval = setInterval(function () {
+                    if (typeof loadHourlyComparisonData === 'function') {
+                        console.log('[Statistics] Periodic hourly chart refresh');
+                        loadHourlyComparisonData();
+                    }
+                }, 300000);
+            }
 
             // Setup BroadcastChannel with improved error handling
             function setupBroadcastChannel() {
@@ -3226,12 +3287,16 @@
                     console.log('[Statistics] Clearing polling interval');
                     clearInterval(pollingInterval);
                 }
+                if (hourlyRefreshInterval) {
+                    clearInterval(hourlyRefreshInterval);
+                }
             });
 
             // Initialize real-time sync mechanisms
             // Priority: SSE (cross-device) > BroadcastChannel (same browser) > Polling (fallback)
             setupSSE();
             setupBroadcastChannel();
+            setupHourlyRefreshPolling();
         });
 
         // Refresh data button
@@ -6100,21 +6165,32 @@
             if (opts.syncBoard) qp.sync_board = '1';
             const packUrl = withStatsWindowParams('/api/statistics/daily_packing_split', qp);
             const canvas = document.getElementById('dailyPackingSplitChart');
+            const t0 = translations[currentLang] || {};
+            try {
+                ensureChartJsReady();
+            } catch (libErr) {
+                drawChartCanvasMessage(canvas, t0.chart_lib_missing || libErr.message, '#dc3545');
+                return Promise.resolve();
+            }
             if (canvas) {
-                const ctx = canvas.getContext('2d');
-                const t0 = translations[currentLang] || {};
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.font = '14px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#6c757d';
-                ctx.fillText(t0.daily_packing_chart_loading || '加载中…', canvas.width / 2, canvas.height / 2);
+                drawChartCanvasMessage(canvas, t0.daily_packing_chart_loading || '加载中…', '#6c757d');
             }
             const boardSyncBtn = document.getElementById('dailyPackingBoardSyncBtn');
             if (boardSyncBtn) boardSyncBtn.disabled = !!opts.syncBoard;
-            fetch(packUrl, { cache: 'no-store', credentials: 'same-origin' })
-                .then(response => {
-                    if (!response.ok) throw new Error('HTTP ' + response.status);
-                    return response.json();
+            return fetch(packUrl, { cache: 'no-store', credentials: 'same-origin' })
+                .then(async function (response) {
+                    const ct = (response.headers.get('content-type') || '').toLowerCase();
+                    let payload = null;
+                    if (ct.includes('application/json')) {
+                        payload = await response.json();
+                    } else {
+                        const text = await response.text();
+                        throw new Error(text ? text.slice(0, 120) : ('HTTP ' + response.status));
+                    }
+                    if (!response.ok) {
+                        throw new Error((payload && payload.error) || ('HTTP ' + response.status));
+                    }
+                    return payload;
                 })
                 .then(data => {
                     if (boardSyncBtn) boardSyncBtn.disabled = false;
@@ -6123,35 +6199,63 @@
                         if (typeof showMessage === 'function') {
                             showMessage(String(data.error), 'error');
                         }
-                        renderDailyPackingSplitChart(null);
+                        renderDailyPackingSplitChart(null, data.error);
                         return;
+                    }
+                    const t0 = translations[currentLang] || {};
+                    if (getDailyPackingCountMode() === 'board') {
+                        if ((data.board_sync_failures || 0) > 0) {
+                            showMessage(
+                                (t0.daily_packing_board_sync_fail_hint || '部分日期 Gofo 看板拉取失败，已用小时累加兜底，请稍后点「同步看板」')
+                                + ' (' + data.board_sync_failures + ')',
+                                'error'
+                            );
+                        } else if ((data.board_fallback_days || 0) > 0) {
+                            showMessage(
+                                (t0.daily_packing_board_cache_hint || '部分日期未缓存看板日汇总，已用小时累加兜底；请点击「同步看板」')
+                                + ' (' + data.board_fallback_days + ')',
+                                'error'
+                            );
+                        }
                     }
                     renderDailyPackingSplitChart(data);
                 })
                 .catch(err => {
                     if (boardSyncBtn) boardSyncBtn.disabled = false;
                     console.error('loadDailyPackingSplitData', err);
-                    renderDailyPackingSplitChart(null);
+                    if (typeof showMessage === 'function') {
+                        showMessage(String(err.message || err), 'error');
+                    }
+                    renderDailyPackingSplitChart(null, err.message);
                 });
         }
 
-        function renderDailyPackingSplitChart(data) {
+        function renderDailyPackingSplitChart(data, errMsg) {
             const canvas = document.getElementById('dailyPackingSplitChart');
             if (!canvas) return;
-            const ctx = canvas.getContext('2d');
             const t = translations[currentLang] || {};
+
+            try {
+                ensureChartJsReady();
+            } catch (libErr) {
+                drawChartCanvasMessage(canvas, t.chart_lib_missing || libErr.message, '#dc3545');
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
 
             if (window.dailyPackingSplitChart && typeof window.dailyPackingSplitChart.destroy === 'function') {
                 window.dailyPackingSplitChart.destroy();
                 window.dailyPackingSplitChart = null;
             }
 
+            if (errMsg) {
+                drawChartCanvasMessage(canvas, String(errMsg), '#dc3545');
+                return;
+            }
+
             if (!data || !data.dates || data.dates.length === 0) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.font = '16px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#6c757d';
-                ctx.fillText(translations[currentLang].no_data || '暂无数据', canvas.width / 2, canvas.height / 2);
+                drawChartCanvasMessage(canvas, t.no_data || '暂无数据', '#6c757d');
                 return;
             }
 
@@ -6177,6 +6281,20 @@
                 return p.toFixed(1).replace(/\.0$/, '') + '%';
             }
 
+            function formatTotalAbove(_value, context) {
+                const sum = dayTotal(context.dataIndex);
+                return sum > 0 ? sum.toLocaleString() : '';
+            }
+
+            const totalLabelStyle = {
+                anchor: 'end',
+                align: 'end',
+                offset: 4,
+                color: '#334155',
+                formatter: formatTotalAbove,
+                font: { size: isMobile ? 10 : 12, weight: '700' }
+            };
+
             try {
             window.dailyPackingSplitChart = new Chart(ctx, {
                 type: 'bar',
@@ -6191,15 +6309,25 @@
                             borderWidth: 1,
                             stack: 'pack',
                             datalabels: {
-                                display: function (context) {
-                                    const v = Number(context.dataset.data[context.dataIndex]) || 0;
-                                    return pctOfDay(v, context.dataIndex) >= 0.5;
-                                },
-                                color: '#fff',
-                                anchor: 'center',
-                                align: 'center',
-                                formatter: formatPctFromContext,
-                                font: { size: isMobile ? 9 : 11, weight: '600' }
+                                labels: {
+                                    pct: {
+                                        display: function (context) {
+                                            const v = Number(context.dataset.data[context.dataIndex]) || 0;
+                                            return pctOfDay(v, context.dataIndex) >= 0.5;
+                                        },
+                                        color: '#fff',
+                                        anchor: 'center',
+                                        align: 'center',
+                                        formatter: formatPctFromContext,
+                                        font: { size: isMobile ? 9 : 11, weight: '600' }
+                                    },
+                                    total: Object.assign({}, totalLabelStyle, {
+                                        display: function (context) {
+                                            const i = context.dataIndex;
+                                            return dayTotal(i) > 0 && (deviceRaw[i] || 0) <= 0;
+                                        }
+                                    })
+                                }
                             }
                         },
                         {
@@ -6211,7 +6339,7 @@
                             stack: 'pack',
                             datalabels: {
                                 labels: {
-                                    segmentPct: {
+                                    pct: {
                                         display: function (context) {
                                             const v = Number(context.dataset.data[context.dataIndex]) || 0;
                                             return pctOfDay(v, context.dataIndex) >= 0.5;
@@ -6222,23 +6350,12 @@
                                         formatter: formatPctFromContext,
                                         font: { size: isMobile ? 9 : 11, weight: '600' }
                                     },
-                                    totalAbove: {
+                                    total: Object.assign({}, totalLabelStyle, {
                                         display: function (context) {
                                             const i = context.dataIndex;
-                                            const sum = (manualRaw[i] || 0) + (deviceRaw[i] || 0);
-                                            return sum > 0;
-                                        },
-                                        color: '#333',
-                                        anchor: 'end',
-                                        align: 'top',
-                                        offset: 4,
-                                        formatter: function (_value, context) {
-                                            const i = context.dataIndex;
-                                            const sum = (manualRaw[i] || 0) + (deviceRaw[i] || 0);
-                                            return sum > 0 ? sum.toLocaleString() : '';
-                                        },
-                                        font: { size: isMobile ? 10 : 12, weight: '700' }
-                                    }
+                                            return dayTotal(i) > 0 && (deviceRaw[i] || 0) > 0;
+                                        }
+                                    })
                                 }
                             }
                         }
@@ -6247,6 +6364,9 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: {
+                        padding: { top: isMobile ? 18 : 24 }
+                    },
                     plugins: {
                         legend: { position: 'top' },
                         title: { display: false },
@@ -6295,11 +6415,11 @@
             });
             } catch (chartErr) {
                 console.error('renderDailyPackingSplitChart', chartErr);
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.font = '14px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#f72585';
-                ctx.fillText((t.render_packing_error || '渲染集包图表出错: ') + chartErr.message, canvas.width / 2, canvas.height / 2);
+                drawChartCanvasMessage(
+                    canvas,
+                    (t.render_packing_error || '渲染集包图表出错: ') + chartErr.message,
+                    '#f72585'
+                );
             }
         }
 
@@ -8232,7 +8352,15 @@
             if (r.week_start) qp.week_start = r.week_start;
             if (r.week_end) qp.week_end = r.week_end;
             const u = withStatsWindowParams('/api/statistics/packing_manual_device_week_comparison', qp);
-            fetch(u)
+            const canvas = document.getElementById('packingManualDeviceWeekComparisonChart');
+            const t0 = translations[currentLang] || {};
+            try {
+                ensureChartJsReady();
+            } catch (libErr) {
+                drawChartCanvasMessage(canvas, t0.chart_lib_missing || libErr.message, '#dc3545');
+                return;
+            }
+            fetch(u, { cache: 'no-store', credentials: 'same-origin' })
                 .then(response => {
                     if (!response.ok) {
                         return response.json().then(j => Promise.reject(new Error(j.error || ('HTTP ' + response.status))));
@@ -8243,42 +8371,37 @@
                     if (data && !Array.isArray(data) && data.error) {
                         console.error('packing_manual_device_week_comparison:', data.error);
                         if (typeof showMessage === 'function') showMessage(String(data.error), 'error');
-                        renderPackingManualDeviceWeekComparisonChart(null);
+                        renderPackingManualDeviceWeekComparisonChart(null, data.error);
                         return;
                     }
                     renderPackingManualDeviceWeekComparisonChart(data);
                 })
                 .catch(error => {
                     console.error('Error fetching packing manual/device week comparison:', error);
-                    try {
-                        const canvas = document.getElementById('packingManualDeviceWeekComparisonChart');
-                        if (canvas) {
-                            const ctx = canvas.getContext('2d');
-                            ctx.clearRect(0, 0, canvas.width, canvas.height);
-                            ctx.font = '16px Arial';
-                            ctx.textAlign = 'center';
-                            ctx.fillStyle = '#dc3545';
-                            ctx.fillText(translations[currentLang].error_loading_data || '加载数据出错', canvas.width / 2, canvas.height / 2);
-                        }
-                    } catch (e) {
-                        console.error(e);
-                    }
+                    renderPackingManualDeviceWeekComparisonChart(null, error.message);
                 });
         }
 
-        function renderPackingManualDeviceWeekComparisonChart(data) {
+        function renderPackingManualDeviceWeekComparisonChart(data, errMsg) {
             const canvasEl = document.getElementById('packingManualDeviceWeekComparisonChart');
             if (!canvasEl) return;
+            const t = translations[currentLang] || {};
+            try {
+                ensureChartJsReady();
+            } catch (libErr) {
+                drawChartCanvasMessage(canvasEl, t.chart_lib_missing || libErr.message, '#dc3545');
+                return;
+            }
             const ctx = canvasEl.getContext('2d');
             if (window.packingManualDeviceWeekComparisonChart && typeof window.packingManualDeviceWeekComparisonChart.destroy === 'function') {
                 window.packingManualDeviceWeekComparisonChart.destroy();
             }
+            if (errMsg) {
+                drawChartCanvasMessage(canvasEl, String(errMsg), '#dc3545');
+                return;
+            }
             if (!data || data.length === 0) {
-                ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-                ctx.font = '16px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#6c757d';
-                ctx.fillText(translations[currentLang].no_data || '暂无数据', canvasEl.width / 2, canvasEl.height / 2);
+                drawChartCanvasMessage(canvasEl, t.no_data || '暂无数据', '#6c757d');
                 return;
             }
 
@@ -8292,7 +8415,6 @@
             });
 
             const isMobile = window.innerWidth < 768;
-            const t = translations[currentLang];
             const ml = t.packing_manual || '人工集包';
             const dl = t.packing_device || '设备集包';
 

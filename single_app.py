@@ -2447,9 +2447,13 @@ def api_statistics_daily_packing_split():
         operlog_unsynced_dates = []
         board_fallback_days = 0
         board_cache_misses = 0
+        board_sync_failures = 0
         hour_slots = []
         sync_board = (request.args.get('sync_board') or '').strip().lower() in (
             '1', 'true', 'yes', 'on',
+        )
+        auto_fill_board = (os.environ.get('STATS_BOARD_AUTO_FILL') or '1').strip().lower() not in (
+            '0', 'false', 'no', 'off',
         )
         import sync_daily_packing_board as _dp_board
 
@@ -2460,29 +2464,37 @@ def api_statistics_daily_packing_split():
                 board_res = None
                 if sync_board:
                     board_res = _dp_board.sync_daily_packing_board_anchor(d, window_mode, force=True)
+                    if not board_res.get('success'):
+                        board_sync_failures += 1
                 else:
                     cached = _dp_board.read_daily_packing_board_anchor(d, window_mode)
                     if cached is not None:
                         board_res = {"success": True, **cached}
                     else:
                         board_cache_misses += 1
-                        board_res = None
+                        if auto_fill_board:
+                            board_res = _dp_board.sync_daily_packing_board_anchor(
+                                d, window_mode, force=True
+                            )
+                            if not board_res.get('success'):
+                                board_sync_failures += 1
+                                board_res = None
                 if board_res and board_res.get("success"):
                     m = int(board_res.get("manual_count") or 0)
                     d0 = int(board_res.get("device_count") or 0)
-                    tp = int(board_res.get("total_pieces") or 0)
+                    tp = m + d0
                     if tp <= 0:
-                        tp = m + d0
-                    elif m + d0 > 0 and m + d0 != tp:
-                        m = int(round(tp * m / (m + d0)))
-                        d0 = tp - m
+                        tp = int(board_res.get("total_pieces") or 0)
+                        if tp > 0:
+                            m, d0 = tp, 0
                     _, _, slots = _sorting_biz_day_manual_device_from_records(cursor, d, window_mode)
                 else:
                     m, d0, slots = _sorting_biz_day_manual_device_from_records(cursor, d, window_mode)
                     tp = m + d0
+                    board_fallback_days += 1
                 manual.append(m)
                 device.append(d0)
-                total_pieces.append(tp if board_res and board_res.get("success") else m + d0)
+                total_pieces.append(tp)
                 hour_slots.append(slots)
             else:
                 import sync_daily_packing_operlog as _dp_oper
@@ -2535,6 +2547,7 @@ def api_statistics_daily_packing_split():
             'operlog_unsynced_dates': operlog_unsynced_dates,
             'board_fallback_days': board_fallback_days,
             'board_cache_misses': board_cache_misses,
+            'board_sync_failures': board_sync_failures,
             'sync_board': sync_board,
             'hour_slots': hour_slots if count_mode == 'board' else [],
         })
@@ -7447,10 +7460,10 @@ def sorting_hourly_data():
                         GROUP BY time_slot
                         ORDER BY time_slot""", binds)
     rows=[{
-        "time_slot": r[0],
-        "total_pieces": int(r[1]) if r[1] else 0,
-        "manual_count": int(r[2]) if r[2] else 0,
-        "device_count": int(r[3]) if r[3] else 0
+        "time_slot": _db_row_get(r, "time_slot", ""),
+        "total_pieces": int(_db_row_get(r, "total_pieces", 0) or 0),
+        "manual_count": int(_db_row_get(r, "manual_total", 0) or 0),
+        "device_count": int(_db_row_get(r, "device_total", 0) or 0),
     } for r in cur.fetchall()]
     _cno_site = os.environ.get("GOFO_CNO01_SITE", "CNO01").strip() or "CNO01"
     try:
@@ -7461,7 +7474,7 @@ def sorting_hourly_data():
                  AND ({clause})""",
             (_cno_site,) + binds,
         )
-        cno_map = {r[0]: int(r[1]) for r in cur.fetchall()}
+        cno_map = { _db_row_get(r, "time_slot", ""): int(_db_row_get(r, "waybill_no_total", 0) or 0) for r in cur.fetchall() }
     except Exception:
         cno_map = {}
     for row in rows:
@@ -8227,6 +8240,196 @@ def _write_hourly_results_sorting_and_cno(
     }
 
 
+def _parse_gofo_report_hour(report_hour_str):
+    """解析 Gofo chart_v2 的 hour 字段 → (datetime, YYYY-MM-DD, HH:00)。"""
+    s = str(report_hour_str).strip()
+    for fmt in ("%Y-%m-%d %H", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt, dt.strftime("%Y-%m-%d"), dt.strftime("%H:00")
+        except ValueError:
+            continue
+    raise ValueError(f"invalid gofo hour: {report_hour_str!r}")
+
+
+def _gofo_hour_overview_window(report_hour_str, now_la):
+    """逐小时 overview 起止；进行中整点用当前 LA 时刻作为 endTime。"""
+    report_dt, _, _ = _parse_gofo_report_hour(report_hour_str)
+    hour_start = report_dt.strftime("%Y-%m-%d %H:00:00")
+    if report_dt.date() == now_la.date() and report_dt.hour == now_la.hour:
+        hour_end = now_la.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        hour_end = report_dt.strftime("%Y-%m-%d %H:59:59")
+    return hour_start, hour_end
+
+
+def _parse_gofo_hourly_cnt(val):
+    if val is None:
+        return 0
+    if isinstance(val, (int, float)):
+        return int(val)
+    if not isinstance(val, str) or not val.strip():
+        return 0
+    if "/" in val:
+        try:
+            return int(val.split("/")[-1].replace(",", "").strip())
+        except Exception:
+            return 0
+    try:
+        return int(val.replace(",", "").strip())
+    except Exception:
+        return 0
+
+
+def _fetch_gofo_hour_overview_result(
+    report_hour_str,
+    *,
+    overview_url,
+    base_headers,
+    now_la,
+    max_retries=3,
+):
+    """拉取单小时 Gofo overview，返回 sorting_records 写入 dict 或 None。"""
+    try:
+        hour_start, hour_end = _gofo_hour_overview_window(report_hour_str, now_la)
+    except ValueError as e:
+        print(f"[GofoHourly] skip hour parse {report_hour_str!r}: {e}")
+        return None
+
+    hour_overview_payload = {
+        "centerIds": [596],
+        "startTime": hour_start,
+        "endTime": hour_end,
+        "groupType": 2,
+    }
+    hour_json = {}
+    for attempt in range(max_retries):
+        try:
+            hour_res = requests.post(
+                overview_url, headers=base_headers, json=hour_overview_payload, timeout=15
+            )
+            if not hour_res.ok:
+                break
+            hour_json = hour_res.json()
+            break
+        except requests.exceptions.RequestException:
+            if attempt < max_retries - 1:
+                time.sleep(1)
+
+    if not hour_json or hour_json.get("code") == 401:
+        return None
+
+    hour_overview = hour_json.get("data") or {}
+    if not hour_overview:
+        return None
+
+    hourly_pieces = _parse_gofo_hourly_cnt(hour_overview.get("collectTotalCnt"))
+    hourly_manual = _parse_gofo_hourly_cnt(hour_overview.get("collectTotalCntArtificial"))
+    hourly_device = _parse_gofo_hourly_cnt(hour_overview.get("collectTotalCntDevice"))
+    if hourly_pieces == 0 and (hourly_manual > 0 or hourly_device > 0):
+        hourly_pieces = hourly_manual + hourly_device
+
+    try:
+        _, target_date, target_slot = _parse_gofo_report_hour(report_hour_str)
+    except ValueError:
+        return None
+
+    return {
+        "date": target_date,
+        "slot": target_slot,
+        "pieces": hourly_pieces,
+        "manual": hourly_manual,
+        "device": hourly_device,
+        "report_hour": report_hour_str,
+    }
+
+
+def _chart_data_indices_newest_first(chart_data):
+    """chart_v2 按时间降序，优先同步最近整点（如 11:00）以便统计页尽快可见。"""
+    indexed = []
+    for i, item in enumerate(chart_data):
+        hour_key = item.get("hour")
+        if not hour_key:
+            continue
+        try:
+            dt, _, _ = _parse_gofo_report_hour(hour_key)
+            indexed.append((dt, i))
+        except ValueError:
+            indexed.append((datetime.min, i))
+    indexed.sort(key=lambda x: x[0], reverse=True)
+    return [i for _, i in indexed]
+
+
+def _write_gofo_hourly_batch(hourly_batch, remark, current_la_time_str, *, gofo_hourly_stats=None):
+    """popover  enrichment + DB 写入（可单小时批量）。"""
+    if not hourly_batch:
+        return {"synced_count": 0, "synced_hour": "", "pieces": 0}
+    batch = list(hourly_batch)
+    _enrich_hourly_results_gofo_popover(batch)
+    return _write_hourly_results_sorting_and_cno(
+        batch,
+        remark,
+        current_la_time_str,
+        gofo_hourly_stats=gofo_hourly_stats,
+    )
+
+
+def perform_gofo_recent_hours_sync(hours=3):
+    """仅刷新最近 N 个整点（含进行中小时），供整点间增量更新统计图。"""
+    from gofo_config import get_gofo_token
+
+    la_tz = pytz.timezone("America/Los_Angeles")
+    now_la = datetime.now(la_tz)
+    token = get_gofo_token()
+    base_headers = {
+        "Admin-Token": token,
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0",
+        "channel-id": "us",
+        "lang": "zh",
+    }
+    overview_url = "https://dms.gofoexpress.com/prod-api/dbu_report/common/magic/center/board/overview"
+    chart_url = "https://dms.gofoexpress.com/prod-api/dbu_report/common/magic/center/board/operation/chart_v2"
+    today_str = now_la.strftime("%Y-%m-%d")
+    trend_start_dt = now_la - timedelta(hours=max(24, hours + 2))
+    trend_payload = {
+        "centerIds": [596],
+        "startTime": trend_start_dt.strftime("%Y-%m-%d %H:00:00"),
+        "endTime": now_la.strftime("%Y-%m-%d %H:%M:%S"),
+        "groupType": 2,
+    }
+    try:
+        chart_res = requests.post(chart_url, headers=base_headers, json=trend_payload, timeout=20)
+        chart_json = chart_res.json()
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Gofo chart_v2 连接失败: {e}") from e
+    if chart_json.get("code") == 401:
+        raise Exception("Gofo API 登录失效 (Token Expired). 请更新 Token。")
+    chart_data = chart_json.get("data") or []
+    if not chart_data:
+        return {"synced_count": 0, "synced_hour": "", "pieces": 0}
+
+    indices = _chart_data_indices_newest_first(chart_data)[: max(1, int(hours))]
+    hourly_results = []
+    for i in indices:
+        report_hour_str = chart_data[i].get("hour")
+        if not report_hour_str:
+            continue
+        res = _fetch_gofo_hour_overview_result(
+            report_hour_str,
+            overview_url=overview_url,
+            base_headers=base_headers,
+            now_la=now_la,
+        )
+        if res:
+            hourly_results.append(res)
+
+    remark = f"Gofo recent-hours sync ({now_la.strftime('%H:%M')} LA)"
+    current_la_time_str = now_la.strftime("%Y-%m-%d %H:%M:%S")
+    return _write_gofo_hourly_batch(hourly_results, remark, current_la_time_str)
+
+
 def perform_gofo_hourly_sync():
     """核心同步逻辑：从 Gofo 抓取每小时集包数据并存入数据库"""
     from gofo_config import get_gofo_token
@@ -8328,100 +8531,58 @@ def perform_gofo_hourly_sync():
     if not chart_data:
         raise Exception("未找到趋势数据 (No trend data found)")
 
-    # 3. Pre-fetch all hourly data before opening database connection
-    # This avoids holding a database lock while making slow network requests
+    # 3. Pre-fetch hourly data (newest first); write recent slots immediately so charts update quickly
     hourly_results = []
-    
-    for i in range(len(chart_data)):
+    recent_write_slots = set()
+    indices = _chart_data_indices_newest_first(chart_data)
+    base_remark = f"Auto-synced from Gofo ({now_la.strftime('%H:%M')})"
+    current_la_time_str = now_la.strftime("%Y-%m-%d %H:%M:%S")
+
+    for rank, i in enumerate(indices):
         item = chart_data[i]
-        report_hour_str = item.get('hour')
+        report_hour_str = item.get("hour")
         if not report_hour_str:
             continue
-            
+
         try:
-            hour_start = f"{report_hour_str}:00:00"
-            hour_end = f"{report_hour_str}:59:59"
-            
-            hour_overview_payload = {
-                "centerIds": [596],
-                "startTime": hour_start,
-                "endTime": hour_end,
-                "groupType": 2
-            }
-            hour_json = {}
-            for attempt in range(max_retries):
-                try:
-                    hour_res = requests.post(overview_url, headers=BASE_HEADERS, json=hour_overview_payload, timeout=15)
-                    if not hour_res.ok:
-                        break
-                    hour_json = hour_res.json()
-                    break
-                except requests.exceptions.RequestException:
-                    if attempt < max_retries - 1:
-                        time.sleep(1)
-            
-            if not hour_json or hour_json.get('code') == 401:
+            res = _fetch_gofo_hour_overview_result(
+                report_hour_str,
+                overview_url=overview_url,
+                base_headers=BASE_HEADERS,
+                now_la=now_la,
+                max_retries=max_retries,
+            )
+            if not res:
                 continue
-                
-            hour_overview = hour_json.get('data') or {}
-            if not hour_overview:
-                continue
-            
-            def parse_hourly_cnt(val):
-                if val is None: return 0
-                if isinstance(val, (int, float)): return int(val)
-                if not isinstance(val, str) or not val.strip(): return 0
-                if '/' in val: 
-                    try:
-                        return int(val.split('/')[-1].replace(',', '').strip())
-                    except:
-                        return 0
-                try:
-                    return int(val.replace(',', '').strip())
-                except:
-                    return 0
+            hourly_results.append(res)
 
-            hourly_pieces = parse_hourly_cnt(hour_overview.get('collectTotalCnt'))
-            hourly_manual = parse_hourly_cnt(hour_overview.get('collectTotalCntArtificial'))
-            hourly_device = parse_hourly_cnt(hour_overview.get('collectTotalCntDevice'))
-
-            # Sanity Check Fallback: If total pieces is 0 but children have data, use sum
-            if hourly_pieces == 0 and (hourly_manual > 0 or hourly_device > 0):
-                hourly_pieces = hourly_manual + hourly_device
-
-            # Parse timestamp
-            report_dt = datetime.strptime(report_hour_str, '%Y-%m-%d %H')
-            target_date = report_dt.strftime('%Y-%m-%d')
-            target_slot = report_dt.strftime('%H:00')
-            
-            hourly_results.append({
-                "date": target_date,
-                "slot": target_slot,
-                "pieces": hourly_pieces,
-                "manual": hourly_manual,
-                "device": hourly_device,
-                "report_hour": report_hour_str
-            })
+            # 最新 3 个整点：拉完即写库，避免全量 25 小时拉取期间 11:00 等长时间空白
+            if rank < 3:
+                slot_key = (res["date"], res["slot"])
+                if slot_key not in recent_write_slots:
+                    _write_gofo_hourly_batch([res], base_remark, current_la_time_str)
+                    recent_write_slots.add(slot_key)
         except Exception as e:
             print(f"Error fetching data for hour {report_hour_str}: {e}")
 
-    _enrich_hourly_results_gofo_popover(hourly_results)
-
-    latest_report = chart_data[-1]
-    report_hour = latest_report.get("hour")
-    base_remark = f"Auto-synced from Gofo ({now_la.strftime('%H:%M')})"
-    current_la_time_str = now_la.strftime("%Y-%m-%d %H:%M:%S")
-    wr = _write_hourly_results_sorting_and_cno(
-        hourly_results,
+    remaining = [
+        r for r in hourly_results if (r["date"], r["slot"]) not in recent_write_slots
+    ]
+    wr = _write_gofo_hourly_batch(
+        remaining,
         base_remark,
         current_la_time_str,
         gofo_hourly_stats={
-            "report_hour": report_hour,
+            "report_hour": (chart_data[indices[0]].get("hour") if indices else chart_data[-1].get("hour")),
             "collect_total": collect_total,
             "collect_artificial": collect_art,
             "collect_device": collect_device,
         },
     )
+    if recent_write_slots and hourly_results:
+        wr["synced_count"] = len(hourly_results)
+        wr["synced_hour"] = hourly_results[0].get("slot", wr.get("synced_hour"))
+        wr["pieces"] = hourly_results[0].get("pieces", wr.get("pieces"))
     result = {
         **wr,
         "total_today": collect_total,
@@ -17078,14 +17239,14 @@ def daily_packing_operlog_hourly_sync_job():
 
     while True:
         try:
-            now = datetime.now()
-            # 整点后 10 分钟执行，避开 Gofo 整点同步高峰
-            next_run = now.replace(minute=10, second=0, microsecond=0)
-            if next_run <= now:
+            now_la = datetime.now(LA_TZ)
+            # 洛杉矶整点后 10 分钟执行，避开 Gofo 整点同步高峰
+            next_run = now_la.replace(minute=10, second=0, microsecond=0)
+            if next_run <= now_la:
                 next_run += timedelta(hours=1)
-            wait_seconds = (next_run - now).total_seconds()
+            wait_seconds = (next_run - now_la).total_seconds()
             print(
-                f"[{log_prefix}] Next run {next_run.strftime('%Y-%m-%d %H:%M:%S')} "
+                f"[{log_prefix}] Next run {next_run.strftime('%Y-%m-%d %H:%M:%S')} LA "
                 f"(wait {wait_seconds:.0f}s)"
             )
             if wait_seconds > 0:
@@ -17208,22 +17369,44 @@ def gofo_hourly_sync_job():
     except Exception as e:
         print(f"[GofoAutoSync] Bootstrap Error: {e}")
 
-    # 循环执行
     while True:
         try:
-            now = datetime.now()
-            # 下一整点执行（例如 13:25 -> 14:00）
-            next_run = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-            wait_seconds = (next_run - now).total_seconds()
-            print(f"[GofoAutoSync] Scheduled next sync for {next_run.strftime('%Y-%m-%d %H:%M:%S')} (waiting {wait_seconds:.1f}s)")
-            
-            if wait_seconds > 0:
-                time.sleep(wait_seconds)
-            
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            now_la = datetime.now(LA_TZ)
+            # 洛杉矶整点执行（与 sorting_records / 统计图运营日一致）
+            next_run = now_la.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            wait_seconds = (next_run - now_la).total_seconds()
+            print(
+                f"[GofoAutoSync] Scheduled next full sync for {next_run.strftime('%Y-%m-%d %H:%M:%S')} LA "
+                f"(waiting {wait_seconds:.1f}s)"
+            )
+
+            # 整点之间每 10 分钟刷新最近 3 小时，避免 11:00 等时段要等到下一整点才更新
+            interval = 600
+            elapsed = 0.0
+            while elapsed < wait_seconds:
+                sleep_chunk = min(interval, max(0.0, wait_seconds - elapsed))
+                if sleep_chunk > 0:
+                    time.sleep(sleep_chunk)
+                elapsed += sleep_chunk
+                if elapsed >= wait_seconds:
+                    break
+                try:
+                    quick = perform_gofo_recent_hours_sync(hours=3)
+                    print(
+                        f"[GofoAutoSync] Recent-hours refresh: "
+                        f"{quick.get('synced_count', 0)} slots, last={quick.get('synced_hour')}"
+                    )
+                    try:
+                        broadcast_update("refresh_stats")
+                    except Exception:
+                        pass
+                except Exception as qe:
+                    print(f"[GofoAutoSync] Recent-hours refresh error: {qe}")
+
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print(f"[GofoAutoSync] Waking up. Triggering scheduled sync at {now_str}...")
             job()
-            
+
         except Exception as e:
             print(f"[GofoAutoSync] Loop Error: {e}")
             time.sleep(60)

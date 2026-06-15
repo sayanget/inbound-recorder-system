@@ -122,10 +122,22 @@ def read_daily_packing_board_anchor(anchor: date, window_mode: str) -> Optional[
         r = cur.fetchone()
         if not r:
             return None
+        def _ri(row, *keys, idx=0):
+            if hasattr(row, 'keys'):
+                lm = {str(k).lower(): k for k in row.keys()}
+                for key in keys:
+                    k = lm.get(key.lower())
+                    if k is not None:
+                        return int(row[k] or 0)
+            try:
+                return int(row[idx] or 0)
+            except (KeyError, IndexError, TypeError):
+                return 0
+
         return {
-            "manual_count": int(r[0] or 0),
-            "device_count": int(r[1] or 0),
-            "total_pieces": int(r[2] or 0),
+            "manual_count": _ri(r, "manual_count", idx=0),
+            "device_count": _ri(r, "device_count", idx=1),
+            "total_pieces": _ri(r, "total_pieces", idx=2),
         }
     finally:
         conn.close()
@@ -148,8 +160,9 @@ def sync_daily_packing_board_anchor(
         total, manual, device = fetch_gofo_overview_split(begin, end)
         if manual + device <= 0 and total > 0:
             manual, device = total, 0
+        pieces = manual + device if (manual + device) > 0 else total
         synced_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        _write_cache(anchor_str, wm, manual, device, total, synced_at)
+        _write_cache(anchor_str, wm, manual, device, pieces, synced_at)
         return {
             "success": True,
             "cached": False,
@@ -157,7 +170,7 @@ def sync_daily_packing_board_anchor(
             "stats_window": wm,
             "manual_count": manual,
             "device_count": device,
-            "total_pieces": total if total > 0 else manual + device,
+            "total_pieces": pieces,
         }
     except Exception as e:
         logger.warning("daily_packing board sync %s %s: %s", anchor_str, wm, e)
@@ -172,13 +185,14 @@ def _write_cache(
     total: int,
     synced_at: str,
 ) -> None:
-    from single_app import get_db
+    from single_app import convert_query_placeholders, get_db
 
     conn = get_db()
     cur = conn.cursor()
     try:
         cur.execute(
-            """
+            convert_query_placeholders(
+                """
             INSERT INTO daily_packing_board_daily
                 (anchor_date, stats_window, manual_count, device_count, total_pieces, synced_at)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -187,7 +201,8 @@ def _write_cache(
                 device_count = excluded.device_count,
                 total_pieces = excluded.total_pieces,
                 synced_at = excluded.synced_at
-            """,
+            """
+            ),
             (anchor_str, window_mode, manual, device, total, synced_at),
         )
         conn.commit()
