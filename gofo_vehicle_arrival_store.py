@@ -178,6 +178,7 @@ def _ensure_day_columns(cur) -> None:
 def _ensure_bag_columns(cur) -> None:
     for col, typedef in (
         ("cno_signed", "INTEGER"),
+        ("waybill_count", "INTEGER"),
     ):
         try:
             cur.execute(f"SELECT {col} FROM {TABLE_BAG} LIMIT 1")
@@ -310,14 +311,42 @@ def ensure_package_waybills(
     )
     rows = fetched.get("rows") or []
     upsert_package_waybills(package_no, rows, record_date=record_date)
+    wb_count = int(fetched.get("total") or len(rows))
+    synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    task_arrival_id = None
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        q, p = convert_placeholders(
+            f"""SELECT task_arrival_id FROM {TABLE_BAG}
+            WHERE record_date = ? AND serial_number = ?
+            LIMIT 1""",
+            (record_date, package_no.strip()),
+        )
+        cur.execute(q, p)
+        bag_row = _dict_row(cur.fetchone())
+        task_arrival_id = bag_row.get("task_arrival_id")
+        q, p = convert_placeholders(
+            f"""UPDATE {TABLE_BAG}
+            SET waybill_count = ?, synced_at = ?
+            WHERE record_date = ? AND serial_number = ?""",
+            (wb_count, synced_at, record_date, package_no.strip()),
+        )
+        cur.execute(q, p)
     refresh_bag_signin_for_package(package_no, record_date=record_date)
+    if task_arrival_id is not None:
+        _refresh_trip_signin_counts(
+            record_date,
+            int(task_arrival_id),
+            synced_at=synced_at,
+        )
     data = read_package_waybills(package_no, record_date=record_date)
     data["from_cache"] = False
     data["refreshed_at"] = fetched.get("fetched_at") or ""
     with get_db_connection() as conn:
         cur = conn.cursor()
         q, p = convert_placeholders(
-            f"""SELECT t.task_arrival_id, t.transit_boxes_total, t.cno_signed_bag_count, t.bags_incomplete,
+            f"""SELECT t.task_arrival_id, t.transit_boxes_total, t.cno_signed_bag_count,
+                t.bags_incomplete, t.waybill_total,
                 b.cno_signed, b.es_context, b.operation_time
             FROM {TABLE_BAG} b
             INNER JOIN {TABLE_TRIP} t
@@ -389,7 +418,61 @@ def _trip_signin_payload(trip: Dict[str, Any]) -> Dict[str, Any]:
         "transit_boxes_total": int(trip.get("transit_boxes_total") or 0),
         "cno_signed_bag_count": int(trip.get("cno_signed_bag_count") or 0),
         "bags_incomplete": 1 if trip.get("bags_incomplete") else 0,
+        "waybill_total": int(trip.get("waybill_total") or 0),
     }
+
+
+def persist_trips_waybill_totals(
+    record_date: str,
+    trips: List[Dict[str, Any]],
+    *,
+    synced_at: Optional[str] = None,
+) -> None:
+    """将 popover loadWaybillTotal 写回车次表（仅更新 waybill_total）。"""
+    record_date = record_date.strip()
+    synced_at = synced_at or datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    ensure_tables()
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        for trip in trips or []:
+            try:
+                aid = int(trip.get("task_arrival_id") or 0)
+            except (TypeError, ValueError):
+                continue
+            if not aid:
+                continue
+            wb = int(trip.get("waybill_total") or 0)
+            q, p = convert_placeholders(
+                f"""UPDATE {TABLE_TRIP}
+                SET waybill_total = ?, synced_at = ?
+                WHERE record_date = ? AND task_arrival_id = ?""",
+                (wb, synced_at, record_date, aid),
+            )
+            cur.execute(q, p)
+
+
+def reconcile_trips_waybill_totals(
+    record_date: str,
+    trips: List[Dict[str, Any]],
+    *,
+    persist: bool = True,
+) -> bool:
+    """用 raw_json 中的 loadWaybillTotal 修正车次与当日总票数。"""
+    import gofo_vehicle_arrival as gva
+
+    changed = False
+    for trip in trips or []:
+        wb = gva.trip_popover_waybill_total(trip)
+        if wb <= 0:
+            continue
+        if wb != int(trip.get("waybill_total") or 0):
+            trip["waybill_total"] = wb
+            changed = True
+    if persist and changed:
+        synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        persist_trips_waybill_totals(record_date, trips, synced_at=synced_at)
+        update_day_stats(record_date)
+    return changed
 
 
 def _refresh_trip_signin_counts(
@@ -450,7 +533,7 @@ def reconcile_trips_signin_from_stored_bags(
         cur = conn.cursor()
         q, p = convert_placeholders(
             f"""SELECT task_arrival_id, plan_unload_point, serial_number, cno_signed,
-                sample_waybill_no, es_context, operation_time
+                sample_waybill_no, es_context, operation_time, waybill_count
             FROM {TABLE_BAG}
             WHERE record_date = ?""",
             (record_date,),
@@ -500,6 +583,28 @@ def reconcile_trips_signin_from_stored_bags(
             update_trip_signin_metrics(record_date, trip, synced_at=synced_at)
 
 
+def repair_waybill_totals(record_date: str) -> Dict[str, Any]:
+    """从 raw_json loadWaybillTotal 回写车次与当日总票数（不拉袋牌）。"""
+    import gofo_vehicle_arrival as gva
+
+    record_date = record_date.strip()
+    trips = read_trips(record_date)
+    if not trips:
+        return {"record_date": record_date, "trips": 0, "total_waybills": 0}
+    for trip in trips:
+        wb = gva.trip_popover_waybill_total(trip)
+        if wb > 0:
+            trip["waybill_total"] = wb
+    synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    persist_trips_waybill_totals(record_date, trips, synced_at=synced_at)
+    stats = update_day_stats(record_date)
+    return {
+        "record_date": record_date,
+        "trips": len(trips),
+        "total_waybills": int(stats.get("total_waybills") or 0),
+    }
+
+
 def list_trip_arrival_ids(record_date: Optional[str] = None) -> set:
     record_date = (record_date or la_record_date()).strip()
     ensure_tables()
@@ -540,6 +645,12 @@ def update_day_stats(record_date: str) -> Dict[str, int]:
     record_date = record_date.strip()
     ensure_tables()
     trips = read_trips(record_date)
+    import gofo_vehicle_arrival as gva
+
+    for trip in trips:
+        wb = gva.trip_popover_waybill_total(trip)
+        if wb > 0:
+            trip["waybill_total"] = wb
     stats = compute_day_stats_from_trips(trips)
     synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
     with get_db_connection() as conn:
@@ -694,8 +805,8 @@ def merge_new_arrivals(
                 record_date, task_arrival_id, task_no, serial_number,
                 load_scan_time, scan_type, load_point, plan_unload_point,
                 unload_point, unload_scan_time, sample_waybill_no,
-                es_context, operation_time, cno_signed, synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                es_context, operation_time, cno_signed, waybill_count, synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         new_ids = {int(t.get("task_arrival_id") or 0) for t in new_trips}
         for arrival_id, bags in bags_by_task.items():
@@ -719,6 +830,7 @@ def merge_new_arrivals(
                         bag.get("es_context"),
                         bag.get("operation_time"),
                         bag.get("cno_signed"),
+                        bag.get("waybill_count"),
                         synced_at,
                     ),
                 )
@@ -765,8 +877,8 @@ def insert_trip_bags(
                 record_date, task_arrival_id, task_no, serial_number,
                 load_scan_time, scan_type, load_point, plan_unload_point,
                 unload_point, unload_scan_time, sample_waybill_no,
-                es_context, operation_time, cno_signed, synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                es_context, operation_time, cno_signed, waybill_count, synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         for bag in bags:
             serial = str(bag.get("serial_number") or "").strip()
@@ -798,6 +910,7 @@ def insert_trip_bags(
                     bag.get("es_context"),
                     bag.get("operation_time"),
                     bag.get("cno_signed"),
+                    bag.get("waybill_count"),
                     synced_at,
                 ),
             )
@@ -1015,8 +1128,8 @@ def save_day_snapshot(
                 record_date, task_arrival_id, task_no, serial_number,
                 load_scan_time, scan_type, load_point, plan_unload_point,
                 unload_point, unload_scan_time, sample_waybill_no,
-                es_context, operation_time, cno_signed, synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                es_context, operation_time, cno_signed, waybill_count, synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         for arrival_id, bags in bags_by_task.items():
             for bag in bags:
@@ -1037,6 +1150,7 @@ def save_day_snapshot(
                         bag.get("es_context"),
                         bag.get("operation_time"),
                         bag.get("cno_signed"),
+                        bag.get("waybill_count"),
                         synced_at,
                     ),
                 )
@@ -1071,6 +1185,7 @@ def update_bags_signin(
                     sample_waybill_no = ?,
                     es_context = ?,
                     operation_time = ?,
+                    waybill_count = COALESCE(?, waybill_count),
                     synced_at = ?
                 WHERE record_date = ? AND task_arrival_id = ? AND serial_number = ?""",
                 (
@@ -1078,6 +1193,7 @@ def update_bags_signin(
                     bag.get("sample_waybill_no"),
                     bag.get("es_context"),
                     bag.get("operation_time"),
+                    bag.get("waybill_count"),
                     synced_at,
                     record_date,
                     int(task_arrival_id),
@@ -1306,6 +1422,11 @@ def read_page(record_date: Optional[str] = None) -> Dict[str, Any]:
     trips = read_trips(record_date)
     import gofo_vehicle_arrival as gva
 
+    for trip in trips:
+        wb = gva.trip_popover_waybill_total(trip)
+        if wb > 0:
+            trip["waybill_total"] = wb
+    reconcile_trips_waybill_totals(record_date, trips)
     reconcile_trips_signin_from_stored_bags(record_date, trips)
     for trip in trips:
         gva.apply_trip_unload_display(trip)

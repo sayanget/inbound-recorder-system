@@ -2,6 +2,7 @@
 """GoFO 中心看板「到车情况 · 当日已到」— transport/arrive/car/popover。"""
 from __future__ import annotations
 
+import json
 import os
 import re
 from datetime import datetime, timedelta
@@ -793,6 +794,58 @@ def filter_signin_eligible_bags(bags: List[Dict[str, Any]]) -> List[Dict[str, An
 
 def count_cno_plan_unload_bags(bags: List[Dict[str, Any]]) -> int:
     return len(filter_signin_eligible_bags(bags))
+
+
+def _waybill_total_from_raw_json(trip: Dict[str, Any]) -> int:
+    raw = trip.get("raw_json")
+    if not raw:
+        return 0
+    try:
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        if isinstance(payload, dict):
+            return int(payload.get("waybill_total") or 0)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return 0
+
+
+def trip_popover_waybill_total(trip: Dict[str, Any]) -> int:
+    """装车总票数：arrive/car/popover 的 loadWaybillTotal（同步入库，不重算）。"""
+    wb = _waybill_total_from_raw_json(trip)
+    if wb > 0:
+        return wb
+    return int(trip.get("waybill_total") or 0)
+
+
+def patch_trips_waybill_from_popover_rows(
+    trips: List[Dict[str, Any]],
+    popover_rows: List[Dict[str, Any]],
+) -> None:
+    """用 popover 明细中的 loadWaybillTotal 写回车次 waybill_total。"""
+    by_arrival_id: Dict[int, int] = {}
+    by_task_no: Dict[str, int] = {}
+    for row in popover_rows or []:
+        wb = int(row.get("waybill_total") or 0)
+        if wb <= 0:
+            continue
+        try:
+            aid = int(row.get("task_arrival_id") or 0)
+        except (TypeError, ValueError):
+            aid = 0
+        if aid:
+            by_arrival_id[aid] = wb
+        task_no = str(row.get("task_no") or "").strip()
+        if task_no:
+            by_task_no[task_no] = wb
+    for trip in trips or []:
+        try:
+            aid = int(trip.get("task_arrival_id") or 0)
+        except (TypeError, ValueError):
+            aid = 0
+        task_no = str(trip.get("task_no") or "").strip()
+        wb = by_arrival_id.get(aid) or by_task_no.get(task_no) or 0
+        if wb > 0:
+            trip["waybill_total"] = wb
 
 
 def apply_trip_bag_metrics(trip: Dict[str, Any], bag_rows: List[Dict[str, Any]]) -> None:

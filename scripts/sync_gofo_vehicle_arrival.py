@@ -53,6 +53,7 @@ def _sync_one_trip(i: int, total: int, trip: Dict[str, Any]) -> Tuple[Optional[i
         secs = (datetime.now() - t_trip).total_seconds()
         print(
             f"  [{i}/{total}] {task_no} 袋牌 {len(bag_rows)}，CNO.H {cno_boxes}，"
+            f"票数 {trip.get('waybill_total', 0)}，"
             f"签入箱 {trip.get('cno_signed_bag_count', 0)}，{secs:.1f}s"
         )
         return int(arrival_id), bag_rows
@@ -69,6 +70,13 @@ def repair_signin_metrics(record_date: str) -> Dict[str, Any]:
     if not trips:
         print(f"[repair] {record_date} 无车次")
         return {"record_date": record_date, "trips_repaired": 0, "elapsed": 0.0}
+
+    try:
+        popover_rows, _ = gva.fetch_arrival_popover_rows()
+        gva.patch_trips_waybill_from_popover_rows(trips, popover_rows)
+        store.persist_trips_waybill_totals(record_date, trips, synced_at=synced_at)
+    except Exception as exc:
+        print(f"[repair] 刷新 loadWaybillTotal 失败: {exc}", file=sys.stderr)
 
     total = len(trips)
     repaired = 0
@@ -218,10 +226,21 @@ def main() -> int:
         action="store_true",
         help="重算当日已入库车次的签入时间/箱数（不删袋牌与运单）",
     )
+    parser.add_argument(
+        "--repair-waybills",
+        action="store_true",
+        help="从 raw_json loadWaybillTotal 回写车次装车总票数与 day 汇总（不拉袋牌）",
+    )
     args = parser.parse_args()
     record_date = (args.date or store.la_record_date()).strip()
     try:
-        if args.repair_metrics:
+        if args.repair_waybills:
+            stats = store.repair_waybill_totals(record_date)
+            print(
+                f"[repair-waybills] {record_date}: "
+                f"{stats['trips']} 车次，总票数 {stats['total_waybills']}"
+            )
+        elif args.repair_metrics:
             repair_signin_metrics(record_date)
         else:
             sync_day(record_date, force=args.force)

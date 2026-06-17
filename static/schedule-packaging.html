@@ -296,6 +296,7 @@
                 col_boxes: '装车箱数',
                 col_boxes_hint: '计划卸车点为 CNO.H 的袋牌数（R 开头退件不计入签入）',
                 col_tickets: '装车总票数',
+                col_tickets_hint: 'DMS 到车 popover 字段 loadWaybillTotal',
                 col_bag_no: '袋牌号',
                 col_bag_scan_time: '装车扫描时间',
                 col_bag_load_point: '实际装车点',
@@ -373,6 +374,7 @@
                 col_boxes: 'Boxes',
                 col_boxes_hint: 'Bags with planned unload at CNO.H (R-prefix returns excluded from sign-in)',
                 col_tickets: 'Waybills',
+                col_tickets_hint: 'DMS arrive/car/popover loadWaybillTotal',
                 col_bag_no: 'Bag',
                 col_bag_scan_time: 'Load scan',
                 col_bag_load_point: 'Load point',
@@ -526,6 +528,7 @@
                     row.cno_signed_bag_count = tripSignin.cno_signed_bag_count;
                     row.transit_boxes_total = tripSignin.transit_boxes_total;
                     row.bags_incomplete = tripSignin.bags_incomplete;
+                    row.waybill_total = tripSignin.waybill_total;
                 }
             }
             const table = document.getElementById('tripTable');
@@ -536,9 +539,11 @@
             if (!tr) return;
             const boxes = Number(tripSignin.transit_boxes_total) || 0;
             const signed = Number(tripSignin.cno_signed_bag_count) || 0;
+            const waybills = Number(tripSignin.waybill_total) || 0;
             const incomplete = isTripIncomplete(tripSignin);
             const taskTd = tr.querySelector('td:nth-child(5)');
             const signedTd = tr.querySelector('td:nth-child(7)');
+            const ticketsTd = tr.querySelector('td:nth-child(10)');
             if (taskTd) {
                 taskTd.classList.toggle('task-incomplete', incomplete);
             }
@@ -550,6 +555,9 @@
             if (bagBtn) {
                 bagBtn.textContent = fmtNum(boxes);
                 bagBtn.title = incomplete ? t('incomplete_trip_hint') : '';
+            }
+            if (ticketsTd && tripSignin.waybill_total != null) {
+                ticketsTd.textContent = fmtNum(waybills);
             }
             renderSummary(pageCache || { rows: [] });
         }
@@ -719,7 +727,7 @@
                     <th>${esc(t('col_cno_signed_bags'))}</th>
                     <th title="${esc(t('col_sign_in_time_hint'))}">${esc(t('col_sign_in_time'))}</th>
                     <th title="${esc(t('col_unload_duration_hint'))}">${esc(t('col_unload_duration'))}</th>
-                    <th>${esc(t('col_tickets'))}</th>
+                    <th title="${esc(t('col_tickets_hint'))}">${esc(t('col_tickets'))}</th>
                 </tr>`;
             const body = rows.map(r => {
                 const aid = esc(r.task_arrival_id);
