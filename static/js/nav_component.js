@@ -11,7 +11,7 @@
         { name: '历史查询', lang: 'history_query', url: '/history', icon: 'fa-history', class: 'nav-item-history', page: 'history' },
         { name: '产能计划', lang: 'capacity_planning', url: '/sorting-schedule', icon: 'fa-calendar-alt', class: 'nav-item-schedule', page: 'sorting-schedule' },
         { name: '出库统计', lang: 'outbound_stats', url: '/outbound-stats', icon: 'fa-truck', class: 'nav-item-outbound', page: 'outbound-stats' },
-        { name: '排班 vs 集包', lang: 'schedule_packaging', url: '/schedule-packaging', icon: 'fa-layer-group', class: 'nav-item-schedule-pack', page: 'outbound-stats' },
+        { name: '到车信息', lang: 'vehicle_arrival', url: '/schedule-packaging', icon: 'fa-truck-ramp-box', class: 'nav-item-schedule-pack', page: 'outbound-stats' },
         { name: '流向地图', lang: 'route_map', url: '/route-map', icon: 'fa-map-marked-alt', class: 'nav-item-route-map', page: 'outbound-stats' },
         { name: '生产及耗材', lang: 'consumables', url: '/consumables', icon: 'fa-box', class: 'nav-item-cost', page: 'consumables' },
         { name: '操作日志', lang: 'operation_logs', url: '/logs', icon: 'fa-file-alt', class: 'nav-item-logs', page: 'logs', hidden: true },

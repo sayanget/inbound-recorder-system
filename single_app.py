@@ -2288,6 +2288,7 @@ def api_route_map_tickets_by_destination():
 
 @app.route('/schedule-packaging')
 def schedule_packaging_page():
+    """到货信息（原排班 vs 集包路由保留，页面已替换为 Gofo 到车看板）。"""
     if 'user_id' not in session:
         return redirect('/login')
     if not check_page_permission('outbound-stats'):
@@ -2299,6 +2300,122 @@ def schedule_packaging_page():
             content = f.read()
         return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
     return f"File not found: {file_path}", 404
+
+
+@app.route('/api/gofo/vehicle-arrival/summary', methods=['GET'])
+def api_gofo_vehicle_arrival_summary():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        import gofo_vehicle_arrival_store as _store
+
+        record_date = (request.args.get('record_date') or request.args.get('date') or '').strip() or None
+        return jsonify({'success': True, **_store.read_summary(record_date)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/gofo/vehicle-arrival/page', methods=['GET'])
+def api_gofo_vehicle_arrival_page():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        import gofo_vehicle_arrival_store as _store
+
+        record_date = (request.args.get('record_date') or request.args.get('date') or '').strip() or None
+        return jsonify({'success': True, **_store.read_page(record_date)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/gofo/vehicle-arrival/details', methods=['GET'])
+def api_gofo_vehicle_arrival_details():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        import gofo_vehicle_arrival_store as _store
+
+        record_date = (request.args.get('record_date') or request.args.get('date') or '').strip() or None
+        summary = _store.read_summary(record_date)
+        rows = _store.read_trips(record_date)
+        return jsonify({
+            'success': True,
+            **summary,
+            'rows': rows,
+            'total': len(rows),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/gofo/vehicle-arrival/load-bags', methods=['GET'])
+def api_gofo_vehicle_arrival_load_bags():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    task_no = (request.args.get('task_no') or request.args.get('taskNo') or '').strip()
+    task_arrival_id = request.args.get('task_arrival_id') or request.args.get('taskArrivalId')
+    if not task_arrival_id:
+        return jsonify({'error': '请提供 task_arrival_id'}), 400
+    try:
+        import gofo_vehicle_arrival_store as _store
+
+        record_date = (request.args.get('record_date') or request.args.get('date') or '').strip() or None
+        return jsonify({
+            'success': True,
+            **_store.read_bags(int(task_arrival_id), record_date=record_date, task_no=task_no or None),
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/gofo/vehicle-arrival/package-waybills', methods=['GET'])
+def api_gofo_vehicle_arrival_package_waybills():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    package_no = (request.args.get('package_no') or request.args.get('packageNo') or '').strip()
+    if not package_no:
+        return jsonify({'error': '请提供 package_no'}), 400
+    try:
+        import gofo_vehicle_arrival_store as _store
+
+        record_date = (request.args.get('record_date') or request.args.get('date') or '').strip() or None
+        return jsonify({'success': True, **_store.ensure_package_waybills(package_no, record_date=record_date)})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/gofo/vehicle-arrival/waybill-track', methods=['GET'])
+def api_gofo_vehicle_arrival_waybill_track():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    waybill_no = (request.args.get('waybill_no') or request.args.get('waybillNo') or '').strip()
+    if not waybill_no:
+        return jsonify({'error': '请提供 waybill_no'}), 400
+    try:
+        import gofo_vehicle_arrival_store as _store
+
+        record_date = (request.args.get('record_date') or request.args.get('date') or '').strip() or None
+        return jsonify({'success': True, **_store.read_waybill_track(waybill_no, record_date=record_date)})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/analytics/schedule-vs-packaging')
