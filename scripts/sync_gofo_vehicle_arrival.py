@@ -84,9 +84,12 @@ def repair_signin_metrics(record_date: str) -> Dict[str, Any]:
             bag_rows = bag_data.get("rows") or []
             gva.apply_trip_bag_metrics(trip, bag_rows)
             store.update_trip_signin_metrics(record_date, trip, synced_at=synced_at)
+            store.update_bags_signin(record_date, int(arrival_id), bag_rows, synced_at=synced_at)
+            unsigned = gva.unsigned_cno_bag_serials(bag_rows)
             print(
                 f"  [{i}/{total}] {task_no} 签入箱 {trip.get('cno_signed_bag_count', 0)} "
                 f"@ {trip.get('sign_in_time') or '-'}"
+                + (f" 未签入 {len(unsigned)}: {', '.join(unsigned[:5])}" + ("…" if len(unsigned) > 5 else "") if unsigned else "")
             )
             return int(arrival_id)
         except Exception as exc:
@@ -100,6 +103,7 @@ def repair_signin_metrics(record_date: str) -> Dict[str, Any]:
             if fut.result() is not None:
                 repaired += 1
     elapsed = (datetime.now() - t0).total_seconds()
+    store.update_day_stats(record_date)
     print(f"[repair] 完成 {record_date}: 更新 {repaired}/{total} 车次，耗时 {elapsed:.1f}s")
     return {"record_date": record_date, "trips_repaired": repaired, "elapsed": elapsed}
 
@@ -113,7 +117,7 @@ def sync_day(record_date: str, *, force: bool = False) -> Dict[str, Any]:
     details = gva.fetch_arrival_details()
     trips = details.get("rows") or []
     summary = {
-        "arrived_today": details.get("arrived_today") or len(trips),
+        "arrived_today": len(trips),
         "destination": details.get("destination"),
         "date_type": details.get("date_type"),
         "center_id": details.get("center_id"),
@@ -132,11 +136,13 @@ def sync_day(record_date: str, *, force: bool = False) -> Dict[str, Any]:
             f"待新增 {len(to_fetch)}（并行 {SYNC_TRIP_WORKERS}）…"
         )
         if not to_fetch:
+            arrived_count = store.update_day_trip_count(record_date)
             print("[sync] 无新车次，已入库数据不更新（运单请点击袋牌写入）")
             elapsed = (datetime.now() - t0).total_seconds()
             return {
                 "record_date": record_date,
                 "trips": len(trips),
+                "arrived_today": arrived_count,
                 "trips_inserted": 0,
                 "bags_inserted": 0,
                 "trips_skipped": len(trips),
@@ -182,15 +188,17 @@ def sync_day(record_date: str, *, force: bool = False) -> Dict[str, Any]:
             synced_at=synced_at,
         )
 
+    arrived_count = store.update_day_trip_count(record_date)
     elapsed = (datetime.now() - t0).total_seconds()
     print(
-        f"[sync] 完成 {record_date}: 新增车次={merge_stats['trips_inserted']} "
+        f"[sync] 完成 {record_date}: 库内车次={arrived_count} 新增车次={merge_stats['trips_inserted']} "
         f"新增袋牌={merge_stats['bags_inserted']} "
         f"跳过={merge_stats['trips_skipped']} @ {synced_at}，耗时 {elapsed:.1f}s"
     )
     return {
         "record_date": record_date,
         "trips": len(trips),
+        "arrived_today": arrived_count,
         "synced_at": synced_at,
         "elapsed": elapsed,
         **merge_stats,

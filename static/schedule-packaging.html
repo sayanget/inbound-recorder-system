@@ -45,6 +45,21 @@
             align-items: center;
             margin-bottom: 1rem;
         }
+        .date-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .date-field input[type="date"] {
+            padding: 7px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--card-bg);
+            color: var(--text-color);
+            font: inherit;
+        }
         .btn {
             padding: 8px 18px;
             border: none;
@@ -169,6 +184,17 @@
             margin-bottom: 12px;
         }
         .task-incomplete { color: #c62828; font-weight: 700; }
+        .bag-unsigned td { background: rgba(198, 40, 40, 0.08); }
+        .bag-unsigned .bag-no { color: #c62828; font-weight: 700; }
+        .unsigned-banner {
+            margin: 0 0 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #ffebee;
+            color: #b71c1c;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
         .unload-overtime { color: #c62828; font-weight: 700; }
         .hidden { display: none !important; }
         @media (max-width: 768px) {
@@ -184,6 +210,10 @@
         <p class="sub" data-lang="vehicle_arrival_sub">本地库快照 · 由定时同步脚本写入，页面只读数据库</p>
         <div id="err" class="err"></div>
         <div class="toolbar">
+            <label class="date-field">
+                <span data-lang="record_date_label">查看日期</span>
+                <input type="date" id="recordDate" aria-label="record date" />
+            </label>
             <button type="button" class="btn btn-primary" id="btnRefresh" data-lang="refresh">刷新</button>
             <button type="button" class="btn btn-outline" id="btnExport" data-lang="export_csv">导出表格</button>
         </div>
@@ -194,6 +224,16 @@
                 <div class="kpi-sub" data-lang="trips_unit">车次</div>
             </div>
             <div class="kpi-block">
+                <div class="kpi-label" data-lang="daily_signed_boxes_label">签入箱数</div>
+                <div class="kpi-value" id="signedBoxesTotal">—</div>
+                <div class="kpi-sub" data-lang="daily_signed_boxes_hint">当日 CNO.H 已签入箱数合计</div>
+            </div>
+            <div class="kpi-block">
+                <div class="kpi-label" data-lang="daily_waybills_label">总票数</div>
+                <div class="kpi-value" id="waybillTotal">—</div>
+                <div class="kpi-sub" data-lang="daily_waybills_hint">当日装车运单数合计</div>
+            </div>
+            <div class="kpi-block">
                 <div class="kpi-label" data-lang="timely_rate_label">卸车及时率</div>
                 <div class="kpi-value timely" id="timelyRate">—</div>
                 <div class="kpi-sub" id="timelyRateSub"></div>
@@ -202,7 +242,7 @@
         </div>
         <div id="emptyHint" class="empty-hint hidden" data-lang="db_empty_hint"></div>
         <section class="page-section">
-            <h3 data-lang="detail_title">当日已到 · 明细</h3>
+            <h3 id="detailTitle">当日已到 · 明细</h3>
             <div class="table-wrap" id="detailPanel">
                 <div class="loading-box" data-lang="loading">加载中…</div>
             </div>
@@ -226,15 +266,22 @@
                 cost_accounting: '成本核算',
                 vehicle_arrival: '到车信息',
                 vehicle_arrival_title: '到车信息',
-                vehicle_arrival_sub: '本地库只读 · 车次/袋牌首次同步后不再更新；点击袋牌号首次写入运单',
+                vehicle_arrival_sub: '本地库只读 · 选日期查历史；刷新同步车次；点击袋牌拉取最新运单轨迹',
+                record_date_label: '查看日期',
                 refresh: '刷新',
+                refresh_hint: '从 DMS 同步所选日并重新加载',
                 export_csv: '导出表格',
                 arrived_today_short: '当日已到',
                 trips_unit: '车次',
                 timely_rate_label: '卸车及时率',
                 timely_rate_fmt: '{pct}%（{timely}/{total}）',
-                timely_rate_hint: '抵达至首袋签入≤1小时（CNO.H计划卸车箱数0不参与）',
+                timely_rate_hint: '首件签入距到货≤45分钟为及时（无签入则自到货起算，超45分钟预警）',
+                daily_signed_boxes_label: '签入箱数',
+                daily_signed_boxes_hint: '当日 CNO.H 已签入箱数合计',
+                daily_waybills_label: '总票数',
+                daily_waybills_hint: '当日装车运单数合计',
                 detail_title: '当日已到 · 明细',
+                detail_title_fmt: '{date} 当日已到 · 明细',
                 loading: '加载中…',
                 col_origin: '始发地',
                 col_destination: '目的地',
@@ -244,14 +291,23 @@
                 col_cno_signed_bags: '签入箱数',
                 col_sign_in_time: '签入时间',
                 col_unload_duration: '到货卸车用时',
-                col_unload_duration_hint: 'CNO.H 计划袋牌首末签入时间差',
+                col_unload_duration_hint: '自实际抵达起算，至首件签入；无签入则计至当前，超45分钟预警',
+                col_sign_in_time_hint: '首件 CNO.H 签入运单时间（无则空）',
                 col_boxes: '装车箱数',
-                col_boxes_hint: '计划卸车点为 CNO.H 的袋牌数',
+                col_boxes_hint: '计划卸车点为 CNO.H 的袋牌数（R 开头退件不计入签入）',
                 col_tickets: '装车总票数',
                 col_bag_no: '袋牌号',
                 col_bag_scan_time: '装车扫描时间',
                 col_bag_load_point: '实际装车点',
                 col_bag_unload_plan: '计划卸车点',
+                col_bag_signed: '签入',
+                bag_signed_yes: '已签入',
+                bag_signed_no: '未签入',
+                bag_signed_pending: '—',
+                bag_return_skip: '退件（不计签入）',
+                unload_live_suffix: '（进行中）',
+                unsigned_bags_banner: '未签入 {n} 箱：{list}',
+                incomplete_trip_hint: '签入不足，点击装车箱数查看未签入袋牌',
                 col_waybill_no: '运单号',
                 col_to_code: '邮编',
                 col_to_city: '城市',
@@ -261,10 +317,10 @@
                 no_rows: '暂无到车明细',
                 no_bags: '暂无袋牌号',
                 no_waybills: '暂无运单号',
-                no_waybills_hint: '点击袋牌号时将自动拉取运单并保存到本地库',
+                no_waybills_hint: '袋内暂无运单（可能已签入重新集包）',
                 load_fail: '加载失败',
                 updated_fmt: '库同步于 {time}（每 {min} 分钟自动刷新）',
-                db_empty_hint: '本地库暂无今日数据。请运行：python scripts/sync_gofo_vehicle_arrival.py',
+                db_empty_hint: '本地库暂无该日数据。点击「刷新」从 DMS 同步（洛杉矶日历日）。',
                 expand_bags: '展开袋牌',
                 collapse_bags: '收起袋牌',
                 expand_waybills: '展开运单',
@@ -287,15 +343,22 @@
                 cost_accounting: 'Cost Accounting',
                 vehicle_arrival: 'Arrival Info',
                 vehicle_arrival_title: 'Arrival Info',
-                vehicle_arrival_sub: 'Read-only DB · trips/bags frozen after first sync; click bag to save waybills once',
+                vehicle_arrival_sub: 'Read-only DB · pick a date; Refresh syncs that LA day from DMS',
+                record_date_label: 'Date',
                 refresh: 'Refresh',
+                refresh_hint: 'Sync selected day from DMS and reload',
                 export_csv: 'Export CSV',
                 arrived_today_short: 'Arrived today',
                 trips_unit: 'trips',
                 timely_rate_label: 'Timely unload rate',
                 timely_rate_fmt: '{pct}% ({timely}/{total})',
-                timely_rate_hint: 'Arrival to first sign-in ≤1h (0 CNO.H planned-box trips excluded)',
+                timely_rate_hint: 'First sign-in within 45m of arrival (live timer if none; alert >45m)',
+                daily_signed_boxes_label: 'Signed boxes',
+                daily_signed_boxes_hint: 'Daily CNO.H signed-in boxes total',
+                daily_waybills_label: 'Total waybills',
+                daily_waybills_hint: 'Daily loaded waybill count total',
                 detail_title: 'Arrived today — details',
+                detail_title_fmt: '{date} arrived — details',
                 loading: 'Loading…',
                 col_origin: 'Origin',
                 col_destination: 'Destination',
@@ -305,14 +368,23 @@
                 col_cno_signed_bags: 'Signed boxes',
                 col_sign_in_time: 'Sign-in time',
                 col_unload_duration: 'Arrival unload time',
-                col_unload_duration_hint: 'CNO.H bags: first to last sign-in',
+                col_unload_duration_hint: 'From arrival to first sign-in; live until signed; alert if >45m',
+                col_sign_in_time_hint: 'First CNO.H sign-in waybill time (empty if none yet)',
                 col_boxes: 'Boxes',
-                col_boxes_hint: 'Bags with planned unload at CNO.H',
+                col_boxes_hint: 'Bags with planned unload at CNO.H (R-prefix returns excluded from sign-in)',
                 col_tickets: 'Waybills',
                 col_bag_no: 'Bag',
                 col_bag_scan_time: 'Load scan',
                 col_bag_load_point: 'Load point',
                 col_bag_unload_plan: 'Planned unload',
+                col_bag_signed: 'Signed',
+                bag_signed_yes: 'Signed',
+                bag_signed_no: 'Not signed',
+                bag_signed_pending: '—',
+                bag_return_skip: 'Return (excluded)',
+                unload_live_suffix: ' (live)',
+                unsigned_bags_banner: '{n} unsigned: {list}',
+                incomplete_trip_hint: 'Sign-in incomplete — expand boxes to see unsigned bags',
                 col_waybill_no: 'Waybill',
                 col_to_code: 'ZIP',
                 col_to_city: 'City',
@@ -325,7 +397,7 @@
                 no_waybills_hint: 'Click the bag label to fetch and store waybills',
                 load_fail: 'Load failed',
                 updated_fmt: 'Synced {time} (auto-refresh every {min} min)',
-                db_empty_hint: 'No data in local DB. Run: python scripts/sync_gofo_vehicle_arrival.py',
+                db_empty_hint: 'No local data for this date. Click Refresh to sync from DMS (LA calendar day).',
                 expand_bags: 'Show bags',
                 collapse_bags: 'Hide bags',
                 expand_waybills: 'Show waybills',
@@ -337,9 +409,12 @@
 
         let currentLang = 'zh';
         let pageCache = null;
+        let selectedRecordDate = '';
+        let laToday = '';
         const REFRESH_SEC = 120;
         const REFRESH_MIN = REFRESH_SEC / 60;
-        const UNLOAD_TIMELY_SEC = 3600;
+        const UNLOAD_WARN_SEC = 45 * 60;
+        const UNLOAD_TIMELY_SEC = UNLOAD_WARN_SEC;
         let refreshTimer = null;
         const bagCache = new Map();
         const waybillCache = new Map();
@@ -362,6 +437,9 @@
             localStorage.setItem('preferred_language', currentLang);
             const navCurrentLang = document.getElementById('nav-currentLang');
             if (navCurrentLang) navCurrentLang.textContent = currentLang.toUpperCase();
+            updateDetailTitle();
+            const btnRefresh = document.getElementById('btnRefresh');
+            if (btnRefresh) btnRefresh.title = t('refresh_hint');
         }
         window.setLanguage = function (code) {
             applyLang(code);
@@ -379,6 +457,101 @@
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+        }
+
+        function isReturnBag(serial) {
+            const s = String(serial || '').trim().toUpperCase();
+            return s.startsWith('R');
+        }
+
+        function getRecordDate() {
+            const el = document.getElementById('recordDate');
+            return (el && el.value) || selectedRecordDate || laToday || '';
+        }
+
+        function updateDetailTitle(date) {
+            const el = document.getElementById('detailTitle');
+            if (!el) return;
+            const d = date || getRecordDate();
+            el.textContent = t('detail_title_fmt').replace('{date}', d || '—');
+        }
+
+        function clearCaches() {
+            bagCache.clear();
+            waybillCache.clear();
+        }
+
+        function bagCacheKey(taskArrivalId) {
+            return `${getRecordDate()}:${taskArrivalId}`;
+        }
+
+        function isTripIncomplete(r) {
+            const boxes = Number(r.transit_boxes_total) || 0;
+            const signed = Number(r.cno_signed_bag_count) || 0;
+            if (boxes <= 0) return false;
+            return signed < boxes;
+        }
+
+        function patchBagRowSignin(bagSignin) {
+            if (!bagSignin?.package_no) return;
+            const pkg = String(bagSignin.package_no);
+            const table = document.getElementById('tripTable');
+            if (!table) return;
+            const btn = table.querySelector(`.wb-toggle[data-package-no="${pkg}"]`);
+            if (!btn) return;
+            const tr = btn.closest('tr');
+            if (!tr) return;
+            const isUnsigned = Number(bagSignin.cno_signed) === 0;
+            tr.classList.toggle('bag-unsigned', isUnsigned && !isReturnBag(pkg));
+            const expandRow = document.getElementById(`row-${btn.getAttribute('data-panel-id')}`);
+            if (expandRow) expandRow.classList.toggle('bag-unsigned', isUnsigned && !isReturnBag(pkg));
+            const signedTd = tr.querySelector('td:nth-child(2)');
+            const ctxTd = tr.querySelector('td.track-cell');
+            const timeTd = tr.querySelector('td:nth-child(7)');
+            if (signedTd) {
+                signedTd.textContent = isReturnBag(pkg)
+                    ? t('bag_return_skip')
+                    : (isUnsigned ? t('bag_signed_no') : t('bag_signed_yes'));
+            }
+            if (ctxTd && bagSignin.es_context) ctxTd.textContent = bagSignin.es_context;
+            if (timeTd && bagSignin.operation_time) timeTd.textContent = bagSignin.operation_time;
+        }
+
+        function patchTripRowSignin(tripSignin) {
+            if (!tripSignin || tripSignin.task_arrival_id == null) return;
+            const aid = String(tripSignin.task_arrival_id);
+            if (pageCache?.rows) {
+                const row = pageCache.rows.find(r => String(r.task_arrival_id) === aid);
+                if (row) {
+                    row.cno_signed_bag_count = tripSignin.cno_signed_bag_count;
+                    row.transit_boxes_total = tripSignin.transit_boxes_total;
+                    row.bags_incomplete = tripSignin.bags_incomplete;
+                }
+            }
+            const table = document.getElementById('tripTable');
+            if (!table) return;
+            const bagBtn = table.querySelector(`.bag-toggle[data-task-arrival-id="${aid}"]`);
+            if (!bagBtn) return;
+            const tr = bagBtn.closest('tr');
+            if (!tr) return;
+            const boxes = Number(tripSignin.transit_boxes_total) || 0;
+            const signed = Number(tripSignin.cno_signed_bag_count) || 0;
+            const incomplete = isTripIncomplete(tripSignin);
+            const taskTd = tr.querySelector('td:nth-child(5)');
+            const signedTd = tr.querySelector('td:nth-child(7)');
+            if (taskTd) {
+                taskTd.classList.toggle('task-incomplete', incomplete);
+            }
+            if (signedTd) {
+                signedTd.classList.toggle('task-incomplete', incomplete);
+                signedTd.textContent = fmtNum(signed);
+                signedTd.title = incomplete ? t('incomplete_trip_hint') : '';
+            }
+            if (bagBtn) {
+                bagBtn.textContent = fmtNum(boxes);
+                bagBtn.title = incomplete ? t('incomplete_trip_hint') : '';
+            }
+            renderSummary(pageCache || { rows: [] });
         }
 
         function fmtNum(n) {
@@ -411,8 +584,16 @@
         function renderSummary(data) {
             pageCache = data;
             const rows = data.rows || [];
-            const cnt = data.arrived_today != null ? data.arrived_today : rows.length;
+            const cnt = rows.length;
             document.getElementById('arrivalCount').textContent = fmtNum(cnt);
+            const signedBoxes = data.cno_signed_boxes_total != null
+                ? Number(data.cno_signed_boxes_total)
+                : rows.reduce((s, r) => s + (Number(r.cno_signed_bag_count) || 0), 0);
+            const waybills = data.total_waybills != null
+                ? Number(data.total_waybills)
+                : rows.reduce((s, r) => s + (Number(r.waybill_total) || 0), 0);
+            document.getElementById('signedBoxesTotal').textContent = fmtNum(signedBoxes);
+            document.getElementById('waybillTotal').textContent = fmtNum(waybills);
             const rate = calcTimelyRate(rows);
             const pct = data.timely_rate_pct != null ? Number(data.timely_rate_pct) : rate.pct;
             const timely = data.timely_trips != null ? data.timely_trips : rate.timely;
@@ -457,13 +638,26 @@
             return `<table class="data-table nested"><thead>${head}</thead><tbody>${body}</tbody></table>`;
         }
 
-        function renderBagTable(rows, taskNo) {
+        function renderBagTable(rows, taskNo, unsignedSerials) {
             if (!rows || !rows.length) {
                 return `<div class="loading-box">${esc(t('no_bags'))}</div>`;
+            }
+            const unsigned = unsignedSerials || rows
+                .filter(r => Number(r.cno_signed) === 0 && !isReturnBag(r.serial_number))
+                .map(r => r.serial_number)
+                .filter(Boolean);
+            let banner = '';
+            if (unsigned.length) {
+                banner = `<div class="unsigned-banner">${esc(
+                    t('unsigned_bags_banner')
+                        .replace('{n}', String(unsigned.length))
+                        .replace('{list}', unsigned.join(', ')),
+                )}</div>`;
             }
             const head = `
                 <tr>
                     <th>${esc(t('col_bag_no'))}</th>
+                    <th>${esc(t('col_bag_signed'))}</th>
                     <th>${esc(t('col_bag_scan_time'))}</th>
                     <th>${esc(t('col_bag_load_point'))}</th>
                     <th>${esc(t('col_bag_unload_plan'))}</th>
@@ -473,22 +667,32 @@
             const body = rows.map(r => {
                 const pkg = esc(r.serial_number);
                 const wbPanelId = `wb-${esc(r.serial_number)}`;
+                const isReturn = isReturnBag(r.serial_number);
+                const signedKnown = r.cno_signed != null && r.cno_signed !== '';
+                const isUnsigned = signedKnown && Number(r.cno_signed) === 0 && !isReturn;
+                const rowCls = isUnsigned ? 'bag-unsigned' : '';
+                const signedLabel = isReturn
+                    ? t('bag_return_skip')
+                    : (!signedKnown
+                        ? t('bag_signed_pending')
+                        : (isUnsigned ? t('bag_signed_no') : t('bag_signed_yes')));
                 return `
-                <tr>
-                    <td>
+                <tr class="${rowCls}">
+                    <td class="bag-no">
                         <button type="button" class="expand-btn wb-toggle"
                             data-package-no="${pkg}"
                             data-panel-id="${wbPanelId}"
                             aria-expanded="false">${pkg}</button>
                     </td>
+                    <td>${esc(signedLabel)}</td>
                     <td>${esc(r.load_scan_time)}</td>
                     <td>${esc(r.load_point)}</td>
                     <td>${esc(r.plan_unload_point)}</td>
                     <td class="track-cell">${esc(r.es_context)}</td>
                     <td>${esc(r.operation_time)}</td>
                 </tr>
-                <tr class="expand-row hidden" id="row-${wbPanelId}">
-                    <td colspan="6">
+                <tr class="expand-row hidden ${rowCls}" id="row-${wbPanelId}">
+                    <td colspan="7">
                         <div class="nested-panel" id="${wbPanelId}">
                             <div class="nested-title">${esc(t('waybills_for_pkg').replace('{pkg}', r.serial_number))}</div>
                             <div class="loading-box">${esc(t('loading'))}</div>
@@ -496,7 +700,7 @@
                     </td>
                 </tr>`;
             }).join('');
-            return `<table class="data-table nested"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+            return banner + `<table class="data-table nested"><thead>${head}</thead><tbody>${body}</tbody></table>`;
         }
 
         function renderTripTable(rows) {
@@ -513,7 +717,7 @@
                     <th>${esc(t('col_task'))}</th>
                     <th title="${esc(t('col_boxes_hint'))}">${esc(t('col_boxes'))}</th>
                     <th>${esc(t('col_cno_signed_bags'))}</th>
-                    <th>${esc(t('col_sign_in_time'))}</th>
+                    <th title="${esc(t('col_sign_in_time_hint'))}">${esc(t('col_sign_in_time'))}</th>
                     <th title="${esc(t('col_unload_duration_hint'))}">${esc(t('col_unload_duration'))}</th>
                     <th>${esc(t('col_tickets'))}</th>
                 </tr>`;
@@ -523,13 +727,19 @@
                 const panelId = `bags-${aid}`;
                 const boxes = Number(r.transit_boxes_total) || 0;
                 const signed = Number(r.cno_signed_bag_count) || 0;
-                const incomplete = boxes > 0 && signed < boxes;
+                const incomplete = isTripIncomplete(r);
                 const taskCls = incomplete ? 'task-incomplete' : '';
                 const boxCell = boxes > 0
-                    ? `<button type="button" class="expand-btn bag-toggle" data-task-arrival-id="${aid}" data-task-no="${tno}" data-panel-id="${panelId}" aria-expanded="false">${esc(fmtNum(boxes))}</button>`
+                    ? `<button type="button" class="expand-btn bag-toggle" data-task-arrival-id="${aid}" data-task-no="${tno}" data-panel-id="${panelId}" aria-expanded="false" title="${incomplete ? esc(t('incomplete_trip_hint')) : ''}">${esc(fmtNum(boxes))}</button>`
                     : esc(fmtNum(boxes));
+                const signedCell = incomplete
+                    ? `<span class="task-incomplete" title="${esc(t('incomplete_trip_hint'))}">${esc(fmtNum(signed))}</span>`
+                    : esc(fmtNum(signed));
                 const overtime = Number(r.unload_overtime) === 1;
+                const live = Number(r.unload_live) === 1;
                 const durationCls = overtime ? 'unload-overtime' : '';
+                const durationText = esc(r.unload_duration || '')
+                    + (live ? esc(t('unload_live_suffix')) : '');
                 return `
                 <tr>
                     <td>${esc(r.place_of_origin)}</td>
@@ -538,9 +748,9 @@
                     <td>${esc(r.actual_arrival_time)}</td>
                     <td class="${taskCls}">${tno}</td>
                     <td>${boxCell}</td>
-                    <td>${esc(fmtNum(signed))}</td>
-                    <td>${esc(r.sign_in_time || r.unload_start_time)}</td>
-                    <td class="${durationCls}">${esc(r.unload_duration)}</td>
+                    <td>${signedCell}</td>
+                    <td>${esc(r.sign_in_time || '')}</td>
+                    <td class="${durationCls}" title="${overtime ? esc(t('col_unload_duration_hint')) : ''}">${durationText}</td>
                     <td>${esc(fmtNum(r.waybill_total))}</td>
                 </tr>
                 <tr class="expand-row hidden" id="row-${panelId}">
@@ -604,11 +814,12 @@
         }
 
         async function fetchBags(taskArrivalId, taskNo) {
-            const key = String(taskArrivalId);
+            const key = bagCacheKey(taskArrivalId);
             if (bagCache.has(key)) return bagCache.get(key);
             const q = new URLSearchParams({
-                task_arrival_id: key,
+                task_arrival_id: String(taskArrivalId),
                 task_no: taskNo || '',
+                record_date: getRecordDate(),
                 _: String(Date.now()),
             });
             const res = await fetch(`/api/gofo/vehicle-arrival/load-bags?${q}`, { credentials: 'same-origin', cache: 'no-store' });
@@ -619,7 +830,11 @@
         }
 
         async function fetchWaybills(packageNo) {
-            const q = new URLSearchParams({ package_no: packageNo, _: String(Date.now()) });
+            const q = new URLSearchParams({
+                package_no: packageNo,
+                record_date: getRecordDate(),
+                _: String(Date.now()),
+            });
             const res = await fetch(`/api/gofo/vehicle-arrival/package-waybills?${q}`, { credentials: 'same-origin', cache: 'no-store' });
             const data = await res.json();
             if (!res.ok || !data.success) throw new Error(data.error || t('load_fail'));
@@ -644,8 +859,9 @@
                     btn.getAttribute('data-task-arrival-id'),
                     btn.getAttribute('data-task-no'),
                 );
+                if (data.trip_signin) patchTripRowSignin(data.trip_signin);
                 panel.innerHTML = `<div class="nested-title">${esc(t('bags_for_task').replace('{task}', data.task_no || ''))}</div>`
-                    + renderBagTable(data.rows || [], data.task_no);
+                    + renderBagTable(data.rows || [], data.task_no, data.unsigned_serials);
                 panel.dataset.loaded = '1';
             } catch (e) {
                 panel.innerHTML = `<div class="loading-box" style="color:#c62828;">${esc(e.message)}</div>`;
@@ -668,6 +884,8 @@
             panel.innerHTML = `<div class="nested-title">${esc(t('waybills_for_pkg').replace('{pkg}', pkg))}</div><div class="loading-box">${esc(t('loading'))}</div>`;
             try {
                 const data = await fetchWaybills(pkg);
+                if (data.trip_signin) patchTripRowSignin(data.trip_signin);
+                if (data.bag_signin) patchBagRowSignin(data.bag_signin);
                 waybillCache.set(pkg, data);
                 panel.innerHTML = `<div class="nested-title">${esc(t('waybills_for_pkg').replace('{pkg}', pkg))}</div>`
                     + renderWaybillTable(data.rows || []);
@@ -697,8 +915,39 @@
             });
         }
 
+        async function initRecordDate() {
+            try {
+                const res = await fetch(`/api/gofo/vehicle-arrival/dates?_${Date.now()}`, {
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    laToday = data.la_today || '';
+                    selectedRecordDate = laToday;
+                    const input = document.getElementById('recordDate');
+                    if (input && laToday) input.value = laToday;
+                }
+            } catch (_) { /* fallback below */ }
+            if (!laToday) {
+                laToday = new Date().toISOString().slice(0, 10);
+                selectedRecordDate = laToday;
+                const input = document.getElementById('recordDate');
+                if (input) input.value = laToday;
+            }
+            updateDetailTitle();
+        }
+
         async function loadPage(opts = {}) {
             const silent = !!opts.silent;
+            const sync = !!opts.sync;
+            const date = getRecordDate();
+            if (!date) {
+                if (!silent) showErr(t('load_fail'));
+                return;
+            }
+            selectedRecordDate = date;
+            updateDetailTitle(date);
             if (!silent) showErr('');
             const btn = document.getElementById('btnRefresh');
             const detailPanel = document.getElementById('detailPanel');
@@ -707,11 +956,35 @@
                 detailPanel.innerHTML = `<div class="loading-box">${esc(t('loading'))}</div>`;
             }
             try {
-                const res = await fetch(`/api/gofo/vehicle-arrival/page?_${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' });
-                const data = await res.json();
-                if (!res.ok || !data.success) {
-                    throw new Error(data.error || t('load_fail'));
+                let data;
+                if (sync) {
+                    const res = await fetch('/api/gofo/vehicle-arrival/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        body: JSON.stringify({ record_date: date }),
+                    });
+                    data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.error || t('load_fail'));
+                    }
+                } else {
+                    const res = await fetch(
+                        `/api/gofo/vehicle-arrival/page?record_date=${encodeURIComponent(date)}&_=${Date.now()}`,
+                        { credentials: 'same-origin', cache: 'no-store' },
+                    );
+                    data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.error || t('load_fail'));
+                    }
+                    if (data.empty && date === (data.la_today || laToday) && !opts._autoSynced) {
+                        return loadPage({ sync: true, silent, _autoSynced: true });
+                    }
                 }
+                if (data.la_today) laToday = data.la_today;
+                selectedRecordDate = data.record_date || date;
+                clearCaches();
                 renderSummary(data);
                 detailPanel.innerHTML = renderTripTable(data.rows || []);
                 bindDetailEvents();
@@ -730,17 +1003,22 @@
             refreshTimer = setInterval(() => loadPage({ silent: true }), REFRESH_SEC * 1000);
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             const savedLang = localStorage.getItem('preferred_language')
                 || localStorage.getItem('preferredLanguage')
                 || 'zh';
             applyLang(savedLang);
+            document.getElementById('btnRefresh').title = t('refresh_hint');
             document.getElementById('btnRefresh').addEventListener('click', () => {
-                bagCache.clear();
-                waybillCache.clear();
-                loadPage();
+                clearCaches();
+                loadPage({ sync: true });
             });
             document.getElementById('btnExport').addEventListener('click', exportTripCsv);
+            document.getElementById('recordDate').addEventListener('change', () => {
+                clearCaches();
+                loadPage();
+            });
+            await initRecordDate();
             loadPage();
             scheduleAutoRefresh();
         });

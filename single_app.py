@@ -2370,7 +2370,7 @@ def api_gofo_vehicle_arrival_load_bags():
         record_date = (request.args.get('record_date') or request.args.get('date') or '').strip() or None
         return jsonify({
             'success': True,
-            **_store.read_bags(int(task_arrival_id), record_date=record_date, task_no=task_no or None),
+            **_store.ensure_trip_bags(int(task_arrival_id), record_date=record_date, task_no=task_no or None),
         })
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
@@ -2414,6 +2414,50 @@ def api_gofo_vehicle_arrival_waybill_track():
         return jsonify({'success': True, **_store.read_waybill_track(waybill_no, record_date=record_date)})
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/gofo/vehicle-arrival/dates', methods=['GET'])
+def api_gofo_vehicle_arrival_dates():
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        import gofo_vehicle_arrival_store as _store
+
+        return jsonify({
+            'success': True,
+            'la_today': _store.la_record_date(),
+            'dates': _store.list_record_dates(),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/gofo/vehicle-arrival/sync', methods=['POST'])
+def api_gofo_vehicle_arrival_sync():
+    """从 GoFO DMS 增量同步指定日到本地库（页面刷新用）。"""
+    if 'user_id' not in session:
+        return jsonify({'error': '未登录'}), 401
+    if not check_page_permission('outbound-stats'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        import gofo_vehicle_arrival_store as _store
+        from scripts.sync_gofo_vehicle_arrival import sync_day
+
+        body = request.get_json(silent=True) or {}
+        record_date = (
+            body.get('record_date')
+            or body.get('date')
+            or request.args.get('record_date')
+            or request.args.get('date')
+            or ''
+        ).strip() or _store.la_record_date()
+        result = sync_day(record_date)
+        page = _store.read_page(record_date)
+        return jsonify({'success': True, 'sync': result, **page})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
