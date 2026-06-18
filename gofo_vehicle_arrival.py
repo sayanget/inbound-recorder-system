@@ -62,7 +62,7 @@ def _context_matches_cno_signin_time(ctx: str) -> bool:
 
 
 UNLOAD_WARN_SECONDS = int(os.environ.get("GOFO_UNLOAD_WARN_SEC", str(45 * 60)))
-UNLOAD_TIMELY_SECONDS = int(os.environ.get("GOFO_UNLOAD_TIMELY_SEC", str(UNLOAD_WARN_SECONDS)))
+UNLOAD_TIMELY_SECONDS = int(os.environ.get("GOFO_UNLOAD_TIMELY_SEC", str(60 * 60)))
 UNLOAD_OVERTIME_SECONDS = int(os.environ.get("GOFO_UNLOAD_OVERTIME_SEC", str(UNLOAD_WARN_SECONDS)))
 MAX_POPOVER_PAGES = int(os.environ.get("GOFO_ARRIVAL_MAX_PAGES", "30"))
 POPOVER_PAGE_SIZE = int(os.environ.get("GOFO_ARRIVAL_PAGE_SIZE", "200"))
@@ -876,7 +876,10 @@ def _compute_cno_bag_signin_map(
     if not serials:
         return out
 
-    pkg_to_wbs = _first_page_waybills_for_packages(serials)
+    pkg_to_wbs = _first_page_waybills_for_packages(
+        serials,
+        per_package=max(1, SIGNIN_WAYBILL_SAMPLE),
+    )
     all_wbs = [wb for wbs in pkg_to_wbs.values() for wb in wbs]
     signins = (
         fetch_waybill_signin_events_batch(all_wbs, after_dt=arr_dt, trip_arrival_dt=arr_dt)
@@ -970,7 +973,8 @@ def apply_trip_unload_display(
     first_signin_dt: Optional[datetime] = None,
     now: Optional[datetime] = None,
 ) -> None:
-    """卸车用时：自实际抵达目的地站起算，至首件签入运单止；尚无签入则计至当前并标记 live。"""
+    """卸车用时：自实际抵达起算至首件签入；无签入则计至当前。
+    及时：首件签入距到货≤60分钟；无签入时超45分钟预警（unload_overtime）。"""
     boxes = int(trip.get("transit_boxes_total") or 0)
     if boxes <= 0:
         trip.update(_empty_signin_summary())
@@ -1008,8 +1012,12 @@ def apply_trip_unload_display(
     trip["unload_duration_seconds"] = span_secs
     trip["unload_duration"] = _fmt_duration(timedelta(seconds=span_secs))
     trip["unload_start_seconds"] = span_secs
-    trip["unload_timely"] = span_secs <= UNLOAD_WARN_SECONDS
-    trip["unload_overtime"] = span_secs > UNLOAD_WARN_SECONDS
+    if has_first_signin:
+        trip["unload_timely"] = span_secs <= UNLOAD_TIMELY_SECONDS
+        trip["unload_overtime"] = False
+    else:
+        trip["unload_timely"] = False
+        trip["unload_overtime"] = span_secs > UNLOAD_WARN_SECONDS
 
 
 def _signin_summary_from_signin_map(
@@ -1058,12 +1066,23 @@ def _signin_summary_from_signin_map(
     return summary
 
 
-def _first_page_waybill_nos_for_package(package_no: str) -> List[str]:
-    """袋内运单第一页（用于判断是否存在 CNO.H 签入，不要求最新节点为签入）。"""
+SIGNIN_WAYBILL_SAMPLE = int(os.environ.get("GOFO_SIGNIN_WAYBILL_SAMPLE", "8"))
+
+
+def _first_page_waybill_nos_for_package(
+    package_no: str,
+    *,
+    limit: Optional[int] = None,
+) -> List[str]:
+    """袋内运单抽样（用于判断是否存在 CNO.H 签入，不要求最新节点为签入）。"""
     package_no = (package_no or "").strip()
     if not package_no:
         return []
-    recs, _ = _fetch_center_pack_page(package_no, 1, PACK_WAYBILL_PAGE_SIZE)
+    page_size = min(
+        max(1, int(limit if limit is not None else PACK_WAYBILL_PAGE_SIZE)),
+        PACK_WAYBILL_PAGE_SIZE,
+    )
+    recs, _ = _fetch_center_pack_page(package_no, 1, page_size)
     nos: List[str] = []
     seen: set = set()
     for rec in recs:
@@ -1080,6 +1099,8 @@ def _first_page_waybill_nos_for_package(package_no: str) -> List[str]:
 def _first_page_waybills_for_packages(
     package_nos: List[str],
     max_workers: int = 8,
+    *,
+    per_package: Optional[int] = None,
 ) -> Dict[str, List[str]]:
     unique = []
     seen: set = set()
@@ -1094,8 +1115,10 @@ def _first_page_waybills_for_packages(
 
     out: Dict[str, List[str]] = {}
 
+    sample_n = per_package if per_package is not None else PACK_WAYBILL_PAGE_SIZE
+
     def _one(pkg: str) -> Tuple[str, List[str]]:
-        return pkg, _first_page_waybill_nos_for_package(pkg)
+        return pkg, _first_page_waybill_nos_for_package(pkg, limit=sample_n)
 
     workers = min(max_workers, len(unique))
     with ThreadPoolExecutor(max_workers=workers) as ex:

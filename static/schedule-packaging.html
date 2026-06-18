@@ -275,7 +275,7 @@
                 trips_unit: '车次',
                 timely_rate_label: '卸车及时率',
                 timely_rate_fmt: '{pct}%（{timely}/{total}）',
-                timely_rate_hint: '首件签入距到货≤45分钟为及时（无签入则自到货起算，超45分钟预警）',
+                timely_rate_hint: '首件签入距到货≤60分钟为及时（无签入则自到货起算，超45分钟预警）',
                 daily_signed_boxes_label: '签入箱数',
                 daily_signed_boxes_hint: '当日 CNO.H 已签入箱数合计',
                 daily_waybills_label: '总票数',
@@ -291,7 +291,7 @@
                 col_cno_signed_bags: '签入箱数',
                 col_sign_in_time: '签入时间',
                 col_unload_duration: '到货卸车用时',
-                col_unload_duration_hint: '自实际抵达起算，至首件签入；无签入则计至当前，超45分钟预警',
+                col_unload_duration_hint: '自实际抵达起算，至首件签入；无签入则计至当前，超45分钟红色预警',
                 col_sign_in_time_hint: '首件 CNO.H 签入运单时间（无则空）',
                 col_boxes: '装车箱数',
                 col_boxes_hint: '计划卸车点为 CNO.H 的袋牌数（R 开头退件不计入签入）',
@@ -353,7 +353,7 @@
                 trips_unit: 'trips',
                 timely_rate_label: 'Timely unload rate',
                 timely_rate_fmt: '{pct}% ({timely}/{total})',
-                timely_rate_hint: 'First sign-in within 45m of arrival (live timer if none; alert >45m)',
+                timely_rate_hint: 'First sign-in within 60m of arrival (live timer if none; alert >45m)',
                 daily_signed_boxes_label: 'Signed boxes',
                 daily_signed_boxes_hint: 'Daily CNO.H signed-in boxes total',
                 daily_waybills_label: 'Total waybills',
@@ -369,7 +369,7 @@
                 col_cno_signed_bags: 'Signed boxes',
                 col_sign_in_time: 'Sign-in time',
                 col_unload_duration: 'Arrival unload time',
-                col_unload_duration_hint: 'From arrival to first sign-in; live until signed; alert if >45m',
+                col_unload_duration_hint: 'From arrival to first sign-in; live until signed; red alert if >45m without sign-in',
                 col_sign_in_time_hint: 'First CNO.H sign-in waybill time (empty if none yet)',
                 col_boxes: 'Boxes',
                 col_boxes_hint: 'Bags with planned unload at CNO.H (R-prefix returns excluded from sign-in)',
@@ -416,7 +416,7 @@
         const REFRESH_SEC = 120;
         const REFRESH_MIN = REFRESH_SEC / 60;
         const UNLOAD_WARN_SEC = 45 * 60;
-        const UNLOAD_TIMELY_SEC = UNLOAD_WARN_SEC;
+        const UNLOAD_TIMELY_SEC = 60 * 60;
         let refreshTimer = null;
         const bagCache = new Map();
         const waybillCache = new Map();
@@ -464,6 +464,13 @@
         function isReturnBag(serial) {
             const s = String(serial || '').trim().toUpperCase();
             return s.startsWith('R');
+        }
+
+        function localYmd(d = new Date()) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
         }
 
         function getRecordDate() {
@@ -582,7 +589,8 @@
 
         function isTripTimely(r) {
             if (Number(r.unload_timely) === 1) return true;
-            const secs = r.unload_start_seconds;
+            if (Number(r.unload_live) === 1) return false;
+            const secs = r.unload_duration_seconds ?? r.unload_start_seconds;
             if (secs != null && secs !== '' && Number.isFinite(Number(secs))) {
                 return Number(secs) <= UNLOAD_TIMELY_SEC;
             }
@@ -814,7 +822,7 @@
             lines.push(csvCell(t('timely_rate_label')) + ',' + csvCell(`${rate.pct}% (${rate.timely}/${rate.total})`));
             const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
             const a = document.createElement('a');
-            const date = pageCache?.record_date || new Date().toISOString().slice(0, 10);
+            const date = pageCache?.record_date || laToday || localYmd();
             a.href = URL.createObjectURL(blob);
             a.download = `vehicle-arrival-${date}.csv`;
             a.click();
@@ -938,7 +946,7 @@
                 }
             } catch (_) { /* fallback below */ }
             if (!laToday) {
-                laToday = new Date().toISOString().slice(0, 10);
+                laToday = localYmd();
                 selectedRecordDate = laToday;
                 const input = document.getElementById('recordDate');
                 if (input) input.value = laToday;
@@ -992,6 +1000,8 @@
                 }
                 if (data.la_today) laToday = data.la_today;
                 selectedRecordDate = data.record_date || date;
+                const input = document.getElementById('recordDate');
+                if (input && data.record_date) input.value = data.record_date;
                 clearCaches();
                 renderSummary(data);
                 detailPanel.innerHTML = renderTripTable(data.rows || []);

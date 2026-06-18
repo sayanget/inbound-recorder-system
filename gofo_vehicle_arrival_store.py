@@ -22,6 +22,33 @@ def la_record_date() -> str:
     return datetime.now(LA_TZ).strftime("%Y-%m-%d")
 
 
+def trip_arrival_la_date(trip_or_arrival_time: Any) -> Optional[str]:
+    """车次归属 LA 日历日：以 actual_arrival_time 为准（与 DMS 看板自然日一致）。"""
+    if isinstance(trip_or_arrival_time, dict):
+        raw = trip_or_arrival_time.get("actual_arrival_time")
+    else:
+        raw = trip_or_arrival_time
+    s = str(raw or "").strip()
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:10]
+    if not s:
+        return None
+    import gofo_vehicle_arrival as gva
+
+    dt = gva._parse_la_dt(s)
+    return dt.strftime("%Y-%m-%d") if dt else None
+
+
+def _trips_la_date_where_sql() -> str:
+    """按 actual_arrival_time 的 LA 日历日筛选车次；无到车时刻时回退 record_date。"""
+    return """(
+        (actual_arrival_time IS NOT NULL AND TRIM(actual_arrival_time) != ''
+         AND SUBSTR(actual_arrival_time, 1, 10) = ?)
+        OR ((actual_arrival_time IS NULL OR TRIM(actual_arrival_time) = '')
+            AND record_date = ?)
+    )"""
+
+
 def list_record_dates(limit: int = 90) -> List[Dict[str, Any]]:
     """本地库已有到车数据的日期（降序）。"""
     ensure_tables()
@@ -529,14 +556,26 @@ def reconcile_trips_signin_from_stored_bags(
     if not trips:
         return
     record_date = record_date.strip()
+    trip_ids: List[int] = []
+    for trip in trips:
+        try:
+            aid = int(trip.get("task_arrival_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if aid:
+            trip_ids.append(aid)
+    if not trip_ids:
+        return
+
+    placeholders = ", ".join(["?"] * len(trip_ids))
     with get_db_connection() as conn:
         cur = conn.cursor()
         q, p = convert_placeholders(
             f"""SELECT task_arrival_id, plan_unload_point, serial_number, cno_signed,
                 sample_waybill_no, es_context, operation_time, waybill_count
             FROM {TABLE_BAG}
-            WHERE record_date = ?""",
-            (record_date,),
+            WHERE task_arrival_id IN ({placeholders})""",
+            tuple(trip_ids),
         )
         cur.execute(q, p)
         all_bags = [_dict_row(r) for r in cur.fetchall()]
@@ -564,23 +603,35 @@ def reconcile_trips_signin_from_stored_bags(
         old_signed = int(trip.get("cno_signed_bag_count") or 0)
         old_inc = 1 if trip.get("bags_incomplete") else 0
 
-        eligible_n = len(gva.filter_signin_eligible_bags(bags))
-        trip["transit_boxes_total"] = eligible_n
-        trip.update(
-            gva.trip_signin_summary_from_stored_bags(
-                bags,
-                trip.get("actual_arrival_time") or "",
+        eligible = gva.filter_signin_eligible_bags(bags)
+        arrival = trip.get("actual_arrival_time") or ""
+        bucket_date = trip_arrival_la_date(trip) or record_date
+        needs_signin = any(b.get("cno_signed") is None for b in eligible)
+
+        if needs_signin and arrival:
+            signin_map = gva._compute_cno_bag_signin_map(eligible, arrival)
+            gva.annotate_bags_signin_status(bags, signin_map)
+            trip["transit_boxes_total"] = len(eligible)
+            trip.update(
+                gva._signin_summary_from_signin_map(signin_map, len(eligible), arrival)
             )
-        )
+            if persist:
+                update_bags_signin(bucket_date, aid, bags, synced_at=synced_at)
+        else:
+            trip["transit_boxes_total"] = len(eligible)
+            trip.update(
+                gva.trip_signin_summary_from_stored_bags(bags, arrival)
+            )
 
         new_signed = int(trip.get("cno_signed_bag_count") or 0)
         new_inc = 1 if trip.get("bags_incomplete") else 0
         if persist and (
-            eligible_n != old_boxes
+            len(eligible) != old_boxes
             or new_signed != old_signed
             or new_inc != old_inc
+            or needs_signin
         ):
-            update_trip_signin_metrics(record_date, trip, synced_at=synced_at)
+            update_trip_signin_metrics(bucket_date, trip, synced_at=synced_at)
 
 
 def repair_waybill_totals(record_date: str) -> Dict[str, Any]:
@@ -611,8 +662,9 @@ def list_trip_arrival_ids(record_date: Optional[str] = None) -> set:
     with get_db_connection() as conn:
         cur = conn.cursor()
         q, p = convert_placeholders(
-            f"SELECT task_arrival_id FROM {TABLE_TRIP} WHERE record_date = ?",
-            (record_date,),
+            f"""SELECT task_arrival_id FROM {TABLE_TRIP}
+            WHERE {_trips_la_date_where_sql()}""",
+            (record_date, record_date),
         )
         cur.execute(q, p)
         rows = cur.fetchall()
@@ -624,6 +676,185 @@ def list_trip_arrival_ids(record_date: Optional[str] = None) -> set:
         except (TypeError, ValueError):
             continue
     return out
+
+
+def list_all_trip_arrival_ids() -> set:
+    ensure_tables()
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(f"SELECT task_arrival_id FROM {TABLE_TRIP}")
+        rows = cur.fetchall()
+    out: set = set()
+    for row in rows:
+        d = _dict_row(row)
+        try:
+            out.add(int(d.get("task_arrival_id")))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def find_trip_record_dates(task_arrival_id: int) -> List[str]:
+    ensure_tables()
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        q, p = convert_placeholders(
+            f"SELECT DISTINCT record_date FROM {TABLE_TRIP} WHERE task_arrival_id = ?",
+            (int(task_arrival_id),),
+        )
+        cur.execute(q, p)
+        rows = cur.fetchall()
+    return [str(_dict_row(r).get("record_date") or "").strip() for r in rows if _dict_row(r).get("record_date")]
+
+
+def find_trip_record_date(task_arrival_id: int) -> Optional[str]:
+    dates = find_trip_record_dates(task_arrival_id)
+    return dates[0] if dates else None
+
+
+def relocate_trip_record_date(task_arrival_id: int, to_record_date: str) -> bool:
+    """将车次及其袋牌/运单移至目标 LA 日历日（record_date 与到车时刻对齐）。"""
+    to_record_date = to_record_date.strip()
+    from_date = find_trip_record_date(task_arrival_id)
+    if not from_date or from_date == to_record_date:
+        return False
+    ensure_tables()
+    synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        q, p = convert_placeholders(
+            f"SELECT 1 FROM {TABLE_TRIP} WHERE record_date = ? AND task_arrival_id = ? LIMIT 1",
+            (to_record_date, int(task_arrival_id)),
+        )
+        cur.execute(q, p)
+        target_exists = bool(cur.fetchone())
+
+        q, p = convert_placeholders(
+            f"SELECT serial_number FROM {TABLE_BAG} WHERE record_date = ? AND task_arrival_id = ?",
+            (from_date, int(task_arrival_id)),
+        )
+        cur.execute(q, p)
+        package_nos = [
+            str(_dict_row(r).get("serial_number") or "").strip()
+            for r in cur.fetchall()
+        ]
+        package_nos = [p for p in package_nos if p]
+
+        if target_exists:
+            for pkg in package_nos:
+                q, p = convert_placeholders(
+                    f"DELETE FROM {TABLE_WAYBILL} WHERE record_date = ? AND package_no = ?",
+                    (from_date, pkg),
+                )
+                cur.execute(q, p)
+            for tbl in (TABLE_BAG, TABLE_TRIP):
+                q, p = convert_placeholders(
+                    f"DELETE FROM {tbl} WHERE record_date = ? AND task_arrival_id = ?",
+                    (from_date, int(task_arrival_id)),
+                )
+                cur.execute(q, p)
+        else:
+            for tbl in (TABLE_TRIP, TABLE_BAG):
+                q, p = convert_placeholders(
+                    f"UPDATE {tbl} SET record_date = ?, synced_at = COALESCE(synced_at, ?) "
+                    f"WHERE record_date = ? AND task_arrival_id = ?",
+                    (to_record_date, synced_at, from_date, int(task_arrival_id)),
+                )
+                cur.execute(q, p)
+            for pkg in package_nos:
+                q, p = convert_placeholders(
+                    f"UPDATE {TABLE_WAYBILL} SET record_date = ?, synced_at = COALESCE(synced_at, ?) "
+                    f"WHERE record_date = ? AND package_no = ?",
+                    (to_record_date, synced_at, from_date, pkg),
+                )
+                cur.execute(q, p)
+    update_day_trip_count(from_date)
+    update_day_trip_count(to_record_date)
+    return True
+
+
+def repair_trip_record_dates(
+    record_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """将错桶车次（record_date 与 actual_arrival_time 不一致）迁回正确 LA 日。"""
+    ensure_tables()
+    record_date = (record_date or "").strip()
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        if record_date:
+            q, p = convert_placeholders(
+                f"SELECT task_arrival_id, record_date, actual_arrival_time FROM {TABLE_TRIP} "
+                f"WHERE record_date = ? OR {_trips_la_date_where_sql()}",
+                (record_date, record_date, record_date),
+            )
+        else:
+            q, p = convert_placeholders(
+                f"SELECT task_arrival_id, record_date, actual_arrival_time FROM {TABLE_TRIP}",
+                (),
+            )
+        cur.execute(q, p)
+        rows = [_dict_row(r) for r in cur.fetchall()]
+    moved = 0
+    touched_dates: set = set()
+    seen_ids: set = set()
+    for row in rows:
+        aid = row.get("task_arrival_id")
+        try:
+            aid_int = int(aid)
+        except (TypeError, ValueError):
+            continue
+        if aid_int in seen_ids:
+            continue
+        seen_ids.add(aid_int)
+        stored_dates = find_trip_record_dates(aid_int)
+        if not stored_dates:
+            continue
+        target = trip_arrival_la_date(row) or stored_dates[0]
+        if not target:
+            continue
+        wrong_dates = [d for d in stored_dates if d != target]
+        if not wrong_dates:
+            continue
+        if target not in stored_dates:
+            relocate_trip_record_date(aid_int, target)
+            moved += 1
+            touched_dates.update(stored_dates)
+            touched_dates.add(target)
+        else:
+            for wrong in wrong_dates:
+                with get_db_connection() as conn:
+                    cur = conn.cursor()
+                    q, p = convert_placeholders(
+                        f"SELECT serial_number FROM {TABLE_BAG} WHERE record_date = ? AND task_arrival_id = ?",
+                        (wrong, aid_int),
+                    )
+                    cur.execute(q, p)
+                    package_nos = [
+                        str(_dict_row(r).get("serial_number") or "").strip()
+                        for r in cur.fetchall()
+                    ]
+                    for pkg in [p for p in package_nos if p]:
+                        q, p = convert_placeholders(
+                            f"DELETE FROM {TABLE_WAYBILL} WHERE record_date = ? AND package_no = ?",
+                            (wrong, pkg),
+                        )
+                        cur.execute(q, p)
+                    for tbl in (TABLE_BAG, TABLE_TRIP):
+                        q, p = convert_placeholders(
+                            f"DELETE FROM {tbl} WHERE record_date = ? AND task_arrival_id = ?",
+                            (wrong, aid_int),
+                        )
+                        cur.execute(q, p)
+                touched_dates.add(wrong)
+                touched_dates.add(target)
+                moved += 1
+    for d in touched_dates:
+        update_day_stats(d)
+    return {
+        "record_date": record_date or None,
+        "trips_moved": moved,
+        "dates_updated": sorted(touched_dates),
+    }
 
 
 def compute_day_stats_from_trips(trips: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -720,134 +951,164 @@ def merge_new_arrivals(
     bags_by_task: Dict[int, List[Dict[str, Any]]],
     synced_at: Optional[str] = None,
 ) -> Dict[str, int]:
-    """仅插入库中不存在的车次与袋牌；不修改/删除已有行；不触碰运单表。"""
+    """仅插入库中不存在的车次与袋牌；按 actual_arrival_time LA 日历日分桶。"""
     ensure_tables()
     synced_at = synced_at or datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
-    record_date = record_date.strip()
-    known = list_trip_arrival_ids(record_date)
-    new_trips = [
-        t for t in trips
-        if int(t.get("task_arrival_id") or 0) not in known
-    ]
-    stats = {"trips_inserted": 0, "bags_inserted": 0, "trips_skipped": len(trips) - len(new_trips)}
+    default_date = record_date.strip()
+    known_global = list_all_trip_arrival_ids()
+    new_trips: List[Dict[str, Any]] = []
+    relocated = 0
+    for trip in trips:
+        aid = int(trip.get("task_arrival_id") or 0)
+        if not aid:
+            continue
+        target_date = trip_arrival_la_date(trip) or default_date
+        existing_date = find_trip_record_date(aid)
+        if existing_date:
+            if existing_date != target_date:
+                if relocate_trip_record_date(aid, target_date):
+                    relocated += 1
+            continue
+        if aid in known_global:
+            continue
+        trip["_bucket_record_date"] = target_date
+        new_trips.append(trip)
+        known_global.add(aid)
+
+    stats = {
+        "trips_inserted": 0,
+        "bags_inserted": 0,
+        "trips_skipped": len(trips) - len(new_trips) - relocated,
+        "trips_relocated": relocated,
+    }
     if not new_trips:
         return stats
 
+    trips_by_date: Dict[str, List[Dict[str, Any]]] = {}
+    for trip in new_trips:
+        d = trip.get("_bucket_record_date") or default_date
+        trips_by_date.setdefault(d, []).append(trip)
+
     with get_db_connection() as conn:
         cur = conn.cursor()
-        q, p = convert_placeholders(
-            f"SELECT 1 FROM {TABLE_DAY} WHERE record_date = ? LIMIT 1",
-            (record_date,),
-        )
-        cur.execute(q, p)
-        if not cur.fetchone():
+        for bucket_date, day_trips in trips_by_date.items():
             q, p = convert_placeholders(
-                f"""INSERT INTO {TABLE_DAY}
-                (record_date, arrived_today, destination, date_type, center_id, synced_at)
-                VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    record_date,
-                    int(summary.get("arrived_today") or 0),
-                    summary.get("destination"),
-                    summary.get("date_type"),
-                    summary.get("center_id"),
-                    synced_at,
-                ),
+                f"SELECT 1 FROM {TABLE_DAY} WHERE record_date = ? LIMIT 1",
+                (bucket_date,),
             )
             cur.execute(q, p)
-
-        trip_sql = f"""
-            INSERT INTO {TABLE_TRIP} (
-                record_date, task_arrival_id, task_no, place_of_origin, destination,
-                actual_departure_time, actual_arrival_time, transit_boxes_total, waybill_total,
-                line_name, license_plate_no, task_status_str,
-                cno_signed_bag_count, sign_in_time, unload_duration,
-                unload_duration_seconds, unload_overtime, unload_live, bags_incomplete,
-                unload_start_time, unload_start_seconds, unload_timely,
-                raw_json, synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        for trip in new_trips:
-            q, p = convert_placeholders(
-                trip_sql,
-                (
-                    record_date,
-                    int(trip.get("task_arrival_id") or 0),
-                    trip.get("task_no"),
-                    trip.get("place_of_origin"),
-                    trip.get("destination"),
-                    trip.get("actual_departure_time"),
-                    trip.get("actual_arrival_time"),
-                    int(trip.get("transit_boxes_total") or 0),
-                    int(trip.get("waybill_total") or 0),
-                    trip.get("line_name"),
-                    trip.get("license_plate_no"),
-                    trip.get("task_status_str"),
-                    int(trip.get("cno_signed_bag_count") or 0),
-                    trip.get("sign_in_time"),
-                    trip.get("unload_duration"),
-                    int(trip.get("unload_duration_seconds") or 0),
-                    1 if trip.get("unload_overtime") else 0,
-                    1 if trip.get("unload_live") else 0,
-                    1 if trip.get("bags_incomplete") else 0,
-                    trip.get("unload_start_time"),
-                    trip.get("unload_start_seconds"),
-                    1 if trip.get("unload_timely") else 0,
-                    json.dumps(trip, ensure_ascii=False, default=str),
-                    synced_at,
-                ),
-            )
-            cur.execute(q, p)
-            stats["trips_inserted"] += 1
-
-        bag_sql = f"""
-            INSERT INTO {TABLE_BAG} (
-                record_date, task_arrival_id, task_no, serial_number,
-                load_scan_time, scan_type, load_point, plan_unload_point,
-                unload_point, unload_scan_time, sample_waybill_no,
-                es_context, operation_time, cno_signed, waybill_count, synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        new_ids = {int(t.get("task_arrival_id") or 0) for t in new_trips}
-        for arrival_id, bags in bags_by_task.items():
-            if int(arrival_id) not in new_ids:
-                continue
-            for bag in bags:
+            if not cur.fetchone():
                 q, p = convert_placeholders(
-                    bag_sql,
+                    f"""INSERT INTO {TABLE_DAY}
+                    (record_date, arrived_today, destination, date_type, center_id, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?)""",
                     (
-                        record_date,
-                        int(arrival_id),
-                        bag.get("task_no"),
-                        bag.get("serial_number"),
-                        bag.get("load_scan_time"),
-                        bag.get("scan_type"),
-                        bag.get("load_point"),
-                        bag.get("plan_unload_point"),
-                        bag.get("unload_point"),
-                        bag.get("unload_scan_time"),
-                        bag.get("sample_waybill_no"),
-                        bag.get("es_context"),
-                        bag.get("operation_time"),
-                        bag.get("cno_signed"),
-                        bag.get("waybill_count"),
+                        bucket_date,
+                        0,
+                        summary.get("destination"),
+                        summary.get("date_type"),
+                        summary.get("center_id"),
                         synced_at,
                     ),
                 )
                 cur.execute(q, p)
-                stats["bags_inserted"] += 1
+
+            trip_sql = f"""
+                INSERT INTO {TABLE_TRIP} (
+                    record_date, task_arrival_id, task_no, place_of_origin, destination,
+                    actual_departure_time, actual_arrival_time, transit_boxes_total, waybill_total,
+                    line_name, license_plate_no, task_status_str,
+                    cno_signed_bag_count, sign_in_time, unload_duration,
+                    unload_duration_seconds, unload_overtime, unload_live, bags_incomplete,
+                    unload_start_time, unload_start_seconds, unload_timely,
+                    raw_json, synced_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            for trip in day_trips:
+                q, p = convert_placeholders(
+                    trip_sql,
+                    (
+                        bucket_date,
+                        int(trip.get("task_arrival_id") or 0),
+                        trip.get("task_no"),
+                        trip.get("place_of_origin"),
+                        trip.get("destination"),
+                        trip.get("actual_departure_time"),
+                        trip.get("actual_arrival_time"),
+                        int(trip.get("transit_boxes_total") or 0),
+                        int(trip.get("waybill_total") or 0),
+                        trip.get("line_name"),
+                        trip.get("license_plate_no"),
+                        trip.get("task_status_str"),
+                        int(trip.get("cno_signed_bag_count") or 0),
+                        trip.get("sign_in_time"),
+                        trip.get("unload_duration"),
+                        int(trip.get("unload_duration_seconds") or 0),
+                        1 if trip.get("unload_overtime") else 0,
+                        1 if trip.get("unload_live") else 0,
+                        1 if trip.get("bags_incomplete") else 0,
+                        trip.get("unload_start_time"),
+                        trip.get("unload_start_seconds"),
+                        1 if trip.get("unload_timely") else 0,
+                        json.dumps(trip, ensure_ascii=False, default=str),
+                        synced_at,
+                    ),
+                )
+                cur.execute(q, p)
+                stats["trips_inserted"] += 1
+
+            bag_sql = f"""
+                INSERT INTO {TABLE_BAG} (
+                    record_date, task_arrival_id, task_no, serial_number,
+                    load_scan_time, scan_type, load_point, plan_unload_point,
+                    unload_point, unload_scan_time, sample_waybill_no,
+                    es_context, operation_time, cno_signed, waybill_count, synced_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            new_ids = {int(t.get("task_arrival_id") or 0) for t in day_trips}
+            for arrival_id, bags in bags_by_task.items():
+                if int(arrival_id) not in new_ids:
+                    continue
+                for bag in bags:
+                    q, p = convert_placeholders(
+                        bag_sql,
+                        (
+                            bucket_date,
+                            int(arrival_id),
+                            bag.get("task_no"),
+                            bag.get("serial_number"),
+                            bag.get("load_scan_time"),
+                            bag.get("scan_type"),
+                            bag.get("load_point"),
+                            bag.get("plan_unload_point"),
+                            bag.get("unload_point"),
+                            bag.get("unload_scan_time"),
+                            bag.get("sample_waybill_no"),
+                            bag.get("es_context"),
+                            bag.get("operation_time"),
+                            bag.get("cno_signed"),
+                            bag.get("waybill_count"),
+                            synced_at,
+                        ),
+                    )
+                    cur.execute(q, p)
+                    stats["bags_inserted"] += 1
+
+    for bucket_date in {t.get("_bucket_record_date") or default_date for t in new_trips}:
+        update_day_trip_count(bucket_date)
     return stats
 
 
 def count_trip_bags(record_date: str, task_arrival_id: int) -> int:
     record_date = record_date.strip()
+    storage_date = find_trip_record_date(task_arrival_id) or record_date
     ensure_tables()
     with get_db_connection() as conn:
         cur = conn.cursor()
         q, p = convert_placeholders(
             f"""SELECT COUNT(*) AS c FROM {TABLE_BAG}
             WHERE record_date = ? AND task_arrival_id = ?""",
-            (record_date, int(task_arrival_id)),
+            (storage_date, int(task_arrival_id)),
         )
         cur.execute(q, p)
         row = _dict_row(cur.fetchone())
@@ -933,18 +1194,19 @@ def ensure_trip_bags(
         cur = conn.cursor()
         q, p = convert_placeholders(
             f"""SELECT * FROM {TABLE_TRIP}
-            WHERE record_date = ? AND task_arrival_id = ?
+            WHERE task_arrival_id = ? AND {_trips_la_date_where_sql()}
             LIMIT 1""",
-            (record_date, task_arrival_id),
+            (task_arrival_id, record_date, record_date),
         )
         cur.execute(q, p)
         trip = _dict_row(cur.fetchone())
     if not trip:
         raise ValueError(f"车次不存在: {task_arrival_id}")
 
+    bucket_date = trip_arrival_la_date(trip) or str(trip.get("record_date") or record_date).strip()
     task_no = (task_no or trip.get("task_no") or "").strip()
     expected_boxes = int(trip.get("transit_boxes_total") or 0)
-    raw_count = count_trip_bags(record_date, task_arrival_id)
+    raw_count = count_trip_bags(bucket_date, task_arrival_id)
     refreshed = False
     synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -956,7 +1218,7 @@ def ensure_trip_bags(
         for bag in bag_rows:
             bag["task_no"] = task_no
         insert_trip_bags(
-            record_date,
+            bucket_date,
             task_arrival_id,
             task_no,
             bag_rows,
@@ -968,28 +1230,28 @@ def ensure_trip_bags(
             q, p = convert_placeholders(
                 f"""UPDATE {TABLE_TRIP}
                 SET transit_boxes_total = ?, synced_at = ?
-                WHERE record_date = ? AND task_arrival_id = ?""",
-                (len(cno_bags), synced_at, record_date, task_arrival_id),
+                WHERE task_arrival_id = ?""",
+                (len(cno_bags), synced_at, task_arrival_id),
             )
             cur.execute(q, p)
         refreshed = True
 
     data = read_bags(
         task_arrival_id,
-        record_date=record_date,
+        record_date=bucket_date,
         task_no=task_no,
         actual_arrival_time=trip.get("actual_arrival_time"),
         compute_signin=not refreshed,
     )
     if data.get("rows"):
         update_bags_signin(
-            record_date,
+            bucket_date,
             task_arrival_id,
             data["rows"],
             synced_at=synced_at,
         )
     refreshed_trip = _refresh_trip_signin_counts(
-        record_date,
+        bucket_date,
         task_arrival_id,
         synced_at=synced_at,
     )
@@ -1028,7 +1290,7 @@ def update_trip_signin_metrics(
                 unload_start_seconds = ?,
                 unload_timely = ?,
                 synced_at = ?
-            WHERE record_date = ? AND task_arrival_id = ?""",
+            WHERE task_arrival_id = ?""",
             (
                 int(trip.get("transit_boxes_total") or 0),
                 int(trip.get("cno_signed_bag_count") or 0),
@@ -1041,7 +1303,6 @@ def update_trip_signin_metrics(
                 trip.get("unload_start_seconds"),
                 1 if trip.get("unload_timely") else 0,
                 synced_at,
-                record_date,
                 arrival_id,
             ),
         )
@@ -1187,7 +1448,7 @@ def update_bags_signin(
                     operation_time = ?,
                     waybill_count = COALESCE(?, waybill_count),
                     synced_at = ?
-                WHERE record_date = ? AND task_arrival_id = ? AND serial_number = ?""",
+                WHERE task_arrival_id = ? AND serial_number = ?""",
                 (
                     bag.get("cno_signed"),
                     bag.get("sample_waybill_no"),
@@ -1195,7 +1456,6 @@ def update_bags_signin(
                     bag.get("operation_time"),
                     bag.get("waybill_count"),
                     synced_at,
-                    record_date,
                     int(task_arrival_id),
                     bag.get("serial_number"),
                 ),
@@ -1258,9 +1518,9 @@ def read_trips(record_date: Optional[str] = None) -> List[Dict[str, Any]]:
         cur = conn.cursor()
         q, p = convert_placeholders(
             f"""SELECT * FROM {TABLE_TRIP}
-            WHERE record_date = ?
+            WHERE {_trips_la_date_where_sql()}
             ORDER BY actual_arrival_time DESC, task_no""",
-            (record_date,),
+            (record_date, record_date),
         )
         cur.execute(q, p)
         rows = [_dict_row(r) for r in cur.fetchall()]
@@ -1276,6 +1536,7 @@ def read_bags(
     compute_signin: bool = True,
 ) -> Dict[str, Any]:
     record_date = (record_date or la_record_date()).strip()
+    storage_date = find_trip_record_date(task_arrival_id) or record_date
     ensure_tables()
     with get_db_connection() as conn:
         cur = conn.cursor()
@@ -1283,16 +1544,16 @@ def read_bags(
             f"""SELECT * FROM {TABLE_BAG}
             WHERE record_date = ? AND task_arrival_id = ?
             ORDER BY load_scan_time DESC, serial_number""",
-            (record_date, int(task_arrival_id)),
+            (storage_date, int(task_arrival_id)),
         )
         cur.execute(q, p)
         rows = [_dict_row(r) for r in cur.fetchall()]
         if actual_arrival_time is None:
             q2, p2 = convert_placeholders(
                 f"""SELECT actual_arrival_time FROM {TABLE_TRIP}
-                WHERE record_date = ? AND task_arrival_id = ?
+                WHERE task_arrival_id = ?
                 LIMIT 1""",
-                (record_date, int(task_arrival_id)),
+                (int(task_arrival_id),),
             )
             cur.execute(q2, p2)
             trip_row = _dict_row(cur.fetchone())
@@ -1418,6 +1679,8 @@ def compute_timely_rate(trips: List[Dict[str, Any]]) -> Dict[str, Any]:
 def read_page(record_date: Optional[str] = None) -> Dict[str, Any]:
     la_today = la_record_date()
     record_date = (record_date or la_today).strip()
+    if record_date == la_today:
+        repair_trip_record_dates(record_date)
     summary = read_summary(record_date)
     trips = read_trips(record_date)
     import gofo_vehicle_arrival as gva
