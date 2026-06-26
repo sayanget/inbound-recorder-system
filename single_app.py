@@ -2890,7 +2890,7 @@ def _gofo_collect_biz_day_trunk_branch(
 
 def _calendar_dates_for_stats_anchor(d: datetime.date, window_mode: str) -> list:
     out = [d.strftime('%Y-%m-%d')]
-    if window_mode in ('business', 'seventeen'):
+    if window_mode in ('business', 'seventeen', 'labor', 'labor_group_csv'):
         nxt = (d + timedelta(days=1)).strftime('%Y-%m-%d')
         if nxt not in out:
             out.append(nxt)
@@ -3273,6 +3273,10 @@ def _labor_row_in_stats_window(rd, slot, anchor_str, next_str, window_mode):
         return (rd == anchor_str and slot >= '05:00') or (
             rd == next_str and slot < '05:00'
         )
+    if window_mode in ('labor', 'labor_group_csv'):
+        return (rd == anchor_str and slot >= '14:00') or (
+            rd == next_str and slot < '16:00'
+        )
     if window_mode == 'seventeen':
         return (rd == anchor_str and slot >= '17:00') or (
             rd == next_str and slot < '17:00'
@@ -3295,6 +3299,9 @@ def la_record_slot_to_operating_anchor(record_date: str, time_slot: str, window_
         return None
     if window_mode == 'business':
         if h < 5:
+            d = d - timedelta(days=1)
+    elif window_mode in ('labor', 'labor_group_csv'):
+        if h < 14:
             d = d - timedelta(days=1)
     elif window_mode == 'seventeen':
         if h < 17:
@@ -3333,17 +3340,13 @@ def _build_cno_labor_sorter_group_summary(
     next_str = next_cal.strftime('%Y-%m-%d')
     cm = _parse_cno_narrowbelt_count_mode(count_mode)
 
-    if window_mode == 'business':
-        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
-    elif window_mode == 'seventeen':
-        labels = [f"{((17 + i) % 24):02d}:00" for i in range(24)]
-    else:
-        labels = [f"{i:02d}:00" for i in range(24)]
+    labels = _stats_hour_slot_labels(window_mode)
+    n_slots = len(labels)
     slot_to_idx = {s: i for i, s in enumerate(labels)}
 
     clause, binds = _record_date_slot_window_sql_binds(window_mode, anchor_date)
 
-    # (company, account) -> pieces；company -> {piece|hourly: 24 整点件数}（计薪按当前规则从账号重算）
+    # (company, account) -> pieces；company -> {piece|hourly: 各整点件数}
     account_agg = {}
     company_hourly = {}
     conn = get_db()
@@ -3399,8 +3402,8 @@ def _build_cno_labor_sorter_group_summary(
             if idx is not None:
                 if company not in company_hourly:
                     company_hourly[company] = {
-                        'piece': [0] * 24,
-                        'hourly': [0] * 24,
+                        'piece': [0] * n_slots,
+                        'hourly': [0] * n_slots,
                     }
                 company_hourly[company][pay_type][idx] += int(n or 0)
             key = (company, account)
@@ -3415,13 +3418,13 @@ def _build_cno_labor_sorter_group_summary(
     companies = {}
     for company in all_companies:
         ch = company_hourly.get(company) or {
-            'piece': [0] * 24,
-            'hourly': [0] * 24,
+            'piece': [0] * n_slots,
+            'hourly': [0] * n_slots,
         }
-        piece_arr = ch.get('piece') or [0] * 24
-        hourly_arr = ch.get('hourly') or [0] * 24
+        piece_arr = ch.get('piece') or [0] * n_slots
+        hourly_arr = ch.get('hourly') or [0] * n_slots
         combined = [
-            int(piece_arr[i] or 0) + int(hourly_arr[i] or 0) for i in range(24)
+            int(piece_arr[i] or 0) + int(hourly_arr[i] or 0) for i in range(n_slots)
         ]
         piece_group_count = sum(
             1
@@ -3585,12 +3588,8 @@ def _build_cno_labor_sorter_hourly_series(
     next_str = next_cal.strftime('%Y-%m-%d')
     cm = _parse_cno_narrowbelt_count_mode(count_mode)
 
-    if window_mode == 'business':
-        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
-    elif window_mode == 'seventeen':
-        labels = [f"{((17 + i) % 24):02d}:00" for i in range(24)]
-    else:
-        labels = [f"{i:02d}:00" for i in range(24)]
+    labels = _stats_hour_slot_labels(window_mode)
+    n_slots = len(labels)
     slot_to_idx = {s: i for i, s in enumerate(labels)}
     series = {}
     dedup_column_cells = 0
@@ -3649,7 +3648,7 @@ def _build_cno_labor_sorter_hourly_series(
             if idx is None:
                 continue
             if company not in series:
-                series[company] = {'piece': [0] * 24, 'hourly': [0] * 24}
+                series[company] = {'piece': [0] * n_slots, 'hourly': [0] * n_slots}
             series[company][pay_type][idx] = (
                 int(series[company][pay_type][idx] or 0) + int(n or 0)
             )
@@ -3821,7 +3820,7 @@ def _aggregate_labor_group_hourly_from_account(
             continue
         key = (company, group_no, pay_type)
         if key not in matrix:
-            matrix[key] = [0] * 24
+            matrix[key] = [0] * len(labels)
         matrix[key][idx] += int(n or 0)
     return matrix
 
@@ -3835,12 +3834,7 @@ def _build_cno_labor_group_hourly_matrix(
     anchor_str = anchor_date.strftime('%Y-%m-%d')
     cm = _parse_cno_narrowbelt_count_mode(count_mode)
 
-    if window_mode == 'business':
-        labels = [f"{((5 + i) % 24):02d}:00" for i in range(24)]
-    elif window_mode == 'seventeen':
-        labels = [f"{((17 + i) % 24):02d}:00" for i in range(24)]
-    else:
-        labels = [f"{i:02d}:00" for i in range(24)]
+    labels = _stats_hour_slot_labels(window_mode)
     slot_to_idx = {s: i for i, s in enumerate(labels)}
 
     matrix = {}
@@ -3904,7 +3898,7 @@ def _build_cno_labor_group_hourly_matrix(
 
 @app.route('/api/statistics/cno_labor_sorter_hourly', methods=['GET'])
 def api_statistics_cno_labor_sorter_hourly():
-    """CNO 劳务公司 Sorter 分时产能（GF 计时/计件）；固定当班次 seventeen。"""
+    """CNO 劳务公司 Sorter 分时产能（GF 计时/计件）；固定劳务班 14:00–次日16:00。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
@@ -3932,10 +3926,8 @@ def api_statistics_cno_labor_sorter_hourly():
         resp.headers['Cache-Control'] = 'no-store, max-age=0'
         return resp
     except Exception as e:
-        labels = (
-            [f"{((17 + i) % 24):02d}:00" for i in range(24)] if wm == 'seventeen'
-            else ([f"{((5 + i) % 24):02d}:00" for i in range(24)] if wm == 'business'
-                  else [f"{i:02d}:00" for i in range(24)]))
+        labels = _stats_hour_slot_labels(wm)
+        n_slots = len(labels)
         return jsonify({
             'error': str(e),
             'date': anchor.strftime('%Y-%m-%d'),
@@ -3953,12 +3945,18 @@ def api_statistics_cno_labor_sorter_hourly():
         }), 500
 
 
+def _labor_csv_window_tag(window_mode: str) -> str:
+    if window_mode in ('labor', 'labor_group_csv'):
+        return 'shift14_16'
+    return window_mode
+
+
 def _la_calendar_dates_for_stats_sync(anchor_date, window_mode: str):
     """统计窗口所需的 LA 日历日列表（business/seventeen 含锚点日+次日）。"""
     if isinstance(anchor_date, str):
         anchor_date = datetime.strptime(str(anchor_date)[:10], '%Y-%m-%d').date()
     dates = [anchor_date.strftime('%Y-%m-%d')]
-    if window_mode in ('business', 'seventeen'):
+    if window_mode in ('business', 'seventeen', 'labor', 'labor_group_csv'):
         nxt = (anchor_date + timedelta(days=1)).strftime('%Y-%m-%d')
         if nxt not in dates:
             dates.append(nxt)
@@ -4002,6 +4000,8 @@ def _build_cno_operlog_sync_plan(anchor_date, window_mode: str = 'calendar'):
         'calendar': '自然日 0–24h',
         'business': '5:00–次日 5:00',
         'seventeen': '17:00–次日 17:00',
+        'labor': '14:00–次日 16:00',
+        'labor_group_csv': '14:00–次日 16:00',
     }
     date_parts = []
     for d in sync_dates:
@@ -4136,13 +4136,14 @@ def _append_cno_labor_sorter_hourly_csv_chart_section(w, data, wm, cm, write_hea
             'pieces',
         ])
     for i, lab in enumerate(data['labels']):
+        n_slots = len(data['labels'])
         for company in data.get('companies') or []:
             buckets = (data.get('series') or {}).get(company) or {}
             for pay_type in ('piece', 'hourly'):
                 if isinstance(buckets, list):
-                    arr = buckets if pay_type == 'piece' else [0] * 24
+                    arr = buckets if pay_type == 'piece' else [0] * n_slots
                 else:
-                    arr = buckets.get(pay_type) or [0] * 24
+                    arr = buckets.get(pay_type) or [0] * n_slots
                 val = arr[i] if i < len(arr) else 0
                 w.writerow([
                     data['date'],
@@ -4371,7 +4372,10 @@ def api_statistics_cno_labor_sorter_hourly_export():
             ]
         )
 
-    fn = f"cno_labor_sorter_hourly_{data['date']}_shift17_{data.get('count_mode', 'raw')}.csv"
+    fn = (
+        f"cno_labor_sorter_hourly_{data['date']}_"
+        f"{_labor_csv_window_tag(wm)}_{data.get('count_mode', 'raw')}.csv"
+    )
     return Response(
         buf.getvalue().encode('utf-8-sig'),
         mimetype='text/csv; charset=utf-8',
@@ -4507,10 +4511,7 @@ def api_statistics_cno_labor_group_hourly():
         resp.headers['Cache-Control'] = 'no-store, max-age=0'
         return resp
     except Exception as e:
-        labels = (
-            [f"{((17 + i) % 24):02d}:00" for i in range(24)] if wm == 'seventeen'
-            else ([f"{((5 + i) % 24):02d}:00" for i in range(24)] if wm == 'business'
-                  else [f"{i:02d}:00" for i in range(24)]))
+        labels = _stats_hour_slot_labels(wm)
         return jsonify({
             'error': str(e),
             'date': anchor.strftime('%Y-%m-%d'),
@@ -4523,7 +4524,7 @@ def api_statistics_cno_labor_group_hourly():
 
 @app.route('/api/statistics/cno_labor_group_hourly/export', methods=['GET'])
 def api_statistics_cno_labor_group_hourly_export():
-    """仅导出各小组每小时产能矩阵 CSV（与统计页表格列一致）。"""
+    """仅导出各小组每小时产能矩阵 CSV（14:00–次日16:00）。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
@@ -4551,7 +4552,7 @@ def api_statistics_cno_labor_group_hourly_export():
     _append_cno_labor_group_hourly_matrix_csv(w, matrix, write_header=True)
     fn = (
         f"cno_labor_group_hourly_{matrix.get('date', anchor.strftime('%Y-%m-%d'))}_"
-        f"shift17_{cm}.csv"
+        f"{_labor_csv_window_tag(wm)}_{cm}.csv"
     )
     return Response(
         buf.getvalue().encode('utf-8-sig'),
@@ -9915,6 +9916,8 @@ def _default_stats_request_date(window_mode):
     d = now.date()
     if window_mode == 'business' and now.hour < 5:
         return d - timedelta(days=1)
+    if window_mode in ('labor', 'labor_group_csv') and now.hour < 14:
+        return d - timedelta(days=1)
     if window_mode == 'seventeen' and now.hour < 17:
         return d - timedelta(days=1)
     return d
@@ -9928,17 +9931,26 @@ def _stats_period_bounds(request_date, window_mode):
     elif window_mode == 'seventeen':
         start = datetime.combine(request_date, datetime.min.time().replace(hour=17))
         end = datetime.combine(next_d, datetime.min.time().replace(hour=17))
+    elif window_mode in ('labor', 'labor_group_csv'):
+        start = datetime.combine(request_date, datetime.min.time().replace(hour=14))
+        end = datetime.combine(next_d, datetime.min.time().replace(hour=16))
     else:
         start = datetime.combine(request_date, datetime.min.time())
         end = datetime.combine(next_d, datetime.min.time())
     return start, end
 
 
-LABOR_SHIFT_STATS_WINDOW = 'seventeen'
+LABOR_SHIFT_STATS_WINDOW = 'labor'
+LABOR_GROUP_CSV_STATS_WINDOW = 'labor_group_csv'
 
 
 def _parse_labor_stats_window_param(raw=None):
-    """劳务/小组分时固定当班次（17:00–次日17:00）；忽略请求中的其它 stats_window。"""
+    """劳务统计/热力图/CSV：14:00–次日 16:00（LA）。"""
+    return LABOR_SHIFT_STATS_WINDOW
+
+
+def _parse_labor_group_csv_window_param(raw=None):
+    """小组分时 CSV（与劳务班相同窗口）。"""
     return LABOR_SHIFT_STATS_WINDOW
 
 
@@ -9947,7 +9959,23 @@ def _stats_hour_slot_labels(window_mode: str):
         return [f"{((5 + i) % 24):02d}:00" for i in range(24)]
     if window_mode == 'seventeen':
         return [f"{((17 + i) % 24):02d}:00" for i in range(24)]
+    if window_mode in ('labor', 'labor_group_csv'):
+        return [f"{h:02d}:00" for h in list(range(14, 24)) + list(range(0, 16))]
     return [f"{i:02d}:00" for i in range(24)]
+
+
+def _slot_calendar_date_for_window(anchor_date, next_d, slot: str, window_mode: str):
+    try:
+        h = int(str(slot)[:2])
+    except ValueError:
+        h = 0
+    if window_mode in ('labor', 'labor_group_csv'):
+        return anchor_date if h >= 14 else next_d
+    if window_mode == 'seventeen':
+        return anchor_date if h >= 17 else next_d
+    if window_mode == 'business':
+        return anchor_date if h >= 5 else next_d
+    return anchor_date
 
 
 def _shift_window_meta(anchor_date, window_mode: str = 'seventeen'):
@@ -9961,18 +9989,11 @@ def _shift_window_meta(anchor_date, window_mode: str = 'seventeen'):
     labels = _stats_hour_slot_labels(window_mode)
     display_labels = []
     for slot in labels:
-        try:
-            h = int(slot[:2])
-        except ValueError:
-            h = 0
-        if window_mode == 'seventeen':
-            cal = anchor_date if h >= 17 else next_d
-        elif window_mode == 'business':
-            cal = anchor_date if h >= 5 else next_d
-        else:
-            cal = anchor_date
+        cal = _slot_calendar_date_for_window(anchor_date, next_d, slot, window_mode)
         display_labels.append(f"{cal.month}/{cal.day} {slot}")
-    if window_mode == 'seventeen':
+    if window_mode in ('labor', 'labor_group_csv'):
+        shift_label = f"{anchor_str} 14:00 – {next_str} 16:00 LA"
+    elif window_mode == 'seventeen':
         shift_label = f"{anchor_str} 17:00 – {next_str} 17:00 LA"
     elif window_mode == 'business':
         shift_label = f"{anchor_str} 05:00 – {next_str} 05:00 LA"
@@ -10063,6 +10084,11 @@ def _record_date_slot_window_sql_binds(window_mode: str, d: date):
     if window_mode == 'seventeen':
         sql = (
             "(record_date = ? AND time_slot >= '17:00') OR (record_date = ? AND time_slot < '17:00')"
+        )
+        return sql, (ds, nxt)
+    if window_mode in ('labor', 'labor_group_csv'):
+        sql = (
+            "(record_date = ? AND time_slot >= '14:00') OR (record_date = ? AND time_slot < '16:00')"
         )
         return sql, (ds, nxt)
     return "record_date = ?", (ds,)
@@ -17256,7 +17282,7 @@ def feishu_sync_cno_narrowbelt_sheet_once(
 
 
 def feishu_sync_cno_labor_group_hourly_sheet_once(
-    stats_window: str = "seventeen",
+    stats_window: str = "labor",
     count_mode: str = "raw",
     anchor_date=None,
     replace_operating_day: bool = True,

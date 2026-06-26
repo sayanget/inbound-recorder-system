@@ -131,7 +131,7 @@
             const params = new URLSearchParams(window.location.search);
             const state = {
                 date: params.get('date') || '',
-                stats_window: 'seventeen',
+                stats_window: 'labor',
                 count_mode: params.get('count_mode') || 'raw',
             };
 
@@ -142,6 +142,7 @@
             function windowLabel(wm) {
                 if (wm === 'calendar') return '自然日（0–24h）';
                 if (wm === 'business') return '5:00–次日5:00';
+                if (wm === 'labor' || wm === 'labor_group_csv') return '14:00–次日16:00';
                 return '17:00–次日17:00';
             }
 
@@ -152,7 +153,7 @@
             function buildShareUrl() {
                 const q = new URLSearchParams();
                 if (state.date) q.set('date', state.date);
-                q.set('stats_window', 'seventeen');
+                q.set('stats_window', 'labor');
                 q.set('count_mode', state.count_mode || 'raw');
                 return window.location.origin + '/share/cno-labor-group-heatmap?' + q.toString();
             }
@@ -175,7 +176,7 @@
                 elGrid.innerHTML = '';
                 const q = new URLSearchParams();
                 if (state.date) q.set('date', state.date);
-                q.set('stats_window', 'seventeen');
+                q.set('stats_window', 'labor');
                 q.set('count_mode', state.count_mode);
                 try {
                     const res = await fetch('/api/statistics/cno_labor_group_hourly?' + q.toString(), {
@@ -195,12 +196,12 @@
                         throw new Error(data.error || ('HTTP ' + res.status));
                     }
                     state.date = data.date || state.date;
-                    state.stats_window = 'seventeen';
+                    state.stats_window = 'labor';
                     state.count_mode = data.count_mode || state.count_mode;
                     const shiftLab = data.shift_label || '';
                     elMeta.textContent =
                         '运营班日 ' + (data.operating_day || data.date || '—')
-                        + (shiftLab ? (' · ' + shiftLab) : (' · ' + windowLabel('seventeen')))
+                        + (shiftLab ? (' · ' + shiftLab) : (' · ' + windowLabel('labor')))
                         + ' · ' + countLabel(data.count_mode)
                         + ' · 更新 ' + new Date().toLocaleString();
                     document.title = '小组热力图 ' + (data.date || '');
