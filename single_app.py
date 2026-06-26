@@ -33,7 +33,6 @@ import schedule
 from openpyxl import Workbook
 import json
 from queue import Queue
-import calc_outsource_finance # 导入生产人工同步逻辑
 import route_distribution_backend as route_dist_backend
 import requests
 import feishu_auth
@@ -2391,7 +2390,15 @@ def api_gofo_vehicle_arrival_package_waybills():
         import gofo_vehicle_arrival_store as _store
 
         record_date = (request.args.get('record_date') or request.args.get('date') or '').strip() or None
-        return jsonify({'success': True, **_store.ensure_package_waybills(package_no, record_date=record_date)})
+        refresh = (request.args.get('refresh') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+        return jsonify({
+            'success': True,
+            **_store.get_package_waybills(
+                package_no,
+                record_date=record_date,
+                refresh=refresh,
+            ),
+        })
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
     except Exception as e:
@@ -3873,7 +3880,7 @@ def _build_cno_labor_group_hourly_matrix(
             'total': total,
         })
 
-    return {
+    result = {
         'date': anchor_str,
         'stats_window': window_mode,
         'count_mode': cm,
@@ -3881,17 +3888,29 @@ def _build_cno_labor_group_hourly_matrix(
         'rows': rows_out,
         'backfilled': backfilled,
     }
+    try:
+        meta = _shift_window_meta(anchor_date, window_mode)
+        result.update({
+            'operating_day': meta['operating_day'],
+            'shift_start_la': meta['shift_start_la'],
+            'shift_end_la': meta['shift_end_la'],
+            'shift_label': meta['shift_label'],
+            'display_labels': meta['display_labels'],
+        })
+    except Exception:
+        pass
+    return result
 
 
 @app.route('/api/statistics/cno_labor_sorter_hourly', methods=['GET'])
 def api_statistics_cno_labor_sorter_hourly():
-    """CNO 劳务公司 Sorter 分时产能（GF 计时/计件）；与窄带相同 stats_window、count_mode。"""
+    """CNO 劳务公司 Sorter 分时产能（GF 计时/计件）；固定当班次 seventeen。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
     raw = request.args.get('date')
-    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    wm = _parse_labor_stats_window_param(request.args.get('stats_window'))
     if raw:
         try:
             anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
@@ -3908,6 +3927,7 @@ def api_statistics_cno_labor_sorter_hourly():
             anchor, wm, cm
         )
         data['sync_plan'] = _build_cno_operlog_sync_plan(anchor, wm)
+        data = _enrich_labor_shift_meta(data, anchor, wm)
         resp = jsonify(data)
         resp.headers['Cache-Control'] = 'no-store, max-age=0'
         return resp
@@ -4054,7 +4074,7 @@ def api_statistics_cno_labor_sorter_hourly_sync():
 
     data = request.get_json(silent=True) or {}
     date_str = (data.get('date') or request.args.get('date') or '').strip()[:10]
-    wm = _parse_stats_window_param(
+    wm = _parse_labor_stats_window_param(
         data.get('stats_window') or request.args.get('stats_window')
     )
     if not date_str:
@@ -4092,7 +4112,7 @@ def api_statistics_cno_labor_sorter_hourly_sync_plan():
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
     raw = request.args.get('date')
-    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    wm = _parse_labor_stats_window_param(request.args.get('stats_window'))
     if raw:
         try:
             anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
@@ -4182,7 +4202,7 @@ def _append_cno_labor_sorter_group_summary_csv(w, gs):
 
 def _append_cno_labor_group_hourly_matrix_csv(w, matrix, write_header=True):
     """宽表：运营锚点日 × 公司 × 组号 × 各整点件数（与统计页矩阵一致）。"""
-    labels = matrix.get('labels') or []
+    labels = matrix.get('display_labels') or matrix.get('labels') or []
     if write_header:
         w.writerow(
             [
@@ -4310,7 +4330,7 @@ def api_statistics_cno_labor_sorter_hourly_export():
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
     raw = request.args.get('date')
-    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    wm = _parse_labor_stats_window_param(request.args.get('stats_window'))
     if raw:
         try:
             anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
@@ -4328,6 +4348,8 @@ def api_statistics_cno_labor_sorter_hourly_export():
 
     buf = io.StringIO()
     w = csv.writer(buf)
+    _write_labor_shift_csv_metadata(w, anchor, wm, cm)
+    w.writerow([])
     _append_cno_labor_sorter_hourly_csv_chart_section(w, data, wm, cm)
     w.writerow([])
     _append_cno_labor_sorter_group_summary_csv(w, data.get('group_summary') or {})
@@ -4349,7 +4371,7 @@ def api_statistics_cno_labor_sorter_hourly_export():
             ]
         )
 
-    fn = f"cno_labor_sorter_hourly_{data['date']}_{data.get('count_mode', 'raw')}.csv"
+    fn = f"cno_labor_sorter_hourly_{data['date']}_shift17_{data.get('count_mode', 'raw')}.csv"
     return Response(
         buf.getvalue().encode('utf-8-sig'),
         mimetype='text/csv; charset=utf-8',
@@ -4379,11 +4401,15 @@ def api_statistics_cno_labor_sorter_hourly_export_range():
     if (end_d - start_d).days > 62:
         return jsonify({'success': False, 'error': '区间最多 62 天'}), 400
 
-    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    wm = _parse_labor_stats_window_param(request.args.get('stats_window'))
     cm = _parse_cno_narrowbelt_count_mode(request.args.get('count_mode'))
 
     buf = io.StringIO()
     w = csv.writer(buf)
+    _write_labor_shift_csv_metadata(w, start_d, wm, cm)
+    w.writerow(['# export_range_start', start_raw])
+    w.writerow(['# export_range_end', end_raw])
+    w.writerow([])
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -4466,7 +4492,7 @@ def api_statistics_cno_labor_group_hourly():
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
     raw = request.args.get('date')
-    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    wm = _parse_labor_stats_window_param(request.args.get('stats_window'))
     if raw:
         try:
             anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
@@ -4503,7 +4529,7 @@ def api_statistics_cno_labor_group_hourly_export():
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
     raw = request.args.get('date')
-    wm = _parse_stats_window_param(request.args.get('stats_window'))
+    wm = _parse_labor_stats_window_param(request.args.get('stats_window'))
     if raw:
         try:
             anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
@@ -4519,11 +4545,13 @@ def api_statistics_cno_labor_group_hourly_export():
 
     buf = io.StringIO()
     w = csv.writer(buf)
+    _write_labor_shift_csv_metadata(w, anchor, wm, cm)
+    w.writerow([])
     w.writerow(['# section', 'group_hourly_matrix'])
     _append_cno_labor_group_hourly_matrix_csv(w, matrix, write_header=True)
     fn = (
         f"cno_labor_group_hourly_{matrix.get('date', anchor.strftime('%Y-%m-%d'))}_"
-        f"{wm}_{cm}.csv"
+        f"shift17_{cm}.csv"
     )
     return Response(
         buf.getvalue().encode('utf-8-sig'),
@@ -4541,7 +4569,7 @@ def api_statistics_cno_labor_group_hourly_feishu_sync():
         return jsonify({'error': '无权限', 'success': False}), 403
 
     data = request.get_json(silent=True) or {}
-    wm = _parse_stats_window_param(
+    wm = _parse_labor_stats_window_param(
         data.get('stats_window') or request.args.get('stats_window')
     )
     cm = _parse_cno_narrowbelt_count_mode(
@@ -5961,6 +5989,8 @@ def post_tms_shuttle_sync():
         'fetched_before_calendar_filter': res.get('fetched_before_calendar_filter'),
         'departure_window_filter': res.get('departure_window_filter'),
         'stored': res.get('stored'),
+        'stored_split': res.get('stored_split'),
+        'db_backend': res.get('db_backend'),
         'total_expected': res.get('total_expected'),
         'actual_departure_window': res.get('actual_departure_window'),
         'day_start_hour': res.get('day_start_hour'),
@@ -9902,6 +9932,89 @@ def _stats_period_bounds(request_date, window_mode):
         start = datetime.combine(request_date, datetime.min.time())
         end = datetime.combine(next_d, datetime.min.time())
     return start, end
+
+
+LABOR_SHIFT_STATS_WINDOW = 'seventeen'
+
+
+def _parse_labor_stats_window_param(raw=None):
+    """劳务/小组分时固定当班次（17:00–次日17:00）；忽略请求中的其它 stats_window。"""
+    return LABOR_SHIFT_STATS_WINDOW
+
+
+def _stats_hour_slot_labels(window_mode: str):
+    if window_mode == 'business':
+        return [f"{((5 + i) % 24):02d}:00" for i in range(24)]
+    if window_mode == 'seventeen':
+        return [f"{((17 + i) % 24):02d}:00" for i in range(24)]
+    return [f"{i:02d}:00" for i in range(24)]
+
+
+def _shift_window_meta(anchor_date, window_mode: str = 'seventeen'):
+    """运营锚点日对应的班次起止与热力图列头（含日历日）。"""
+    if isinstance(anchor_date, datetime):
+        anchor_date = anchor_date.date()
+    anchor_str = anchor_date.strftime('%Y-%m-%d')
+    next_d = anchor_date + timedelta(days=1)
+    next_str = next_d.strftime('%Y-%m-%d')
+    start, end = _stats_period_bounds(anchor_date, window_mode)
+    labels = _stats_hour_slot_labels(window_mode)
+    display_labels = []
+    for slot in labels:
+        try:
+            h = int(slot[:2])
+        except ValueError:
+            h = 0
+        if window_mode == 'seventeen':
+            cal = anchor_date if h >= 17 else next_d
+        elif window_mode == 'business':
+            cal = anchor_date if h >= 5 else next_d
+        else:
+            cal = anchor_date
+        display_labels.append(f"{cal.month}/{cal.day} {slot}")
+    if window_mode == 'seventeen':
+        shift_label = f"{anchor_str} 17:00 – {next_str} 17:00 LA"
+    elif window_mode == 'business':
+        shift_label = f"{anchor_str} 05:00 – {next_str} 05:00 LA"
+    else:
+        shift_label = f"{anchor_str} 00:00 – {next_str} 00:00 LA"
+    return {
+        'operating_day': anchor_str,
+        'shift_start_la': start.strftime('%Y-%m-%d %H:%M:%S'),
+        'shift_end_la': end.strftime('%Y-%m-%d %H:%M:%S'),
+        'shift_label': shift_label,
+        'labels': labels,
+        'display_labels': display_labels,
+    }
+
+
+def _enrich_labor_shift_meta(payload: dict, anchor_date, window_mode: str) -> dict:
+    meta = _shift_window_meta(anchor_date, window_mode)
+    payload.update({
+        'operating_day': meta['operating_day'],
+        'shift_start_la': meta['shift_start_la'],
+        'shift_end_la': meta['shift_end_la'],
+        'shift_label': meta['shift_label'],
+        'stats_window': window_mode,
+    })
+    ghm = payload.get('group_hourly_matrix')
+    if isinstance(ghm, dict):
+        ghm.update({
+            'operating_day': meta['operating_day'],
+            'shift_start_la': meta['shift_start_la'],
+            'shift_end_la': meta['shift_end_la'],
+            'shift_label': meta['shift_label'],
+            'display_labels': meta['display_labels'],
+        })
+    return payload
+
+
+def _write_labor_shift_csv_metadata(w, anchor_date, window_mode: str, count_mode: str = 'raw'):
+    meta = _shift_window_meta(anchor_date, window_mode)
+    w.writerow(['# operating_shift_anchor', meta['operating_day']])
+    w.writerow(['# shift_window_la', meta['shift_label']])
+    w.writerow(['# stats_window', window_mode])
+    w.writerow(['# count_mode', count_mode])
 
 
 def _sorting_slot_window_sql_binds(window_mode: str, d: date):
@@ -17163,7 +17276,7 @@ def feishu_sync_cno_labor_group_hourly_sheet_once(
     ).strip()
     cfg_last_key = "feishu_wiki_cno_labor_group_hourly_meta_last_synced_at"
 
-    wm = stats_window
+    wm = _parse_labor_stats_window_param(stats_window)
     cm = count_mode
     if anchor_date is None:
         anchor = _default_stats_request_date(wm)
@@ -17447,6 +17560,15 @@ def gofo_hourly_sync_job():
                         f"[GofoAutoSync] cno narrowbelt ok date={nb.get('date')} "
                         f"hours={nb.get('hours_attempted')}"
                     )
+                # token 曾中断时，今日 0 点任务只补今天；回刷近 N 小时覆盖昨日 23 点前等缺口
+                lb = _cno_nb.sync_lookback_hours()
+                if lb.get("errors"):
+                    print(f"[GofoAutoSync] cno narrowbelt lookback errors: {lb.get('errors')[:3]}")
+                else:
+                    print(
+                        f"[GofoAutoSync] cno narrowbelt lookback ok "
+                        f"hours={lb.get('hours_ok')} lookback={lb.get('lookback')}"
+                    )
             except Exception as e:
                 print(f"[GofoAutoSync] cno narrowbelt failed: {e}")
             
@@ -17487,6 +17609,24 @@ def gofo_hourly_sync_job():
                     print(f"[GofoAutoSync] tms shuttle returned error: {ts_res.get('error')}")
             except Exception as e:
                 print(f"[GofoAutoSync] TMS shuttle sync failed: {e}")
+
+            # 到车：增量同步新车次 + 签入未齐车次每小时重探
+            try:
+                import gofo_vehicle_arrival_store as _gva_store
+                from scripts.sync_gofo_vehicle_arrival import sync_day
+
+                rd = _gva_store.la_record_date()
+                va_sync = sync_day(rd)
+                va_rep = _gva_store.reprobe_stale_incomplete_signin(rd)
+                print(
+                    f"[GofoAutoSync] vehicle arrival: date={rd} "
+                    f"new_trips={va_sync.get('trips_inserted', 0)} "
+                    f"signin_reprobe={va_rep.get('trips_reprobed', 0)}/"
+                    f"{va_rep.get('trips_checked', 0)} "
+                    f"({va_rep.get('elapsed', 0):.1f}s)"
+                )
+            except Exception as e:
+                print(f"[GofoAutoSync] vehicle arrival signin reprobe failed: {e}")
 
             synced_count = result.get('synced_count', 0)
             pieces = result.get('pieces', 0)

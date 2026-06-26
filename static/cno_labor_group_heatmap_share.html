@@ -131,7 +131,7 @@
             const params = new URLSearchParams(window.location.search);
             const state = {
                 date: params.get('date') || '',
-                stats_window: params.get('stats_window') || 'seventeen',
+                stats_window: 'seventeen',
                 count_mode: params.get('count_mode') || 'raw',
             };
 
@@ -152,7 +152,7 @@
             function buildShareUrl() {
                 const q = new URLSearchParams();
                 if (state.date) q.set('date', state.date);
-                q.set('stats_window', state.stats_window || 'seventeen');
+                q.set('stats_window', 'seventeen');
                 q.set('count_mode', state.count_mode || 'raw');
                 return window.location.origin + '/share/cno-labor-group-heatmap?' + q.toString();
             }
@@ -175,7 +175,7 @@
                 elGrid.innerHTML = '';
                 const q = new URLSearchParams();
                 if (state.date) q.set('date', state.date);
-                q.set('stats_window', state.stats_window);
+                q.set('stats_window', 'seventeen');
                 q.set('count_mode', state.count_mode);
                 try {
                     const res = await fetch('/api/statistics/cno_labor_group_hourly?' + q.toString(), {
@@ -195,11 +195,12 @@
                         throw new Error(data.error || ('HTTP ' + res.status));
                     }
                     state.date = data.date || state.date;
-                    state.stats_window = data.stats_window || state.stats_window;
+                    state.stats_window = 'seventeen';
                     state.count_mode = data.count_mode || state.count_mode;
+                    const shiftLab = data.shift_label || '';
                     elMeta.textContent =
-                        '运营日 ' + (data.date || '—')
-                        + ' · ' + windowLabel(data.stats_window)
+                        '运营班日 ' + (data.operating_day || data.date || '—')
+                        + (shiftLab ? (' · ' + shiftLab) : (' · ' + windowLabel('seventeen')))
                         + ' · ' + countLabel(data.count_mode)
                         + ' · 更新 ' + new Date().toLocaleString();
                     document.title = '小组热力图 ' + (data.date || '');

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -11,6 +12,9 @@ import pytz
 from database import convert_placeholders, convert_sql, get_db_connection
 
 LA_TZ = pytz.timezone("America/Los_Angeles")
+
+# 签入未齐车次重探间隔（秒），默认 1 小时
+SIGNIN_REPROBE_INTERVAL_SEC = int(os.environ.get("GOFO_SIGNIN_REPROBE_SEC", "3600"))
 
 TABLE_DAY = "gofo_vehicle_arrival_day"
 TABLE_TRIP = "gofo_vehicle_arrival_trip"
@@ -185,7 +189,24 @@ def ensure_tables() -> None:
             cur.execute(sql)
         _ensure_trip_columns(cur)
         _ensure_bag_columns(cur)
+        _ensure_waybill_columns(cur)
         _ensure_day_columns(cur)
+
+
+def _ensure_waybill_columns(cur) -> None:
+    for col, typedef in (
+        ("signin_es_context", "TEXT"),
+        ("signin_operation_time", "TEXT"),
+        ("latest_to_signin_duration", "TEXT"),
+        ("latest_to_signin_seconds", "INTEGER"),
+    ):
+        try:
+            cur.execute(f"SELECT {col} FROM {TABLE_WAYBILL} LIMIT 1")
+        except Exception:
+            try:
+                cur.execute(f"ALTER TABLE {TABLE_WAYBILL} ADD COLUMN {col} {typedef}")
+            except Exception:
+                pass
 
 
 def _ensure_day_columns(cur) -> None:
@@ -226,6 +247,7 @@ def _ensure_trip_columns(cur) -> None:
         ("unload_start_time", "TEXT"),
         ("unload_start_seconds", "INTEGER"),
         ("unload_timely", "INTEGER DEFAULT 0"),
+        ("signin_probed_at", "TEXT"),
     ):
         try:
             cur.execute(f"SELECT {col} FROM {TABLE_TRIP} LIMIT 1")
@@ -234,6 +256,231 @@ def _ensure_trip_columns(cur) -> None:
                 cur.execute(f"ALTER TABLE {TABLE_TRIP} ADD COLUMN {col} {typedef}")
             except Exception:
                 pass
+
+
+def _parse_la_dt_safe(raw: Any) -> Optional[datetime]:
+    import gofo_vehicle_arrival as gva
+
+    return gva._parse_la_dt(raw)
+
+
+def trip_signin_incomplete(
+    trip: Dict[str, Any],
+    eligible_bags: Optional[List[Dict[str, Any]]] = None,
+) -> bool:
+    """签入箱数 < 可签入装车箱数。"""
+    if eligible_bags is not None:
+        boxes = len(eligible_bags)
+        signed = sum(1 for b in eligible_bags if int(b.get("cno_signed") or 0) == 1)
+    else:
+        boxes = int(trip.get("transit_boxes_total") or 0)
+        signed = int(trip.get("cno_signed_bag_count") or 0)
+    return boxes > 0 and signed < boxes
+
+
+def signin_probe_stale(
+    trip: Dict[str, Any],
+    *,
+    interval_sec: Optional[int] = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """距上次签入探测是否已超过 interval（默认 1 小时）。"""
+    interval_sec = SIGNIN_REPROBE_INTERVAL_SEC if interval_sec is None else interval_sec
+    probed = str(trip.get("signin_probed_at") or trip.get("synced_at") or "").strip()
+    if not probed:
+        return True
+    dt = _parse_la_dt_safe(probed)
+    if not dt:
+        return True
+    now = now or datetime.now(LA_TZ)
+    return (now - dt).total_seconds() >= interval_sec
+
+
+def should_reprobe_trip_signin(
+    trip: Dict[str, Any],
+    eligible_bags: List[Dict[str, Any]],
+    *,
+    force: bool = False,
+    include_stale: bool = True,
+) -> bool:
+    """是否应对该车次打 DMS 重探签入。
+
+    include_stale=False 时仅处理从未探测的袋牌（页面 reconcile 用）；
+    定时任务用默认 True，对签入未齐且距上次探≥1h 的车次重探。
+    """
+    if force:
+        return bool(eligible_bags)
+    if any(b.get("cno_signed") is None for b in eligible_bags):
+        return True
+    if not include_stale:
+        return False
+    if not trip_signin_incomplete(trip, eligible_bags):
+        return False
+    return signin_probe_stale(trip)
+
+
+def _bags_pending_signin_probe(eligible_bags: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        b
+        for b in eligible_bags
+        if b.get("cno_signed") is None or int(b.get("cno_signed") or 0) == 0
+    ]
+
+
+def _stored_signed_signin_map(
+    eligible_bags: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for bag in eligible_bags:
+        if int(bag.get("cno_signed") or 0) != 1:
+            continue
+        pkg = str(bag.get("serial_number") or "").strip()
+        if not pkg:
+            continue
+        out[pkg] = {
+            "cno_signed": 1,
+            "sample_waybill_no": bag.get("sample_waybill_no") or "",
+            "es_context": bag.get("es_context") or "",
+            "operation_time": bag.get("operation_time") or "",
+        }
+    return out
+
+
+def reprobe_trip_signin(
+    trip: Dict[str, Any],
+    bags: List[Dict[str, Any]],
+    record_date: str,
+    *,
+    persist: bool = True,
+    force: bool = False,
+) -> bool:
+    """重探未签入袋牌并回写车次签入指标。返回是否执行了 DMS 探测。"""
+    import gofo_vehicle_arrival as gva
+
+    record_date = record_date.strip()
+    bucket_date = trip_arrival_la_date(trip) or record_date
+    arrival = trip.get("actual_arrival_time") or ""
+    eligible = gva.filter_signin_eligible_bags(bags)
+    if not arrival or not eligible:
+        return False
+    if not should_reprobe_trip_signin(trip, eligible, force=force):
+        return False
+
+    to_probe = _bags_pending_signin_probe(eligible)
+    if not to_probe:
+        return False
+
+    signin_map = _stored_signed_signin_map(eligible)
+    signin_map.update(gva._compute_cno_bag_signin_map(to_probe, arrival))
+    gva.annotate_bags_signin_status(bags, signin_map)
+
+    trip["transit_boxes_total"] = len(eligible)
+    trip.update(
+        gva._signin_summary_from_signin_map(signin_map, len(eligible), arrival)
+    )
+    gva.apply_trip_unload_display(trip)
+
+    if not persist:
+        return True
+
+    synced_at = datetime.now(LA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        aid = int(trip.get("task_arrival_id") or 0)
+    except (TypeError, ValueError):
+        return True
+    if aid:
+        update_bags_signin(bucket_date, aid, bags, synced_at=synced_at)
+        update_trip_signin_metrics(
+            bucket_date,
+            trip,
+            synced_at=synced_at,
+            signin_probed_at=synced_at,
+        )
+    return True
+
+
+def reprobe_stale_incomplete_signin(
+    record_date: str,
+    *,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """对签入未齐且超过重探间隔的车次，仅重探未签入袋牌。"""
+    import gofo_vehicle_arrival as gva
+
+    record_date = record_date.strip()
+    trips = read_trips(record_date)
+    if not trips:
+        return {
+            "record_date": record_date,
+            "trips_checked": 0,
+            "trips_reprobed": 0,
+            "elapsed": 0.0,
+        }
+
+    t0 = datetime.now()
+    trip_ids: List[int] = []
+    for trip in trips:
+        try:
+            aid = int(trip.get("task_arrival_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if aid:
+            trip_ids.append(aid)
+    if not trip_ids:
+        return {
+            "record_date": record_date,
+            "trips_checked": 0,
+            "trips_reprobed": 0,
+            "elapsed": 0.0,
+        }
+
+    placeholders = ", ".join(["?"] * len(trip_ids))
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        q, p = convert_placeholders(
+            f"""SELECT * FROM {TABLE_BAG}
+            WHERE task_arrival_id IN ({placeholders})""",
+            tuple(trip_ids),
+        )
+        cur.execute(q, p)
+        all_bags = [_dict_row(r) for r in cur.fetchall()]
+
+    from collections import defaultdict
+
+    by_trip: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+    for bag in all_bags:
+        try:
+            aid = int(bag.get("task_arrival_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if aid:
+            by_trip[aid].append(bag)
+
+    reprobed = 0
+    for trip in trips:
+        try:
+            aid = int(trip.get("task_arrival_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        bags = by_trip.get(aid, [])
+        if not bags:
+            continue
+        eligible = gva.filter_signin_eligible_bags(bags)
+        if not force and not should_reprobe_trip_signin(trip, eligible):
+            continue
+        if reprobe_trip_signin(trip, bags, record_date, persist=True, force=force):
+            reprobed += 1
+
+    if reprobed:
+        update_day_stats(record_date)
+
+    elapsed = (datetime.now() - t0).total_seconds()
+    return {
+        "record_date": record_date,
+        "trips_checked": len(trips),
+        "trips_reprobed": reprobed,
+        "elapsed": elapsed,
+    }
 
 
 def _delete_day(cur, record_date: str, *, include_waybills: bool = True) -> None:
@@ -259,8 +506,11 @@ def _insert_waybill_rows(
     wb_sql = f"""
         INSERT INTO {TABLE_WAYBILL} (
             record_date, package_no, waybill_no, to_code, to_state, to_city,
-            es_context, operation_time, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            es_context, operation_time,
+            signin_es_context, signin_operation_time,
+            latest_to_signin_duration, latest_to_signin_seconds,
+            synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     for wb in rows:
         q, p = convert_placeholders(
@@ -274,6 +524,10 @@ def _insert_waybill_rows(
                 wb.get("to_city"),
                 wb.get("es_context"),
                 wb.get("operation_time"),
+                wb.get("signin_es_context"),
+                wb.get("signin_operation_time"),
+                wb.get("latest_to_signin_duration"),
+                wb.get("latest_to_signin_seconds"),
                 synced_at,
             ),
         )
@@ -306,12 +560,43 @@ def upsert_package_waybills(
     return len(rows)
 
 
-def ensure_package_waybills(
+def _attach_package_waybill_signin_meta(
+    data: Dict[str, Any],
+    package_no: str,
+    record_date: str,
+) -> None:
+    """为袋牌运单响应附加袋/车次签入摘要。"""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        q, p = convert_placeholders(
+            f"""SELECT t.task_arrival_id, t.transit_boxes_total, t.cno_signed_bag_count,
+                t.bags_incomplete, t.waybill_total,
+                b.cno_signed, b.es_context, b.operation_time
+            FROM {TABLE_BAG} b
+            INNER JOIN {TABLE_TRIP} t
+              ON t.record_date = b.record_date AND t.task_arrival_id = b.task_arrival_id
+            WHERE b.record_date = ? AND b.serial_number = ?
+            LIMIT 1""",
+            (record_date, package_no.strip()),
+        )
+        cur.execute(q, p)
+        trip_row = _dict_row(cur.fetchone())
+    if trip_row:
+        data["trip_signin"] = _trip_signin_payload(trip_row)
+        data["bag_signin"] = {
+            "package_no": package_no.strip(),
+            "cno_signed": int(trip_row.get("cno_signed") or 0),
+            "es_context": trip_row.get("es_context") or "",
+            "operation_time": trip_row.get("operation_time") or "",
+        }
+
+
+def refresh_package_waybills(
     package_no: str,
     *,
     record_date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """每次点击袋牌从 GoFO 拉取最新运单与轨迹，并回写袋牌签入状态。"""
+    """从 GoFO 拉取袋内运单与轨迹，写入库并更新袋/车次签入。"""
     record_date = (record_date or la_record_date()).strip()
     import gofo_vehicle_arrival as gva
 
@@ -368,31 +653,40 @@ def ensure_package_waybills(
         )
     data = read_package_waybills(package_no, record_date=record_date)
     data["from_cache"] = False
-    data["refreshed_at"] = fetched.get("fetched_at") or ""
-    with get_db_connection() as conn:
-        cur = conn.cursor()
-        q, p = convert_placeholders(
-            f"""SELECT t.task_arrival_id, t.transit_boxes_total, t.cno_signed_bag_count,
-                t.bags_incomplete, t.waybill_total,
-                b.cno_signed, b.es_context, b.operation_time
-            FROM {TABLE_BAG} b
-            INNER JOIN {TABLE_TRIP} t
-              ON t.record_date = b.record_date AND t.task_arrival_id = b.task_arrival_id
-            WHERE b.record_date = ? AND b.serial_number = ?
-            LIMIT 1""",
-            (record_date, package_no.strip()),
-        )
-        cur.execute(q, p)
-        trip_row = _dict_row(cur.fetchone())
-    if trip_row:
-        data["trip_signin"] = _trip_signin_payload(trip_row)
-        data["bag_signin"] = {
-            "package_no": package_no.strip(),
-            "cno_signed": int(trip_row.get("cno_signed") or 0),
-            "es_context": trip_row.get("es_context") or "",
-            "operation_time": trip_row.get("operation_time") or "",
-        }
+    data["refreshed_at"] = fetched.get("fetched_at") or synced_at
+    _attach_package_waybill_signin_meta(data, package_no, record_date)
     return data
+
+
+def get_package_waybills(
+    package_no: str,
+    *,
+    record_date: Optional[str] = None,
+    refresh: bool = False,
+) -> Dict[str, Any]:
+    """袋牌运单：默认读库；refresh=True 时从 DMS 拉取并覆盖入库。"""
+    if refresh:
+        return refresh_package_waybills(package_no, record_date=record_date)
+
+    record_date = (record_date or la_record_date()).strip()
+    package_no = (package_no or "").strip()
+    import gofo_vehicle_arrival as gva
+
+    data = read_package_waybills(package_no, record_date=record_date)
+    gva.recompute_waybill_signin_elapsed(data.get("rows") or [])
+    data["from_cache"] = True
+    data["refreshed_at"] = data.get("fetched_at") or ""
+    _attach_package_waybill_signin_meta(data, package_no, record_date)
+    return data
+
+
+def ensure_package_waybills(
+    package_no: str,
+    *,
+    record_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """兼容旧调用：等同 refresh_package_waybills。"""
+    return refresh_package_waybills(package_no, record_date=record_date)
 
 
 def refresh_bag_signin_for_package(
@@ -539,7 +833,9 @@ def _refresh_trip_signin_counts(
             trip.get("actual_arrival_time") or "",
         )
     )
-    update_trip_signin_metrics(record_date, trip, synced_at=synced_at)
+    update_trip_signin_metrics(
+        record_date, trip, synced_at=synced_at, signin_probed_at=synced_at
+    )
     return trip
 
 
@@ -606,17 +902,12 @@ def reconcile_trips_signin_from_stored_bags(
         eligible = gva.filter_signin_eligible_bags(bags)
         arrival = trip.get("actual_arrival_time") or ""
         bucket_date = trip_arrival_la_date(trip) or record_date
-        needs_signin = any(b.get("cno_signed") is None for b in eligible)
+        needs_first_probe = any(b.get("cno_signed") is None for b in eligible)
 
-        if needs_signin and arrival:
-            signin_map = gva._compute_cno_bag_signin_map(eligible, arrival)
-            gva.annotate_bags_signin_status(bags, signin_map)
-            trip["transit_boxes_total"] = len(eligible)
-            trip.update(
-                gva._signin_summary_from_signin_map(signin_map, len(eligible), arrival)
+        if needs_first_probe and arrival:
+            reprobe_trip_signin(
+                trip, bags, bucket_date, persist=persist, force=False
             )
-            if persist:
-                update_bags_signin(bucket_date, aid, bags, synced_at=synced_at)
         else:
             trip["transit_boxes_total"] = len(eligible)
             trip.update(
@@ -629,7 +920,7 @@ def reconcile_trips_signin_from_stored_bags(
             len(eligible) != old_boxes
             or new_signed != old_signed
             or new_inc != old_inc
-            or needs_signin
+            or needs_first_probe
         ):
             update_trip_signin_metrics(bucket_date, trip, synced_at=synced_at)
 
@@ -1267,6 +1558,7 @@ def update_trip_signin_metrics(
     trip: Dict[str, Any],
     *,
     synced_at: Optional[str] = None,
+    signin_probed_at: Optional[str] = None,
 ) -> None:
     """仅更新车次签入相关指标（不重写袋牌/运单）。"""
     ensure_tables()
@@ -1275,6 +1567,7 @@ def update_trip_signin_metrics(
     arrival_id = int(trip.get("task_arrival_id") or 0)
     if not arrival_id:
         return
+    probed_at = signin_probed_at if signin_probed_at is not None else trip.get("signin_probed_at")
     with get_db_connection() as conn:
         cur = conn.cursor()
         q, p = convert_placeholders(
@@ -1289,7 +1582,8 @@ def update_trip_signin_metrics(
                 unload_start_time = ?,
                 unload_start_seconds = ?,
                 unload_timely = ?,
-                synced_at = ?
+                synced_at = ?,
+                signin_probed_at = COALESCE(?, signin_probed_at)
             WHERE task_arrival_id = ?""",
             (
                 int(trip.get("transit_boxes_total") or 0),
@@ -1303,6 +1597,7 @@ def update_trip_signin_metrics(
                 trip.get("unload_start_seconds"),
                 1 if trip.get("unload_timely") else 0,
                 synced_at,
+                probed_at,
                 arrival_id,
             ),
         )

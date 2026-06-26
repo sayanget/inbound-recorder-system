@@ -315,10 +315,20 @@
                 col_to_state: '州',
                 col_es_context: '轨迹',
                 col_operation_time: '操作时间',
+                col_latest_track: '最新轨迹',
+                col_latest_time: '最新时间',
+                col_signin_track: '签入轨迹',
+                col_signin_time: '签入时间',
+                col_latest_to_signin: '签入至今',
                 no_rows: '暂无到车明细',
                 no_bags: '暂无袋牌号',
                 no_waybills: '暂无运单号',
                 no_waybills_hint: '袋内暂无运单（可能已签入重新集包）',
+                no_waybills_db_hint: '本地库暂无该袋运单，请点击「刷新运单」从 DMS 拉取并入库',
+                waybill_refresh_btn: '刷新运单',
+                waybill_cached_fmt: '读库 · 同步于 {time}',
+                waybill_refreshed_fmt: '已刷新 · {time}',
+                waybill_refreshing: '正在从 DMS 刷新运单…',
                 load_fail: '加载失败',
                 updated_fmt: '库同步于 {time}（每 {min} 分钟自动刷新）',
                 db_empty_hint: '本地库暂无该日数据。点击「刷新」从 DMS 同步（洛杉矶日历日）。',
@@ -393,10 +403,20 @@
                 col_to_state: 'State',
                 col_es_context: 'Track',
                 col_operation_time: 'Time',
+                col_latest_track: 'Latest track',
+                col_latest_time: 'Latest time',
+                col_signin_track: 'Sign-in track',
+                col_signin_time: 'Sign-in time',
+                col_latest_to_signin: 'Since sign-in',
                 no_rows: 'No records',
                 no_bags: 'No bags',
                 no_waybills: 'No waybills',
                 no_waybills_hint: 'Click the bag label to fetch and store waybills',
+                no_waybills_db_hint: 'No cached waybills for this bag. Click Refresh to pull from DMS.',
+                waybill_refresh_btn: 'Refresh waybills',
+                waybill_cached_fmt: 'From DB · synced {time}',
+                waybill_refreshed_fmt: 'Refreshed · {time}',
+                waybill_refreshing: 'Refreshing waybills from DMS…',
                 load_fail: 'Load failed',
                 updated_fmt: 'Synced {time} (auto-refresh every {min} min)',
                 db_empty_hint: 'No local data for this date. Click Refresh to sync from DMS (LA calendar day).',
@@ -629,9 +649,12 @@
             else emptyHint.classList.add('hidden');
         }
 
-        function renderWaybillTable(rows) {
+        function renderWaybillTable(rows, opts) {
+            const emptyHint = (opts && opts.fromCache && (!rows || !rows.length))
+                ? t('no_waybills_db_hint')
+                : t('no_waybills_hint');
             if (!rows || !rows.length) {
-                return `<div class="loading-box">${esc(t('no_waybills'))}<br><span style="font-size:0.85rem;">${esc(t('no_waybills_hint'))}</span></div>`;
+                return `<div class="loading-box">${esc(t('no_waybills'))}<br><span style="font-size:0.85rem;">${esc(emptyHint)}</span></div>`;
             }
             const head = `
                 <tr>
@@ -639,10 +662,21 @@
                     <th>${esc(t('col_to_code'))}</th>
                     <th>${esc(t('col_to_city'))}</th>
                     <th>${esc(t('col_to_state'))}</th>
-                    <th>${esc(t('col_es_context'))}</th>
-                    <th>${esc(t('col_operation_time'))}</th>
+                    <th>${esc(t('col_latest_track'))}</th>
+                    <th>${esc(t('col_latest_time'))}</th>
+                    <th>${esc(t('col_signin_track'))}</th>
+                    <th>${esc(t('col_signin_time'))}</th>
+                    <th>${esc(t('col_latest_to_signin'))}</th>
                 </tr>`;
-            const body = rows.map(r => `
+            const body = rows.map(r => {
+                const lag = r.latest_to_signin_duration
+                    || (r.latest_to_signin_seconds != null && r.latest_to_signin_seconds !== ''
+                        ? String(r.latest_to_signin_seconds) + 's'
+                        : '');
+                const lagCell = lag
+                    ? esc(lag)
+                    : '<span style="color:#c7ccd1">—</span>';
+                return `
                 <tr>
                     <td>${esc(r.waybill_no)}</td>
                     <td>${esc(r.to_code)}</td>
@@ -650,7 +684,11 @@
                     <td>${esc(r.to_state)}</td>
                     <td class="track-cell">${esc(r.es_context)}</td>
                     <td>${esc(r.operation_time)}</td>
-                </tr>`).join('');
+                    <td class="track-cell">${esc(r.signin_es_context || '')}</td>
+                    <td>${esc(r.signin_operation_time || '')}</td>
+                    <td>${lagCell}</td>
+                </tr>`;
+            }).join('');
             return `<table class="data-table nested"><thead>${head}</thead><tbody>${body}</tbody></table>`;
         }
 
@@ -845,16 +883,49 @@
             return data;
         }
 
-        async function fetchWaybills(packageNo) {
+        function renderWaybillPanelContent(pkg, data) {
+            const time = data.refreshed_at || data.fetched_at || '';
+            const metaTpl = data.from_cache ? t('waybill_cached_fmt') : t('waybill_refreshed_fmt');
+            const meta = time ? metaTpl.replace('{time}', time) : (data.from_cache ? t('waybill_cached_fmt').replace('{time}', '—') : '');
+            return `
+                <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+                    <div>
+                        <div class="nested-title">${esc(t('waybills_for_pkg').replace('{pkg}', pkg))}</div>
+                        <div style="font-size:12px;color:var(--text-muted,#666);">${esc(meta)}</div>
+                    </div>
+                    <button type="button" class="nav-btn wb-refresh-btn"
+                        data-package-no="${esc(pkg)}"
+                        style="padding:4px 12px;font-size:12px;cursor:pointer;background:#0d6efd;color:#fff;border:none;border-radius:4px;">
+                        ${esc(t('waybill_refresh_btn'))}
+                    </button>
+                </div>
+                ${renderWaybillTable(data.rows || [], { fromCache: !!data.from_cache })}`;
+        }
+
+        async function fetchWaybills(packageNo, refresh) {
             const q = new URLSearchParams({
                 package_no: packageNo,
                 record_date: getRecordDate(),
                 _: String(Date.now()),
             });
+            if (refresh) q.set('refresh', '1');
             const res = await fetch(`/api/gofo/vehicle-arrival/package-waybills?${q}`, { credentials: 'same-origin', cache: 'no-store' });
             const data = await res.json();
             if (!res.ok || !data.success) throw new Error(data.error || t('load_fail'));
             return data;
+        }
+
+        async function loadWaybillPanel(pkg, panel, refresh) {
+            if (!panel) return;
+            if (refresh) {
+                panel.innerHTML = `<div class="loading-box">${esc(t('waybill_refreshing'))}</div>`;
+            }
+            const data = await fetchWaybills(pkg, refresh);
+            if (data.trip_signin) patchTripRowSignin(data.trip_signin);
+            if (data.bag_signin) patchBagRowSignin(data.bag_signin);
+            waybillCache.set(pkg, data);
+            panel.innerHTML = renderWaybillPanelContent(pkg, data);
+            panel.dataset.loaded = '1';
         }
 
         async function toggleBagPanel(btn) {
@@ -897,17 +968,25 @@
             }
             row.classList.remove('hidden');
             btn.setAttribute('aria-expanded', 'true');
-            panel.innerHTML = `<div class="nested-title">${esc(t('waybills_for_pkg').replace('{pkg}', pkg))}</div><div class="loading-box">${esc(t('loading'))}</div>`;
+            panel.innerHTML = `<div class="loading-box">${esc(t('loading'))}</div>`;
             try {
-                const data = await fetchWaybills(pkg);
-                if (data.trip_signin) patchTripRowSignin(data.trip_signin);
-                if (data.bag_signin) patchBagRowSignin(data.bag_signin);
-                waybillCache.set(pkg, data);
-                panel.innerHTML = `<div class="nested-title">${esc(t('waybills_for_pkg').replace('{pkg}', pkg))}</div>`
-                    + renderWaybillTable(data.rows || []);
-                panel.dataset.loaded = '1';
+                await loadWaybillPanel(pkg, panel, false);
             } catch (e) {
                 panel.innerHTML = `<div class="loading-box" style="color:#c62828;">${esc(e.message)}</div>`;
+            }
+        }
+
+        async function refreshWaybillPanel(btn) {
+            const pkg = btn.getAttribute('data-package-no');
+            const panel = btn.closest('.nested-panel');
+            if (!pkg || !panel) return;
+            btn.disabled = true;
+            try {
+                await loadWaybillPanel(pkg, panel, true);
+            } catch (e) {
+                panel.innerHTML = `<div class="loading-box" style="color:#c62828;">${esc(e.message)}</div>`;
+            } finally {
+                btn.disabled = false;
             }
         }
 
@@ -927,6 +1006,12 @@
                 if (wbBtn) {
                     e.preventDefault();
                     toggleWaybillPanel(wbBtn);
+                    return;
+                }
+                const wbRefreshBtn = e.target.closest('.wb-refresh-btn');
+                if (wbRefreshBtn) {
+                    e.preventDefault();
+                    refreshWaybillPanel(wbRefreshBtn);
                 }
             });
         }

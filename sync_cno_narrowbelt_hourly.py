@@ -406,7 +406,13 @@ def sync_la_calendar_day_hours(record_date_str: str) -> Dict[str, Any]:
         else:
             slot_end = natural_end
         try:
-            detail.append(sync_one_la_window(slot, slot_end))
+            r = sync_one_la_window(slot, slot_end)
+            detail.append(r)
+            print(
+                f"[cno_operlog] {record_date_str} {r.get('time_slot')} "
+                f"rows={r.get('raw_rows')} ok",
+                flush=True,
+            )
         except Exception as e:
             errors.append({"slot": slot.isoformat(), "error": str(e)})
             logger.warning("cno_narrowbelt sync hour failed: %s", e)

@@ -444,11 +444,11 @@
                 style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;">
                 <span data-lang="stats_window_label" style="color: var(--text-muted, #666); font-size: 13px;">统计口径</span>
                 <div class="stats-window-seg" role="group" aria-label="stats window mode">
-                    <button type="button" id="statsWindowCalendarBtn" class="segment-btn active"
+                    <button type="button" id="statsWindowCalendarBtn" class="segment-btn"
                         data-lang="stats_window_calendar_short">自然日（0–24h）</button>
                     <button type="button" id="statsWindowBusinessBtn" class="segment-btn"
                         data-lang="stats_window_business_short">5:00–次日5:00</button>
-                    <button type="button" id="statsWindowSeventeenBtn" class="segment-btn"
+                    <button type="button" id="statsWindowSeventeenBtn" class="segment-btn active"
                         data-lang="stats_window_seventeen_short">17:00–次日17:00</button>
                 </div>
             </div>
@@ -778,6 +778,8 @@
             </div>
             <div id="cnoLaborSorterSyncStatus" style="font-size:12px; min-height:18px; margin:0 0 8px 0; line-height:1.45;"></div>
             <div id="cnoLaborSorterDedupHint" style="display:none; margin:0 0 10px 0;"></div>
+            <div id="cnoLaborShiftRangeLabel"
+                style="font-size:13px; color:var(--primary-color,#4361ee); margin:0 0 10px 0; line-height:1.45; font-weight:600;"></div>
             <div class="chart-container" style="min-height: 360px;">
                 <canvas id="cnoLaborSorterHourlyCanvas"></canvas>
             </div>
@@ -1284,7 +1286,9 @@
                 cno_narrowbelt_stats_col_active_h: "有产时段(h)",
                 cno_narrowbelt_stats_col_mean_active: "件/h（有产）",
                 cno_labor_sorter_hourly_chart: "CNO 劳务公司分时产能",
-                cno_labor_sorter_hourly_sub: "数据来源：与上方窄带图相同（Gofo operatelog scan 217，每小时同步）；统计劳务分拣账号扫描件数。GF：Sorter 10/38/39/40 计时，2/4/5 计件；CNO.H：Sorter 06 计时；DJ：「DJ storing 01」计时；其余公司 Sorter 均为计件。计数口径与窄带图右上角一致。",
+                cno_labor_sorter_hourly_sub: "当班次 17:00–次日17:00（LA）；与窄带同源 operatelog scan 217。GF：10/38/39/40 计时，2/4/5 计件；CNO.H：06 计时；DJ storing 01 计时。",
+                labor_shift_range_fmt: "当班次：{range}",
+                labor_shift_fixed_note: "劳务/小组产能固定按当班次统计，不受顶部「自然日」切换影响。",
                 cno_labor_sorter_hourly_title: "劳务公司 Sorter 分时件数（每小时产能）",
                 load_labor_sorter_error: "加载劳务公司分时数据出错:",
                 render_labor_sorter_error: "渲染劳务公司分时图表出错:",
@@ -1326,7 +1330,7 @@
                 cno_labor_sorter_group_total: "合计",
                 cno_labor_sorter_group_empty: "暂无组数数据，请先「手动同步」当前运营日。",
                 cno_labor_group_hourly_heading: "各小组每小时产能",
-                cno_labor_group_hourly_caption: "热力图展示各小组每整点件数；明细表默认收起。可点「同步到飞书」写入元数据表（亦每小时自动同步）。",
+                cno_labor_group_hourly_caption: "当班次 17:00–次日17:00；热力图横轴含日历日。可同步飞书或导出 CSV。",
                 cno_labor_group_hourly_feishu_sync_btn: "同步到飞书",
                 cno_labor_group_hourly_feishu_sync_btn_running: "同步中…",
                 cno_labor_group_hourly_feishu_sync_ok: "已同步至飞书",
@@ -1349,7 +1353,7 @@
                 cno_labor_group_hourly_share_link_ok: "分享链接已复制",
                 cno_labor_group_hourly_share_open: "打开分享页",
                 cno_labor_group_hourly_heatmap_title: "小组 × 小时产能热力图",
-                cno_labor_group_hourly_heatmap_hint: "横轴为运营日内整点，纵轴为各小组；颜色越深表示该小时件数越高（相对当日所有格子中的最大值归一化）。",
+                cno_labor_group_hourly_heatmap_hint: "横轴为当班次各整点（含日期）；纵轴为各小组；颜色越深表示该小时件数越高。",
                 cno_labor_group_hourly_heatmap_scale: "强度",
                 cno_labor_group_hourly_heatmap_low: "低",
                 cno_labor_group_hourly_heatmap_to: "→",
@@ -1596,7 +1600,9 @@
                 cno_narrowbelt_stats_col_active_h: "Active slots (h)",
                 cno_narrowbelt_stats_col_mean_active: "pcs/h (active)",
                 cno_labor_sorter_hourly_chart: "CNO labor company hourly output",
-                cno_labor_sorter_hourly_sub: "Same source as narrow-belt chart (Gofo operatelog scan 217). GF: 10/38/39/40 hourly, 2/4/5 piece; CNO.H: Sorter 06 hourly; DJ: \"DJ storing 01\" hourly; other Sorters piece-only.",
+                cno_labor_sorter_hourly_sub: "Shift window 17:00–next day 17:00 LA; same operatelog scan 217 source as narrow-belt.",
+                labor_shift_range_fmt: "Shift: {range}",
+                labor_shift_fixed_note: "Labor/group hourly stats always use the 17:00 shift window.",
                 cno_labor_sorter_hourly_title: "Labor Sorter hourly output (pcs per hour)",
                 load_labor_sorter_error: "Error loading labor Sorter hourly data:",
                 render_labor_sorter_error: "Error rendering labor Sorter chart:",
@@ -2200,11 +2206,12 @@
         // Current selected date
         let currentDate = null;
 
-        /** calendar = 本地自然日 00:00–次日 00:00；business = 本地 05:00–次日 05:00；seventeen = 本地 17:00–次日 17:00（与 /api/stats 一致） */
+        /** calendar = 自然日；business = 05:00–次日05:00；seventeen = 当班次 17:00–次日17:00 */
+        const LABOR_SHIFT_WINDOW = 'seventeen';
         let statsWindowMode = (function () {
             const s = localStorage.getItem('stats_window');
-            if (s === 'business' || s === 'seventeen') return s;
-            return 'calendar';
+            if (s === 'business' || s === 'seventeen' || s === 'calendar') return s;
+            return 'seventeen';
         })();
 
         function statsWindowStartHour() {
@@ -2251,6 +2258,49 @@
             p.set('stats_window', statsWindowMode);
             const q = p.toString();
             return q ? `${base}?${q}` : base;
+        }
+
+        function withLaborStatsWindowParams(path, extraParams) {
+            const p = new URLSearchParams();
+            let base = path;
+            const qIdx = path.indexOf('?');
+            if (qIdx >= 0) {
+                base = path.slice(0, qIdx);
+                new URLSearchParams(path.slice(qIdx + 1)).forEach((v, k) => p.set(k, v));
+            }
+            if (extraParams && typeof extraParams === 'object') {
+                for (const k of Object.keys(extraParams)) {
+                    const v = extraParams[k];
+                    if (v !== undefined && v !== null && v !== '') p.set(k, v);
+                }
+            }
+            p.set('stats_window', LABOR_SHIFT_WINDOW);
+            const q = p.toString();
+            return q ? `${base}?${q}` : base;
+        }
+
+        function formatLaborShiftRangeLabel(anchorYmd) {
+            if (!anchorYmd || anchorYmd.length < 10) return '';
+            const p = anchorYmd.split('-').map(function (x) { return parseInt(x, 10); });
+            if (p.length < 3 || p.some(function (n) { return Number.isNaN(n); })) return '';
+            const end = new Date(p[0], p[1] - 1, p[2] + 1);
+            const pad = function (n) { return String(n).padStart(2, '0'); };
+            const endStr = end.getFullYear() + '-' + pad(end.getMonth() + 1) + '-' + pad(end.getDate());
+            return anchorYmd + ' 17:00 – ' + endStr + ' 17:00 (LA)';
+        }
+
+        function updateLaborShiftRangeLabel(shiftLabelOrAnchor) {
+            const el = document.getElementById('cnoLaborShiftRangeLabel');
+            if (!el) return;
+            const t = translations[currentLang] || {};
+            let range = '';
+            if (shiftLabelOrAnchor && String(shiftLabelOrAnchor).indexOf('17:00') >= 0) {
+                range = String(shiftLabelOrAnchor);
+            } else {
+                range = formatLaborShiftRangeLabel(shiftLabelOrAnchor || currentDate);
+            }
+            const tpl = t.labor_shift_range_fmt || '当班次：{range}';
+            el.textContent = range ? tpl.replace('{range}', range) : '';
         }
 
         const CNO_NARROWBELT_COUNT_MODE_LS = 'cno_narrowbelt_count_mode';
@@ -2876,6 +2926,7 @@
             const formattedDate = getDefaultStatsAnchorYmd();
             document.getElementById('selectedDate').value = formattedDate;
             currentDate = formattedDate;
+            updateLaborShiftRangeLabel(currentDate);
             const floatingDateEl = document.getElementById('floatingStatsDate');
             if (floatingDateEl) floatingDateEl.value = formattedDate;
             syncStatsWindowToggleUi();
@@ -3918,7 +3969,7 @@
             renderCnoLaborSorterSyncScope(null);
             setCnoLaborSorterSyncStatus('', '');
             const dateStr = getCnoLaborSyncAnchorDateStr();
-            const url = withStatsWindowParams('/api/statistics/cno_labor_sorter_hourly/sync_plan', { date: dateStr });
+            const url = withLaborStatsWindowParams('/api/statistics/cno_labor_sorter_hourly/sync_plan', { date: dateStr });
             fetch(url, { cache: 'no-store', credentials: 'same-origin' })
                 .then(function (r) {
                     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -3974,7 +4025,7 @@
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ date: dateStr, stats_window: statsWindowMode })
+                body: JSON.stringify({ date: dateStr, stats_window: LABOR_SHIFT_WINDOW })
             })
                 .then(function (r) {
                     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -4026,7 +4077,7 @@
                 currentDate ? { date: currentDate } : {},
                 { count_mode: getCnoNarrowbeltCountMode() }
             );
-            const url = withStatsWindowParams('/api/statistics/cno_labor_sorter_hourly/export', qp);
+            const url = withLaborStatsWindowParams('/api/statistics/cno_labor_sorter_hourly/export', qp);
             window.location.href = url;
         }
 
@@ -4035,14 +4086,14 @@
                 currentDate ? { date: currentDate } : {},
                 { count_mode: getCnoNarrowbeltCountMode() }
             );
-            const url = withStatsWindowParams('/api/statistics/cno_labor_group_hourly/export', qp);
+            const url = withLaborStatsWindowParams('/api/statistics/cno_labor_group_hourly/export', qp);
             window.location.href = url;
         }
 
         function buildCnoLaborGroupHourlyShareUrl() {
             const q = new URLSearchParams();
             if (currentDate) q.set('date', currentDate);
-            q.set('stats_window', statsWindowMode || 'seventeen');
+            q.set('stats_window', LABOR_SHIFT_WINDOW);
             q.set('count_mode', getCnoNarrowbeltCountMode() || 'raw');
             return window.location.origin + '/share/cno-labor-group-heatmap?' + q.toString();
         }
@@ -4278,7 +4329,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     date: dateStr,
-                    stats_window: statsWindowMode,
+                    stats_window: LABOR_SHIFT_WINDOW,
                     count_mode: getCnoNarrowbeltCountMode()
                 })
             })
@@ -4333,7 +4384,7 @@
                 end_date: endStr,
                 count_mode: getCnoNarrowbeltCountMode()
             };
-            const url = withStatsWindowParams(
+            const url = withLaborStatsWindowParams(
                 '/api/statistics/cno_labor_sorter_hourly/export_range',
                 qp
             );
@@ -4345,7 +4396,7 @@
                 currentDate ? { date: currentDate } : {},
                 { count_mode: getCnoNarrowbeltCountMode() }
             );
-            const url = withStatsWindowParams('/api/statistics/cno_labor_sorter_hourly', qp);
+            const url = withLaborStatsWindowParams('/api/statistics/cno_labor_sorter_hourly', qp);
             fetch(url, { cache: 'no-store', credentials: 'same-origin' })
                 .then(response => {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -4354,6 +4405,7 @@
                 .then(data => {
                     if (data.error) throw new Error(data.error);
                     if (data.sync_plan) renderCnoLaborSorterSyncScope(data.sync_plan);
+                    updateLaborShiftRangeLabel(data.shift_label || data.operating_day || currentDate);
                     renderCnoLaborSorterHourlyChart(data);
                     if (typeof refreshCnoLaborGroupHourlyFeishuStatus === 'function') {
                         refreshCnoLaborGroupHourlyFeishuStatus();
@@ -5333,11 +5385,15 @@
             _cnoLaborGroupHourlyLastPayload = payload || null;
             const t = translations[currentLang] || {};
             const mx = (payload && payload.group_hourly_matrix) ? payload.group_hourly_matrix : {};
-            const labels = mx.labels || (payload && payload.labels) || [];
+            const slotLabels = mx.labels || (payload && payload.labels) || [];
+            const colLabels = mx.display_labels || slotLabels;
             const rows = mx.rows || [];
+            if (payload && (payload.shift_label || payload.operating_day)) {
+                updateLaborShiftRangeLabel(payload.shift_label || payload.operating_day);
+            }
             const wrap = document.getElementById('cnoLaborGroupHourlyWrap');
             if (wrap) wrap.style.display = 'block';
-            if (!rows.length || !labels.length) {
+            if (!rows.length || !slotLabels.length) {
                 _cnoLaborGroupHourlyHeatmapHasData = false;
                 grid.innerHTML = '<div style="padding:12px;color:#856404;background:#fff8e1;border-radius:6px;line-height:1.5;">'
                     + (t.cno_labor_group_hourly_empty || '暂无小组分时数据') + '</div>';
@@ -5348,7 +5404,7 @@
             let vmax = 0;
             rows.forEach(function (r) {
                 const h = r.hourly || [];
-                for (let i = 0; i < labels.length; i++) {
+                for (let i = 0; i < slotLabels.length; i++) {
                     const n = Number(h[i]) || 0;
                     if (n > vmax) vmax = n;
                 }
@@ -5372,9 +5428,9 @@
             const rowHead = t.cno_labor_group_hourly_heatmap_row_label || '小组';
 
             grid.style.display = 'grid';
-            grid.style.gridTemplateColumns = 'minmax(140px, 1.7fr) repeat(' + labels.length + ', minmax(32px, 1fr))';
+            grid.style.gridTemplateColumns = 'minmax(140px, 1.7fr) repeat(' + slotLabels.length + ', minmax(36px, 1fr))';
             grid.style.gap = '3px';
-            grid.style.fontSize = '11px';
+            grid.style.fontSize = '10px';
             grid.style.alignItems = 'stretch';
 
             const stickyCorner = 'position:sticky;left:0;z-index:3;box-shadow:4px 0 6px -3px rgba(0,0,0,0.06);';
@@ -5383,8 +5439,8 @@
             let html = '';
             html += '<div style="padding:6px 8px;font-weight:600;border-radius:4px;background:var(--table-stripe,#f8f9fa);display:flex;align-items:center;' + stickyCorner + '">'
                 + _cnoStatsEscapeHtml(rowHead) + '</div>';
-            labels.forEach(function (lab) {
-                html += '<div style="padding:6px 2px;text-align:center;font-weight:600;line-height:1.2;border-radius:4px;background:var(--table-stripe,#f8f9fa);">'
+            colLabels.forEach(function (lab) {
+                html += '<div style="padding:6px 2px;text-align:center;font-weight:600;line-height:1.15;border-radius:4px;background:var(--table-stripe,#f8f9fa);white-space:nowrap;">'
                     + _cnoStatsEscapeHtml(lab) + '</div>';
             });
 
@@ -5394,9 +5450,9 @@
                 html += '<div style="padding:6px 8px;display:flex;align-items:center;line-height:1.25;border-radius:4px;background:var(--card-bg,#fff);border:1px solid var(--border-color,#e9ecef);' + stickyRow + '">'
                     + _cnoStatsEscapeHtml(rowLabel) + '</div>';
                 const h = r.hourly || [];
-                for (let hi = 0; hi < labels.length; hi++) {
+                for (let hi = 0; hi < slotLabels.length; hi++) {
                     const n = Number(h[hi]) || 0;
-                    const lab = labels[hi] || '';
+                    const lab = colLabels[hi] || slotLabels[hi] || '';
                     const tip = rowLabel + ' · ' + lab + ': ' + n;
                     html += '<div title="' + _cnoStatsEscapeAttr(tip) + '" style="' + cellStyle(n)
                         + 'display:flex;align-items:center;justify-content:center;border-radius:4px;min-height:30px;font-variant-numeric:tabular-nums;padding:2px;">'
@@ -5412,7 +5468,8 @@
             if (!tbl) return;
             const t = translations[currentLang] || {};
             const mx = (payload && payload.group_hourly_matrix) ? payload.group_hourly_matrix : {};
-            const labels = mx.labels || (payload && payload.labels) || [];
+            const slotLabels = mx.labels || (payload && payload.labels) || [];
+            const colLabels = mx.display_labels || slotLabels;
             const rows = mx.rows || [];
             const payPieceLab = t.cno_labor_sorter_pay_piece || '计件';
             const payHourlyLab = t.cno_labor_sorter_pay_hourly || '计时';
@@ -5421,7 +5478,7 @@
             const thBase = 'text-align:center;padding:6px 8px;font-weight:600;background:var(--table-stripe, #f8f9fa);border-bottom:2px solid var(--border-color,#dee2e6);white-space:nowrap;position:sticky;top:0;z-index:1;';
             const thStickyL = thBase + 'text-align:left;left:0;z-index:2;background:var(--table-stripe,#f8f9fa);';
             const thStickyGroup = thStickyL + 'min-width:140px;max-width:220px;';
-            const thHour = thBase + 'min-width:44px;background:#dbeafe;color:#1e3a5f;';
+            const thHour = thBase + 'min-width:52px;background:#dbeafe;color:#1e3a5f;font-size:11px;';
             const tdL = 'padding:6px 8px;border-top:' + border + ';white-space:nowrap;';
             const tdR = tdL + 'text-align:right;';
             const tdHour = tdR + 'min-width:44px;font-size:12px;';
@@ -5435,7 +5492,7 @@
 
             let html = '<thead><tr>';
             html += '<th style="' + thStickyGroup + '">' + (t.cno_labor_group_hourly_col_team || '小组') + '</th>';
-            labels.forEach(function (lab) {
+            colLabels.forEach(function (lab) {
                 html += '<th style="' + thHour + '" title="' + _cnoStatsEscapeAttr(lab) + '">' + _cnoStatsEscapeHtml(lab) + '</th>';
             });
             html += '<th style="' + thBase + '">' + (t.cno_labor_group_hourly_col_pay || '计薪') + '</th>';
@@ -5450,7 +5507,7 @@
                 (r.hourly || []).forEach(function (v, hi) {
                     const n = Number(v) || 0;
                     const cellBg = n > 0 ? 'background:#e8f4fd;' : '';
-                    const tip = teamLabel + ' · ' + (labels[hi] || '') + ': ' + n;
+                    const tip = teamLabel + ' · ' + (colLabels[hi] || slotLabels[hi] || '') + ': ' + n;
                     html += '<td style="' + tdHour + cellBg + '" title="' + _cnoStatsEscapeAttr(tip) + '">'
                         + (n > 0 ? _fmtNarrowbeltInt(n) : '—') + '</td>';
                 });
@@ -9718,8 +9775,10 @@
                     const synced = data.date || d;
                     const fetched = data.fetched != null ? data.fetched : '?';
                     const stored = data.stored != null ? data.stored : '?';
+                    const storedSplit = data.stored_split != null ? data.stored_split : stored;
                     const okMsg = (t.tms_shuttle_pivot_sync_ok || '短驳已同步') + ' ' + synced
-                        + '（抓取 ' + fetched + ' / 入表 ' + stored + '）';
+                        + '（抓取 ' + fetched + ' / 入表 ' + storedSplit + '）';
+                    if (meta) meta.textContent = okMsg;
                     if (typeof showMessage === 'function') showMessage(okMsg, 'success');
                 } catch (err) {
                     const full = (t.tms_shuttle_pivot_sync_fail || '短驳同步失败：') + (err.message || err);

@@ -11,6 +11,7 @@
   python scripts/sync_gofo_vehicle_arrival.py --date 2026-06-16
   python scripts/sync_gofo_vehicle_arrival.py --force   # 整日删后重拉（慎用）
   python scripts/sync_gofo_vehicle_arrival.py --repair-metrics  # 重算当日签入指标
+  python scripts/sync_gofo_vehicle_arrival.py --reprobe-signin  # 重探签入未齐且超1h未探的车次
 """
 from __future__ import annotations
 
@@ -91,7 +92,9 @@ def repair_signin_metrics(record_date: str) -> Dict[str, Any]:
             bag_data = gva.fetch_load_bag_details(task_no, arrival_id, enrich_tracks=False)
             bag_rows = bag_data.get("rows") or []
             gva.apply_trip_bag_metrics(trip, bag_rows)
-            store.update_trip_signin_metrics(record_date, trip, synced_at=synced_at)
+            store.update_trip_signin_metrics(
+                record_date, trip, synced_at=synced_at, signin_probed_at=synced_at
+            )
             store.update_bags_signin(record_date, int(arrival_id), bag_rows, synced_at=synced_at)
             unsigned = gva.unsigned_cno_bag_serials(bag_rows)
             print(
@@ -246,6 +249,16 @@ def main() -> int:
         action="store_true",
         help="按 actual_arrival_time LA 日历日修正车次/袋牌 record_date 错桶",
     )
+    parser.add_argument(
+        "--reprobe-signin",
+        action="store_true",
+        help="重探签入箱数<装车箱数且距上次探测≥1小时的车次（仅未签入袋牌）",
+    )
+    parser.add_argument(
+        "--reprobe-signin-force",
+        action="store_true",
+        help="忽略1小时间隔，重探当日所有签入未齐车次",
+    )
     args = parser.parse_args()
     record_date = (args.date or store.la_record_date()).strip()
     try:
@@ -257,6 +270,15 @@ def main() -> int:
             )
         elif args.repair_metrics:
             repair_signin_metrics(record_date)
+        elif args.reprobe_signin or args.reprobe_signin_force:
+            stats = store.reprobe_stale_incomplete_signin(
+                record_date, force=args.reprobe_signin_force
+            )
+            print(
+                f"[reprobe-signin] {record_date}: "
+                f"{stats['trips_reprobed']}/{stats['trips_checked']} 车次，"
+                f"耗时 {stats['elapsed']:.1f}s"
+            )
         elif args.repair_dates:
             stats = store.repair_trip_record_dates(record_date if args.date else None)
             print(

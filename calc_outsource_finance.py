@@ -1,9 +1,9 @@
 import os
 import re
 import pytz
+from collections import defaultdict
 from datetime import datetime, timedelta
 
-import pandas as pd
 import requests
 
 try:
@@ -444,6 +444,86 @@ def _sync_gofo_daily_cost(cur, is_pg: bool, d, d_str: str) -> None:
         )
 
 
+def _parse_labor_record_date(date_val) -> str:
+    """飞书日期列 → YYYY-MM-DD（替代 pandas to_datetime format=mixed）。"""
+    s = _norm_sheet_cell(date_val)
+    if not s:
+        return ""
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%m-%d-%y"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{2,4})$", s)
+    if m:
+        mo, da, yr = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if yr < 100:
+            yr += 2000
+        try:
+            return datetime(yr, mo, da).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return ""
+
+
+def _aggregate_labor_records(all_records: list) -> list:
+    """按日期×代理商汇总飞书排班记录，含【当日总计】行。"""
+    agency_agg: dict = defaultdict(
+        lambda: {"Hourly_Cost": 0.0, "Piece_Cost": 0.0, "Total_Cost": 0.0, "Headcount": 0}
+    )
+    daily_agg: dict = defaultdict(
+        lambda: {"Hourly_Cost": 0.0, "Piece_Cost": 0.0, "Total_Cost": 0.0, "Headcount": 0}
+    )
+
+    for rec in all_records:
+        hourly = float(rec["Cost"]) if rec.get("Type") == "Hourly" else 0.0
+        piece = float(rec["Cost"]) if rec.get("Type") == "Piece" else 0.0
+        total = float(rec.get("Cost") or 0.0)
+        headcount = int(rec.get("Headcount") or 0)
+        rdate = _parse_labor_record_date(rec.get("Date"))
+        if not rdate:
+            continue
+        agency = rec.get("Agency") or ""
+        ak = (rdate, agency)
+        agency_agg[ak]["Hourly_Cost"] += hourly
+        agency_agg[ak]["Piece_Cost"] += piece
+        agency_agg[ak]["Total_Cost"] += total
+        agency_agg[ak]["Headcount"] += headcount
+        daily_agg[rdate]["Hourly_Cost"] += hourly
+        daily_agg[rdate]["Piece_Cost"] += piece
+        daily_agg[rdate]["Total_Cost"] += total
+        daily_agg[rdate]["Headcount"] += headcount
+
+    combined = []
+    for (rdate, agency), v in agency_agg.items():
+        combined.append({
+            "Record_Date": rdate,
+            "Agency_Name": agency,
+            "Hourly_Cost_USD": round(v["Hourly_Cost"], 2),
+            "Piece_Cost_USD": round(v["Piece_Cost"], 2),
+            "Total_Cost_USD": round(v["Total_Cost"], 2),
+            "Headcount": int(v["Headcount"]),
+        })
+    for rdate, v in daily_agg.items():
+        combined.append({
+            "Record_Date": rdate,
+            "Agency_Name": "【当日总计】",
+            "Hourly_Cost_USD": round(v["Hourly_Cost"], 2),
+            "Piece_Cost_USD": round(v["Piece_Cost"], 2),
+            "Total_Cost_USD": round(v["Total_Cost"], 2),
+            "Headcount": int(v["Headcount"]),
+        })
+
+    combined.sort(
+        key=lambda x: (
+            x["Record_Date"],
+            0 if x["Agency_Name"] == "【当日总计】" else 1,
+            x["Agency_Name"],
+        )
+    )
+    return combined
+
+
 def _persist_labor_combined(combined) -> dict:
     """将飞书解析结果写入 daily_cost_summary。"""
     conn, is_pg = _open_labor_db()
@@ -455,9 +535,11 @@ def _persist_labor_combined(combined) -> dict:
         dates_to_refresh = set()
         upsert_count = 0
 
-        for _, row in combined.iterrows():
-            rdate = row['Record_Date']
-            agency = row['Agency_Name']
+        for row in combined:
+            if hasattr(row, "to_dict"):
+                row = row.to_dict()
+            rdate = row["Record_Date"]
+            agency = row["Agency_Name"]
             if not rdate:
                 continue
             dates_to_refresh.add(rdate)
@@ -808,56 +890,15 @@ def run_sync(link=None):
         return {"success": False, "error": msg}
 
     print(f"✅ 解析 {workers_parsed} 名员工、{day_records} 条日工时记录")
-        
-    df = pd.DataFrame(all_records)
-    
-    # 拆分展示
-    df['Hourly_Cost'] = df.apply(lambda r: r['Cost'] if r['Type'] == 'Hourly' else 0.0, axis=1)
-    df['Piece_Cost'] = df.apply(lambda r: r['Cost'] if r['Type'] == 'Piece' else 0.0, axis=1)
-    df['Total_Cost'] = df['Cost']
-    # Use format=mixed to handle mixed date formats correctly without warnings if dates are valid
-    df['Date_Obj'] = pd.to_datetime(df['Date'], format='mixed', errors='coerce')
-    
-    # 按公司汇总
-    summary = df.groupby(['Date_Obj', 'Date', 'Agency']).agg(
-        Hourly_Cost=('Hourly_Cost', 'sum'),
-        Piece_Cost=('Piece_Cost', 'sum'),
-        Total_Cost=('Total_Cost', 'sum'),
-        Headcount=('Headcount', 'sum')
-    ).reset_index()
-    
-    # 计算当日总计
-    daily_total = df.groupby(['Date_Obj', 'Date']).agg(
-        Hourly_Cost=('Hourly_Cost', 'sum'),
-        Piece_Cost=('Piece_Cost', 'sum'),
-        Total_Cost=('Total_Cost', 'sum'),
-        Headcount=('Headcount', 'sum')
-    ).reset_index()
-    daily_total['Agency'] = '【当日总计】'
-    
-    # 合并、排序与清理格式
-    combined = pd.concat([summary, daily_total], ignore_index=True)
-    combined['Is_Total'] = combined['Agency'] == '【当日总计】'
-    combined['Date_Obj'] = combined['Date_Obj'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notnull(x) else '')
-    combined = combined.sort_values(['Date_Obj', 'Is_Total', 'Agency']).drop(columns=['Date', 'Is_Total'])
-    
-    for col in ['Hourly_Cost', 'Piece_Cost', 'Total_Cost']:
-        combined[col] = combined[col].round(2)
-    combined['Headcount'] = combined['Headcount'].astype(int)
-        
-    combined.rename(columns={
-        'Date_Obj': 'Record_Date', 
-        'Agency': 'Agency_Name',
-        'Headcount': 'Headcount',
-        'Hourly_Cost': 'Hourly_Cost_USD',
-        'Piece_Cost': 'Piece_Cost_USD',
-        'Total_Cost': 'Total_Cost_USD'
-    }, inplace=True)
-    
-    # Debug combined for 03-01 AAS
-    debug_match = combined[(combined['Record_Date'] == '3/1/26') & (combined['Agency_Name'] == 'AAS')]
-    if not debug_match.empty:
-        print(f"DEBUG COMBINED AAS 03-01: {debug_match.iloc[0].to_dict()}")
+
+    combined = _aggregate_labor_records(all_records)
+
+    debug_match = [
+        r for r in combined
+        if r.get("Record_Date") == "2026-03-01" and r.get("Agency_Name") == "AAS"
+    ]
+    if debug_match:
+        print(f"DEBUG COMBINED AAS 03-01: {debug_match[0]}")
     
     db_kind = 'PostgreSQL' if USE_POSTGRES else 'SQLite'
     print(f"⏳ 正在将核算结果保存至 {db_kind} -> 表: daily_cost_summary")

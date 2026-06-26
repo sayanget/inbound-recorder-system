@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sqlite3
 import sys
 import time
 from datetime import datetime, timedelta, time
@@ -41,15 +40,18 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from database import (  # noqa: E402
+    USE_POSTGRES,
+    convert_placeholders,
+    convert_sql,
+    get_db_connection,
+    get_sqlite_db_path,
+)
 from gofo_config import get_gofo_token  # noqa: E402
 
 URL = "https://dms.gofoexpress.com/prod-api/dbu_tms/api/task/transportTask/pageList"
 TABLE = "gofo_tms_shuttle_completed"
 TABLE_SPLIT = "gofo_tms_shuttle_split"
-DB_PATH = (
-    os.environ.get("DATABASE_PATH")
-    or os.path.join(ROOT, "inbound.db")
-)
 
 CNO_H_ORIGIN_ID = 148
 TASK_STATUS_COMPLETED = "5"
@@ -358,9 +360,19 @@ def _hour_bucket(actual_dep: Optional[str]) -> Optional[str]:
     return None
 
 
-def _ensure_table(cur: sqlite3.Cursor) -> None:
-    cur.execute(
-        f"""
+def _exec(cur, sql: str, params=None) -> None:
+    q, p = convert_placeholders(sql, params)
+    if p is None:
+        cur.execute(q)
+    else:
+        cur.execute(q, p)
+
+
+def _ensure_table(cur) -> None:
+    _exec(
+        cur,
+        convert_sql(
+            f"""
         CREATE TABLE IF NOT EXISTS {TABLE} (
             record_date            TEXT NOT NULL,
             task_no                TEXT NOT NULL,
@@ -401,17 +413,26 @@ def _ensure_table(cur: sqlite3.Cursor) -> None:
             PRIMARY KEY (record_date, task_no)
         )
         """
+        ),
     )
-    cur.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_hour "
-        f"ON {TABLE}(record_date, actual_departure_hour)"
+    _exec(
+        cur,
+        convert_sql(
+            f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_hour "
+            f"ON {TABLE}(record_date, actual_departure_hour)"
+        ),
     )
-    cur.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_origin "
-        f"ON {TABLE}(record_date, place_of_origin)"
+    _exec(
+        cur,
+        convert_sql(
+            f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_origin "
+            f"ON {TABLE}(record_date, place_of_origin)"
+        ),
     )
-    cur.execute(
-        f"""
+    _exec(
+        cur,
+        convert_sql(
+            f"""
         CREATE TABLE IF NOT EXISTS {TABLE_SPLIT} (
             record_date            TEXT NOT NULL,
             task_no                TEXT NOT NULL,
@@ -425,14 +446,21 @@ def _ensure_table(cur: sqlite3.Cursor) -> None:
             PRIMARY KEY (record_date, task_no)
         )
         """
+        ),
     )
-    cur.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_SPLIT}_origin "
-        f"ON {TABLE_SPLIT}(record_date, place_of_origin)"
+    _exec(
+        cur,
+        convert_sql(
+            f"CREATE INDEX IF NOT EXISTS idx_{TABLE_SPLIT}_origin "
+            f"ON {TABLE_SPLIT}(record_date, place_of_origin)"
+        ),
     )
-    cur.execute(
-        f"CREATE INDEX IF NOT EXISTS idx_{TABLE_SPLIT}_dep "
-        f"ON {TABLE_SPLIT}(actual_departure_date, actual_departure_time)"
+    _exec(
+        cur,
+        convert_sql(
+            f"CREATE INDEX IF NOT EXISTS idx_{TABLE_SPLIT}_dep "
+            f"ON {TABLE_SPLIT}(actual_departure_date, actual_departure_time)"
+        ),
     )
 
 
@@ -618,13 +646,13 @@ def sync_day(
     fetched_before_row_filter = len(actual_rows)
     rows = _filter_rows_actual_departure_window(actual_rows, day_str.strip())
 
-    conn = sqlite3.connect(DB_PATH)
     inserted = 0
-    try:
+    split_inserted = 0
+    with get_db_connection() as conn:
         cur = conn.cursor()
         _ensure_table(cur)
-        cur.execute(f"DELETE FROM {TABLE} WHERE record_date = ?", (day_str,))
-        cur.execute(f"DELETE FROM {TABLE_SPLIT} WHERE record_date = ?", (day_str,))
+        _exec(cur, f"DELETE FROM {TABLE} WHERE record_date = ?", (day_str,))
+        _exec(cur, f"DELETE FROM {TABLE_SPLIT} WHERE record_date = ?", (day_str,))
         tuples = []
         split_tuples = []
         for rec in rows:
@@ -634,21 +662,22 @@ def sync_day(
             st = _split_row_tuple(rec, day_str, fetched_at)
             if st is not None:
                 split_tuples.append(st)
+        insert_sql, _ = convert_placeholders(_INSERT_SQL)
+        split_sql, _ = convert_placeholders(_INSERT_SPLIT_SQL)
         if tuples:
-            cur.executemany(_INSERT_SQL, tuples)
+            cur.executemany(insert_sql, tuples)
             inserted = len(tuples)
         if split_tuples:
-            cur.executemany(_INSERT_SPLIT_SQL, split_tuples)
-        conn.commit()
+            cur.executemany(split_sql, split_tuples)
+            split_inserted = len(split_tuples)
 
-        cur.execute(
+        _exec(
+            cur,
             f"SELECT actual_departure_hour, COUNT(*) FROM {TABLE} "
             f"WHERE record_date = ? GROUP BY actual_departure_hour ORDER BY actual_departure_hour",
             (day_str,),
         )
         per_hour = {(r[0] or "未知"): int(r[1]) for r in cur.fetchall()}
-    finally:
-        conn.close()
 
     ds, de = _actual_departure_time_bounds(day_str)
     return {
@@ -663,7 +692,11 @@ def sync_day(
         "actual_departure_window": {"start": ds, "end": de},
         "day_start_hour": _day_start_hour(),
         "per_hour": per_hour,
-        "db_path": DB_PATH,
+        "stored_split": split_inserted,
+        "db_backend": "postgresql" if USE_POSTGRES else "sqlite",
+        "db_path": "(postgresql)" if USE_POSTGRES else (
+            os.environ.get("DATABASE_PATH") or get_sqlite_db_path()
+        ),
         "table": TABLE,
         "table_split": TABLE_SPLIT,
     }

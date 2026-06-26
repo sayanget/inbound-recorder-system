@@ -396,9 +396,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-w",
         "--window",
-        default=os.environ.get("STATS_WINDOW", "calendar"),
+        default=os.environ.get("STATS_WINDOW", "seventeen"),
         choices=("calendar", "business", "seventeen"),
-        help="stats_window，默认 calendar 或环境变量 STATS_WINDOW",
+        help="stats_window，默认 seventeen（当班次 17:00–次日17:00）或环境变量 STATS_WINDOW",
     )
     args = parser.parse_args()
     try:

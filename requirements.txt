@@ -15,7 +15,8 @@ python-dotenv==1.0.0
 requests>=2.31.0,<3
 pycryptodome>=3.20.0,<4
 
-# 与 single_app 同进程加载的 calc_outsource_finance 需要
+# calc_outsource_finance 生产人工同步已不依赖 pandas；以下供其他脚本/可选使用
+numpy>=1.26.0,<3
 pandas>=2.0.0,<3
 
 # --- 以下为生产/连 Postgres 时再装（与 requirements-prod.txt 重复，避免本地强依赖编译）---

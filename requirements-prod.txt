@@ -16,7 +16,8 @@ python-dotenv==1.0.0
 requests>=2.31.0,<3
 pycryptodome>=3.20.0,<4
 
-# calc_outsource_finance 与 single_app 同进程加载，生产必须安装
+# 可选：其他批处理脚本；生产人工同步 (calc_outsource_finance) 已不再依赖 pandas
+numpy>=1.26.0,<3
 pandas>=2.0.0,<3
 
 # PostgreSQL（Neon / RDS 等）

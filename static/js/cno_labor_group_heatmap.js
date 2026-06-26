@@ -60,10 +60,11 @@
         if (!gridEl) return false;
         const t = pickLang(opts && opts.lang);
         const mx = (matrix && matrix.rows) ? matrix : (matrix && matrix.group_hourly_matrix) || matrix || {};
-        const labels = mx.labels || [];
+        const slotLabels = mx.labels || [];
+        const colLabels = mx.display_labels || slotLabels;
         const rows = mx.rows || [];
 
-        if (!rows.length || !labels.length) {
+        if (!rows.length || !slotLabels.length) {
             gridEl.innerHTML =
                 '<div style="padding:12px;color:#856404;background:#fff8e1;border-radius:6px;line-height:1.5;">'
                 + escapeHtml(t.empty) + '</div>';
@@ -74,7 +75,7 @@
         let vmax = 0;
         rows.forEach(function (r) {
             const h = r.hourly || [];
-            for (let i = 0; i < labels.length; i++) {
+            for (let i = 0; i < slotLabels.length; i++) {
                 const n = Number(h[i]) || 0;
                 if (n > vmax) vmax = n;
             }
@@ -99,9 +100,9 @@
 
         gridEl.style.display = 'grid';
         gridEl.style.gridTemplateColumns =
-            'minmax(140px, 1.7fr) repeat(' + labels.length + ', minmax(32px, 1fr))';
+            'minmax(140px, 1.7fr) repeat(' + slotLabels.length + ', minmax(36px, 1fr))';
         gridEl.style.gap = '3px';
-        gridEl.style.fontSize = '11px';
+        gridEl.style.fontSize = '10px';
         gridEl.style.alignItems = 'stretch';
 
         const stickyCorner =
@@ -113,9 +114,9 @@
         html +=
             '<div style="padding:6px 8px;font-weight:600;border-radius:4px;background:var(--table-stripe,#f8f9fa);display:flex;align-items:center;'
             + stickyCorner + '">' + escapeHtml(rowHead) + '</div>';
-        labels.forEach(function (lab) {
+        colLabels.forEach(function (lab) {
             html +=
-                '<div style="padding:6px 2px;text-align:center;font-weight:600;line-height:1.2;border-radius:4px;background:var(--table-stripe,#f8f9fa);">'
+                '<div style="padding:6px 2px;text-align:center;font-weight:600;line-height:1.15;border-radius:4px;background:var(--table-stripe,#f8f9fa);white-space:nowrap;">'
                 + escapeHtml(lab) + '</div>';
         });
 
@@ -127,9 +128,9 @@
                 '<div style="padding:6px 8px;display:flex;align-items:center;line-height:1.25;border-radius:4px;background:var(--card-bg,#fff);border:1px solid var(--border-color,#e9ecef);'
                 + stickyRow + '">' + escapeHtml(rowLabel) + '</div>';
             const h = r.hourly || [];
-            for (let hi = 0; hi < labels.length; hi++) {
+            for (let hi = 0; hi < slotLabels.length; hi++) {
                 const n = Number(h[hi]) || 0;
-                const lab = labels[hi] || '';
+                const lab = colLabels[hi] || slotLabels[hi] || '';
                 const tip = rowLabel + ' · ' + lab + ': ' + n;
                 html +=
                     '<div title="' + escapeAttr(tip) + '" style="' + cellStyle(n)

@@ -418,6 +418,107 @@ def _normalize_waybill_row(rec: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _enrich_waybill_row_from_track_item(
+    item: Dict[str, Any],
+    *,
+    arr_dt: Optional[datetime] = None,
+    elig_dt: Optional[datetime] = None,
+) -> Optional[Dict[str, Any]]:
+    """从轨迹 item 提取最新节点、签入节点及签入至今时长。"""
+    wb = _extract_waybill_no_from_track_item(item)
+    if not wb:
+        return None
+    latest = _newest_track_from_item(item)
+
+    signin_ev: Dict[str, str] = {"es_context": "", "operation_time": ""}
+    signin_dt: Optional[datetime] = None
+    if elig_dt is not None or arr_dt is not None:
+        after = elig_dt if elig_dt is not None else arr_dt
+        time_hit = _find_cno_signin_time_event_in_item(item, after_dt=after)
+        if not time_hit:
+            time_hit = _find_cno_signed_event_in_item(item, after_dt=after)
+        if time_hit:
+            signin_ev, signin_dt = time_hit
+            signin_ev = {
+                "es_context": signin_ev.get("es_context", ""),
+                "operation_time": _fmt_dt(signin_dt),
+            }
+
+    lag_secs: Optional[int] = None
+    lag_str = ""
+    if signin_dt:
+        now_la = datetime.now(LA_TZ)
+        lag_secs = int((now_la - signin_dt).total_seconds())
+        lag_str = _fmt_duration(now_la - signin_dt)
+
+    return {
+        "waybill_no": wb,
+        "es_context": latest.get("es_context", ""),
+        "operation_time": _fmt_dt(latest.get("operation_time", "")),
+        "signin_es_context": signin_ev.get("es_context", ""),
+        "signin_operation_time": signin_ev.get("operation_time", ""),
+        "latest_to_signin_seconds": lag_secs,
+        "latest_to_signin_duration": lag_str,
+    }
+
+
+def _enrich_package_waybill_rows(
+    rows: List[Dict[str, Any]],
+    *,
+    actual_arrival_time: Optional[str] = None,
+) -> None:
+    """袋内运单：最新轨迹节点 + 签入时刻 + 签入至今时长。"""
+    order_nos = [str(r.get("waybill_no") or "").strip() for r in rows if r.get("waybill_no")]
+    if not order_nos:
+        return
+
+    arr_dt = _parse_la_dt(actual_arrival_time) if actual_arrival_time else None
+    elig_dt = _signin_eligibility_after_dt(actual_arrival_time) if actual_arrival_time else None
+    enrich_map: Dict[str, Dict[str, Any]] = {}
+    token = get_gofo_token()
+    for i in range(0, len(order_nos), TRACK_BATCH_SIZE):
+        chunk = order_nos[i : i + TRACK_BATCH_SIZE]
+        items = _fetch_waybill_track_batch(chunk, token=token)
+        for item in items:
+            meta = _enrich_waybill_row_from_track_item(
+                item, arr_dt=arr_dt, elig_dt=elig_dt
+            )
+            if meta:
+                enrich_map[meta["waybill_no"]] = meta
+
+    empty_track = {
+        "es_context": "",
+        "operation_time": "",
+        "signin_es_context": "",
+        "signin_operation_time": "",
+        "latest_to_signin_seconds": None,
+        "latest_to_signin_duration": "",
+    }
+    for row in rows:
+        wb = str(row.get("waybill_no") or "").strip()
+        meta = enrich_map.get(wb) or empty_track
+        row["es_context"] = meta.get("es_context", "")
+        row["operation_time"] = meta.get("operation_time", "")
+        row["signin_es_context"] = meta.get("signin_es_context", "")
+        row["signin_operation_time"] = meta.get("signin_operation_time", "")
+        row["latest_to_signin_seconds"] = meta.get("latest_to_signin_seconds")
+        row["latest_to_signin_duration"] = meta.get("latest_to_signin_duration", "")
+
+
+def recompute_waybill_signin_elapsed(rows: List[Dict[str, Any]]) -> None:
+    """读库展示时按当前时刻重算「签入至今」（不写库）。"""
+    now_la = datetime.now(LA_TZ)
+    for row in rows or []:
+        signin_dt = _parse_operation_time(row.get("signin_operation_time"))
+        if not signin_dt:
+            row["latest_to_signin_seconds"] = None
+            row["latest_to_signin_duration"] = ""
+            continue
+        delta = now_la - signin_dt
+        row["latest_to_signin_seconds"] = int(delta.total_seconds())
+        row["latest_to_signin_duration"] = _fmt_duration(delta)
+
+
 def fetch_package_waybill_details(
     package_no: str,
     *,
@@ -450,23 +551,7 @@ def fetch_package_waybill_details(
         if len(recs) < PACK_WAYBILL_PAGE_SIZE:
             break
 
-    arr_dt = _parse_la_dt(actual_arrival_time) if actual_arrival_time else None
-    if arr_dt and rows:
-        order_nos = [str(r.get("waybill_no") or "").strip() for r in rows if r.get("waybill_no")]
-        signins = fetch_waybill_signin_events_batch(
-            order_nos, after_dt=arr_dt, trip_arrival_dt=arr_dt
-        )
-        for row in rows:
-            wb = str(row.get("waybill_no") or "").strip()
-            ev = signins.get(wb)
-            if ev:
-                row["es_context"] = ev.get("es_context", "")
-                row["operation_time"] = _fmt_dt(ev.get("operation_time", ""))
-            else:
-                row["es_context"] = ""
-                row["operation_time"] = ""
-    else:
-        _attach_tracks_to_rows(rows, key_field="waybill_no")
+    _enrich_package_waybill_rows(rows, actual_arrival_time=actual_arrival_time)
 
     now_la = datetime.now(LA_TZ)
     return {
@@ -475,6 +560,19 @@ def fetch_package_waybill_details(
         "rows": rows,
         "fetched_at": now_la.strftime("%Y-%m-%d %H:%M:%S"),
     }
+
+
+def _la_calendar_day_start(dt: datetime) -> datetime:
+    d = dt.astimezone(LA_TZ)
+    return d.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _signin_eligibility_after_dt(actual_arrival_time: str) -> Optional[datetime]:
+    """签入判定下界：到货 LA 日历日 0 点（当日到车前扫签入仍计已签入）。"""
+    arr_dt = _parse_la_dt(actual_arrival_time)
+    if not arr_dt:
+        return None
+    return _la_calendar_day_start(arr_dt)
 
 
 def _extract_waybill_no_from_track_item(item: Dict[str, Any]) -> str:
@@ -618,6 +716,11 @@ def _resolve_waybill_cno_signin_from_item(
 
     if time_hit:
         time_ev, signin_dt = time_hit
+        if trip_arrival_dt is not None and signin_dt < trip_arrival_dt:
+            return {
+                "es_context": time_ev.get("es_context", signed_ev.get("es_context", "")),
+                "operation_time": "",
+            }
         adj_ev, adj_dt = _coalesce_delayed_cno_signin(
             time_ev, signin_dt, vehicle_hit, trip_arrival_dt
         )
@@ -858,16 +961,101 @@ def apply_trip_bag_metrics(trip: Dict[str, Any], bag_rows: List[Dict[str, Any]])
     trip.update(_signin_summary_from_signin_map(signin_map, len(cno_bags), arrival))
 
 
+def _probe_package_cno_signin(
+    package_no: str,
+    *,
+    arr_dt: Optional[datetime],
+    eligibility_after_dt: Optional[datetime],
+) -> Dict[str, Any]:
+    """分页拉取袋内运单直至找到签入或穷尽（避免仅抽样前几票漏判）。"""
+    package_no = (package_no or "").strip()
+    empty_unsigned = {
+        "cno_signed": 0,
+        "sample_waybill_no": "",
+        "es_context": "",
+        "operation_time": "",
+    }
+    if not package_no:
+        return empty_unsigned
+
+    all_wbs: List[str] = []
+    seen: set = set()
+    pending: List[str] = []
+    signed_pair: Optional[Tuple[str, Dict[str, str]]] = None
+    elig = eligibility_after_dt if eligibility_after_dt is not None else arr_dt
+
+    def _flush_pending() -> bool:
+        nonlocal signed_pair
+        if not pending:
+            return signed_pair is not None
+        signins = fetch_waybill_signin_events_batch(
+            pending, after_dt=elig, trip_arrival_dt=arr_dt
+        )
+        for wb in pending:
+            if wb in signins:
+                signed_pair = (wb, signins[wb])
+                return True
+        pending.clear()
+        return False
+
+    for page in range(1, MAX_POPOVER_PAGES + 1):
+        recs, total = _fetch_center_pack_page(package_no, page, PACK_WAYBILL_PAGE_SIZE)
+        if not recs:
+            break
+        for rec in recs:
+            if not isinstance(rec, dict):
+                continue
+            wb = str(rec.get("waybillNo") or "").strip()
+            if not wb or wb in seen:
+                continue
+            seen.add(wb)
+            all_wbs.append(wb)
+            pending.append(wb)
+            if len(pending) >= TRACK_BATCH_SIZE:
+                if _flush_pending():
+                    break
+        if signed_pair:
+            break
+        if len(recs) < PACK_WAYBILL_PAGE_SIZE:
+            break
+        if total and len(all_wbs) >= total:
+            break
+
+    if not signed_pair:
+        _flush_pending()
+
+    if not all_wbs:
+        return {
+            "cno_signed": 1,
+            "sample_waybill_no": "",
+            "es_context": CNO_REPACKED_EMPTY_NOTE,
+            "operation_time": "",
+        }
+    if signed_pair:
+        wb, ev = signed_pair
+        return {
+            "cno_signed": 1,
+            "sample_waybill_no": wb,
+            "es_context": ev.get("es_context", ""),
+            "operation_time": ev.get("operation_time", ""),
+        }
+    return {
+        **empty_unsigned,
+        "sample_waybill_no": all_wbs[0],
+    }
+
+
 def _compute_cno_bag_signin_map(
     cno_bags: List[Dict[str, Any]],
     actual_arrival_time: str,
 ) -> Dict[str, Dict[str, Any]]:
-    """每袋 CNO.H 箱：是否抵达后有签入，及样本运单/轨迹。"""
+    """每袋 CNO.H 箱：当日签入或抵达后签入计已签入；卸车时刻仍仅用到货后签入。"""
     out: Dict[str, Dict[str, Any]] = {}
     if not cno_bags:
         return out
 
     arr_dt = _parse_la_dt(actual_arrival_time)
+    elig_dt = _signin_eligibility_after_dt(actual_arrival_time)
     serials = [
         str(b.get("serial_number") or "").strip()
         for b in cno_bags
@@ -876,45 +1064,25 @@ def _compute_cno_bag_signin_map(
     if not serials:
         return out
 
-    pkg_to_wbs = _first_page_waybills_for_packages(
-        serials,
-        per_package=max(1, SIGNIN_WAYBILL_SAMPLE),
-    )
-    all_wbs = [wb for wbs in pkg_to_wbs.values() for wb in wbs]
-    signins = (
-        fetch_waybill_signin_events_batch(all_wbs, after_dt=arr_dt, trip_arrival_dt=arr_dt)
-        if all_wbs
-        else {}
-    )
+    workers = min(8, len(serials))
+
+    def _one(pkg: str) -> Tuple[str, Dict[str, Any]]:
+        return pkg, _probe_package_cno_signin(
+            pkg, arr_dt=arr_dt, eligibility_after_dt=elig_dt
+        )
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(_one, pkg): pkg for pkg in serials}
+        for fut in as_completed(futs):
+            pkg, info = fut.result()
+            out[pkg] = info
 
     for bag in cno_bags:
         pkg = str(bag.get("serial_number") or "").strip()
-        if not pkg:
-            continue
-        wbs = pkg_to_wbs.get(pkg) or []
-        # 袋内已无运单：通常已签入并重新集包，不计为未签入
-        if not wbs:
-            out[pkg] = {
-                "cno_signed": 1,
-                "sample_waybill_no": "",
-                "es_context": CNO_REPACKED_EMPTY_NOTE,
-                "operation_time": "",
-            }
-            continue
-        hit = _earliest_signin_among_waybills(wbs, signins)
-        signed = bool(not wbs or any(wb in signins for wb in wbs))
-        if signed:
-            wb, ev, dt = hit if hit else ("", {}, None)
-            out[pkg] = {
-                "cno_signed": 1,
-                "sample_waybill_no": wb or (wbs[0] if wbs else ""),
-                "es_context": (ev.get("es_context", "") if ev else ""),
-                "operation_time": _fmt_dt(dt) if dt else "",
-            }
-        else:
+        if pkg and pkg not in out:
             out[pkg] = {
                 "cno_signed": 0,
-                "sample_waybill_no": wbs[0] if wbs else "",
+                "sample_waybill_no": "",
                 "es_context": "",
                 "operation_time": "",
             }
