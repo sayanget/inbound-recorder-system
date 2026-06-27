@@ -3896,6 +3896,191 @@ def _build_cno_labor_group_hourly_matrix(
     return result
 
 
+def _parse_labor_group_export_keys(raw):
+    """解析导出小组筛选：逗号分隔 company|group_no。"""
+    if not raw:
+        return None
+    keys = set()
+    for part in str(raw).split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '|' in part:
+            keys.add(part)
+        elif ':' in part:
+            c, g = part.split(':', 1)
+            keys.add(f'{c.strip()}|{g.strip()}')
+    return keys if keys else None
+
+
+def _parse_labor_export_datetime(raw):
+    """解析导出时间范围（LA 本地时钟，YYYY-MM-DD HH:MM 或 ISO T 分隔）。"""
+    raw = (raw or '').strip()
+    if not raw:
+        return None
+    raw = raw.replace('T', ' ')[:19]
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d %H'):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _labor_anchor_dates_overlapping_range(dt_from, dt_to, window_mode='labor'):
+    """与 [dt_from, dt_to] 有交集的运营锚点日列表。"""
+    if not dt_from and not dt_to:
+        return None
+    rf = dt_from or dt_to
+    rt = dt_to or dt_from
+    start = rf.date() - timedelta(days=1)
+    end = rt.date() + timedelta(days=1)
+    anchors = []
+    d = start
+    while d <= end:
+        ps, pe = _stats_period_bounds(d, window_mode)
+        if ps <= rt and pe >= rf:
+            anchors.append(d)
+        d += timedelta(days=1)
+    return anchors
+
+
+def _labor_matrix_slot_mask(
+    anchor_date, window_mode, labels, dt_from=None, dt_to=None,
+    hour_from=None, hour_to=None,
+):
+    next_d = anchor_date + timedelta(days=1)
+    if dt_from or dt_to:
+        mask = []
+        for slot in labels:
+            cal = _slot_calendar_date_for_window(anchor_date, next_d, slot, window_mode)
+            try:
+                h = int(str(slot)[:2])
+            except ValueError:
+                h = 0
+            slot_dt = datetime.combine(
+                cal, datetime.min.time().replace(hour=h)
+            )
+            ok = True
+            if dt_from and slot_dt < dt_from:
+                ok = False
+            if dt_to and slot_dt > dt_to:
+                ok = False
+            mask.append(ok)
+        return mask
+    si, ei = _labor_slot_index_range(labels, hour_from, hour_to)
+    return [si <= i <= ei for i in range(len(labels))]
+
+
+def _labor_slot_index_range(labels, hour_from=None, hour_to=None):
+    if not labels:
+        return 0, -1
+    start = 0
+    end = len(labels) - 1
+    if hour_from:
+        hf = _norm_labor_time_slot(hour_from)
+        if hf in labels:
+            start = labels.index(hf)
+    if hour_to:
+        ht = _norm_labor_time_slot(hour_to)
+        if ht in labels:
+            end = labels.index(ht)
+    if start > end:
+        start, end = end, start
+    return start, end
+
+
+def _filter_labor_group_hourly_matrix(
+    matrix,
+    dt_from=None,
+    dt_to=None,
+    group_keys=None,
+    hour_from=None,
+    hour_to=None,
+):
+    """按时间范围与小组筛选矩阵（用于自定义导出）。"""
+    labels = list(matrix.get('labels') or [])
+    display_labels = list(matrix.get('display_labels') or labels)
+    if len(display_labels) != len(labels):
+        display_labels = labels[:]
+    wm = matrix.get('stats_window') or 'labor'
+    try:
+        anchor_date = datetime.strptime(
+            str(matrix.get('date') or '')[:10], '%Y-%m-%d'
+        ).date()
+    except ValueError:
+        anchor_date = datetime.now().date()
+    mask = _labor_matrix_slot_mask(
+        anchor_date, wm, labels, dt_from, dt_to, hour_from, hour_to
+    )
+    flabels = [labels[i] for i in range(len(labels)) if mask[i]]
+    fdisplay = [display_labels[i] for i in range(len(labels)) if mask[i]]
+
+    filtered_rows = []
+    for row in matrix.get('rows') or []:
+        company = str(row.get('company') or '').strip()
+        group_no = str(row.get('group_no') or '').strip()
+        key = f'{company}|{group_no}'
+        if group_keys is not None and key not in group_keys:
+            continue
+        hourly = row.get('hourly') or []
+        fh = [
+            int(hourly[i]) if i < len(hourly) else 0
+            for i in range(len(labels))
+            if mask[i]
+        ]
+        ft = int(sum(fh))
+        if group_keys is None and ft <= 0:
+            continue
+        if group_keys is not None or ft > 0:
+            filtered_rows.append({
+                'company': company,
+                'group_no': group_no,
+                'pay_type': row.get('pay_type'),
+                'hourly': fh,
+                'total': ft,
+            })
+
+    out = dict(matrix)
+    out['labels'] = flabels
+    out['display_labels'] = fdisplay
+    out['rows'] = filtered_rows
+    if dt_from:
+        out['filter_range_from'] = dt_from.strftime('%Y-%m-%d %H:%M')
+    if dt_to:
+        out['filter_range_to'] = dt_to.strftime('%Y-%m-%d %H:%M')
+    if hour_from:
+        out['filter_hour_from'] = _norm_labor_time_slot(hour_from) or hour_from
+    if hour_to:
+        out['filter_hour_to'] = _norm_labor_time_slot(hour_to) or hour_to
+    if group_keys is not None:
+        out['filter_groups'] = sorted(group_keys)
+    return out
+
+
+def _write_labor_group_export_filter_metadata(
+    w,
+    range_from=None,
+    range_to=None,
+    hour_from=None,
+    hour_to=None,
+    group_keys=None,
+    start_date=None,
+    end_date=None,
+):
+    if range_from or range_to:
+        w.writerow(['# filter_range_from', range_from or ''])
+        w.writerow(['# filter_range_to', range_to or ''])
+    elif hour_from or hour_to:
+        w.writerow(['# filter_hour_from', hour_from or ''])
+        w.writerow(['# filter_hour_to', hour_to or ''])
+    if group_keys:
+        w.writerow(['# filter_groups', ','.join(sorted(group_keys))])
+    if start_date or end_date:
+        w.writerow(['# export_date_start', start_date or ''])
+        w.writerow(['# export_date_end', end_date or ''])
+
+
 @app.route('/api/statistics/cno_labor_sorter_hourly', methods=['GET'])
 def api_statistics_cno_labor_sorter_hourly():
     """CNO 劳务公司 Sorter 分时产能（GF 计时/计件）；固定劳务班 14:00–次日16:00。"""
@@ -4524,36 +4709,122 @@ def api_statistics_cno_labor_group_hourly():
 
 @app.route('/api/statistics/cno_labor_group_hourly/export', methods=['GET'])
 def api_statistics_cno_labor_group_hourly_export():
-    """仅导出各小组每小时产能矩阵 CSV（14:00–次日16:00）。"""
+    """导出各小组每小时产能矩阵 CSV；支持 range_from/range_to、groups 筛选。"""
     if 'user_id' not in session:
         return jsonify({'error': '未登录'}), 401
     if not check_page_permission('statistics'):
         return jsonify({'error': '无权限'}), 403
-    raw = request.args.get('date')
     wm = _parse_labor_stats_window_param(request.args.get('stats_window'))
-    if raw:
-        try:
-            anchor = datetime.strptime(str(raw)[:10], '%Y-%m-%d').date()
-        except ValueError:
-            anchor = _default_stats_request_date(wm)
-    else:
-        anchor = _default_stats_request_date(wm)
     cm = _parse_cno_narrowbelt_count_mode(request.args.get('count_mode'))
+    group_keys = _parse_labor_group_export_keys(request.args.get('groups'))
+
+    range_from_raw = (
+        request.args.get('range_from')
+        or request.args.get('datetime_from')
+        or ''
+    ).strip()
+    range_to_raw = (
+        request.args.get('range_to')
+        or request.args.get('datetime_to')
+        or ''
+    ).strip()
+    dt_from = _parse_labor_export_datetime(range_from_raw)
+    dt_to = _parse_labor_export_datetime(range_to_raw)
+
+    hour_from = (request.args.get('hour_from') or request.args.get('slot_from') or '').strip()
+    hour_to = (request.args.get('hour_to') or request.args.get('slot_to') or '').strip()
+    start_raw = (request.args.get('start_date') or '').strip()[:10]
+    end_raw = (request.args.get('end_date') or '').strip()[:10]
+    raw = (request.args.get('date') or '').strip()[:10]
+
+    if dt_from and dt_to and dt_to < dt_from:
+        return jsonify({'success': False, 'error': '结束时间不能早于开始时间'}), 400
+    if dt_from and dt_to and (dt_to - dt_from).days > 62:
+        return jsonify({'success': False, 'error': '时间区间最多 62 天'}), 400
+
+    if dt_from or dt_to:
+        date_list = _labor_anchor_dates_overlapping_range(dt_from, dt_to, wm) or []
+        if not date_list:
+            return jsonify({'success': False, 'error': '时间范围内无匹配运营日'}), 400
+    elif start_raw and end_raw:
+        try:
+            start_d = datetime.strptime(start_raw, '%Y-%m-%d').date()
+            end_d = datetime.strptime(end_raw, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'success': False, 'error': '日期格式应为 YYYY-MM-DD'}), 400
+        if end_d < start_d:
+            return jsonify({'success': False, 'error': '结束日期不能早于开始日期'}), 400
+        if (end_d - start_d).days > 62:
+            return jsonify({'success': False, 'error': '区间最多 62 天'}), 400
+        date_list = []
+        cur = start_d
+        while cur <= end_d:
+            date_list.append(cur)
+            cur += timedelta(days=1)
+    else:
+        if raw:
+            try:
+                anchor = datetime.strptime(raw, '%Y-%m-%d').date()
+            except ValueError:
+                anchor = _default_stats_request_date(wm)
+        else:
+            anchor = _default_stats_request_date(wm)
+        date_list = [anchor]
+
+    range_from_meta = dt_from.strftime('%Y-%m-%d %H:%M') if dt_from else None
+    range_to_meta = dt_to.strftime('%Y-%m-%d %H:%M') if dt_to else None
+
     try:
-        matrix = _build_cno_labor_group_hourly_matrix(anchor, wm, cm)
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        _write_labor_shift_csv_metadata(w, date_list[0], wm, cm)
+        _write_labor_group_export_filter_metadata(
+            w,
+            range_from=range_from_meta,
+            range_to=range_to_meta,
+            hour_from=hour_from or None,
+            hour_to=hour_to or None,
+            group_keys=group_keys,
+            start_date=start_raw or None,
+            end_date=end_raw or None,
+        )
+        w.writerow([])
+        w.writerow(['# section', 'group_hourly_matrix'])
+        first_header = True
+        any_row = False
+        for d in date_list:
+            matrix = _build_cno_labor_group_hourly_matrix(d, wm, cm)
+            matrix = _filter_labor_group_hourly_matrix(
+                matrix,
+                dt_from=dt_from,
+                dt_to=dt_to,
+                group_keys=group_keys,
+                hour_from=hour_from or None,
+                hour_to=hour_to or None,
+            )
+            if matrix.get('rows'):
+                any_row = True
+            _append_cno_labor_group_hourly_matrix_csv(
+                w, matrix, write_header=first_header
+            )
+            first_header = False
+        if not any_row:
+            return jsonify({'success': False, 'error': '筛选条件下无数据可导出'}), 400
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    _write_labor_shift_csv_metadata(w, anchor, wm, cm)
-    w.writerow([])
-    w.writerow(['# section', 'group_hourly_matrix'])
-    _append_cno_labor_group_hourly_matrix_csv(w, matrix, write_header=True)
-    fn = (
-        f"cno_labor_group_hourly_{matrix.get('date', anchor.strftime('%Y-%m-%d'))}_"
-        f"{_labor_csv_window_tag(wm)}_{cm}.csv"
-    )
+    tag = _labor_csv_window_tag(wm)
+    if len(date_list) > 1:
+        fn = (
+            f"cno_labor_group_hourly_{date_list[0].strftime('%Y-%m-%d')}_"
+            f"{date_list[-1].strftime('%Y-%m-%d')}_{tag}_{cm}.csv"
+        )
+    else:
+        fn = (
+            f"cno_labor_group_hourly_{date_list[0].strftime('%Y-%m-%d')}_{tag}_{cm}.csv"
+        )
+    if dt_from or dt_to or hour_from or hour_to or group_keys:
+        fn = fn.replace('.csv', '_custom.csv')
     return Response(
         buf.getvalue().encode('utf-8-sig'),
         mimetype='text/csv; charset=utf-8',

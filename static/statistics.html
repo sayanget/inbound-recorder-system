@@ -822,6 +822,45 @@
                     </div>
                 </div>
                 <div id="cnoLaborGroupHourlyFeishuSyncStatus" style="font-size:12px; min-height:18px; margin:0 0 8px 0; line-height:1.45; color:var(--text-muted,#666);"></div>
+                <div id="cnoLaborGroupHourlyCustomExportBar"
+                    style="display:none; margin:0 0 12px 0; padding:10px 12px; background:var(--table-stripe,#f8f9fa); border:1px solid var(--border-color,#e9ecef); border-radius:6px; font-size:13px;">
+                    <div style="font-weight:600; margin-bottom:8px; color:var(--text-color,#333);"
+                        data-lang="cno_labor_group_hourly_custom_export_title">自定义导出</div>
+                    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin-bottom:8px;">
+                        <span data-lang="cno_labor_group_hourly_custom_export_range" style="color:var(--text-muted,#666);">时间范围（LA）</span>
+                        <label style="display:inline-flex; align-items:center; gap:4px;">
+                            <span data-lang="cno_labor_group_hourly_custom_export_from">从</span>
+                            <input type="datetime-local" id="cnoLaborGroupExportRangeFrom" step="3600"
+                                style="padding:4px 8px; font-size:13px; min-width:180px;" />
+                        </label>
+                        <label style="display:inline-flex; align-items:center; gap:4px;">
+                            <span data-lang="cno_labor_group_hourly_custom_export_to">到</span>
+                            <input type="datetime-local" id="cnoLaborGroupExportRangeTo" step="3600"
+                                style="padding:4px 8px; font-size:13px; min-width:180px;" />
+                        </label>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:6px;">
+                            <span data-lang="cno_labor_group_hourly_custom_export_groups" style="color:var(--text-muted,#666);">小组</span>
+                            <button type="button" id="cnoLaborGroupExportSelectAllBtn" class="nav-btn"
+                                style="padding:3px 10px; font-size:12px; cursor:pointer; background:#fff; color:#333; border:1px solid #ced4da; border-radius:4px;"
+                                data-lang="cno_labor_group_hourly_custom_export_select_all">全选</button>
+                            <button type="button" id="cnoLaborGroupExportClearAllBtn" class="nav-btn"
+                                style="padding:3px 10px; font-size:12px; cursor:pointer; background:#fff; color:#333; border:1px solid #ced4da; border-radius:4px;"
+                                data-lang="cno_labor_group_hourly_custom_export_clear_all">清空</button>
+                        </div>
+                        <div id="cnoLaborGroupExportGroupsPanel"
+                            style="display:flex; flex-wrap:wrap; gap:6px 12px; max-height:160px; overflow-y:auto; padding:8px; background:var(--card-bg,#fff); border:1px solid var(--border-color,#dee2e6); border-radius:4px;"></div>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+                        <button type="button" id="cnoLaborGroupHourlyCustomExportBtn" class="nav-btn"
+                            style="padding:6px 14px; font-size:13px; cursor:pointer; background:#198754; color:#fff; border:none; border-radius:4px;">
+                            <span data-lang="cno_labor_group_hourly_custom_export_btn">导出自定义 CSV</span>
+                        </button>
+                        <span data-lang="cno_labor_group_hourly_custom_export_hint"
+                            style="font-size:11px; color:var(--text-muted,#888); line-height:1.4;">选择起止日期时间（洛杉矶）；跨日时自动包含相应运营日，最多 62 天。不选小组则导出全部。</span>
+                    </div>
+                </div>
                 <div id="cnoLaborGroupHourlyHeatmapSection" style="margin-bottom: 14px;">
                     <div id="cnoLaborGroupHourlyHeatmapExportStamp"
                         style="display:none; font-size:11px; color:var(--text-muted,#666); margin-bottom:6px; line-height:1.4;"></div>
@@ -1346,6 +1385,17 @@
                 cno_labor_group_hourly_col_total: "日合计",
                 cno_labor_group_hourly_empty: "当前运营日暂无小组分时数据。若上方公司折线图有数据仍为空，请点「手动同步」；部署后请 Ctrl+F5 强刷页面。",
                 cno_labor_group_hourly_export_csv: "导出小组分时 CSV",
+                cno_labor_group_hourly_custom_export_title: "自定义导出",
+                cno_labor_group_hourly_custom_export_range: "时间范围（LA）",
+                cno_labor_group_hourly_custom_export_from: "从",
+                cno_labor_group_hourly_custom_export_to: "到",
+                cno_labor_group_hourly_custom_export_groups: "小组",
+                cno_labor_group_hourly_custom_export_select_all: "全选",
+                cno_labor_group_hourly_custom_export_clear_all: "清空",
+                cno_labor_group_hourly_custom_export_btn: "导出自定义 CSV",
+                cno_labor_group_hourly_custom_export_hint: "选择起止日期时间（洛杉矶）；跨日自动包含相应运营日，最多 62 天。不选小组则导出全部。",
+                cno_labor_group_hourly_custom_export_no_group: "请至少选择一个小组，或点「全选」。",
+                cno_labor_group_hourly_custom_export_bad_range: "结束时间不能早于开始时间。",
                 cno_labor_group_hourly_heatmap_export_png: "导出热力图截图",
                 cno_labor_group_hourly_heatmap_export_png_running: "生成截图中…",
                 cno_labor_group_hourly_heatmap_export_empty: "暂无热力图数据，请先加载统计页小组分时数据。",
@@ -1660,6 +1710,17 @@
                 cno_labor_group_hourly_col_total: "Day total",
                 cno_labor_group_hourly_empty: "No per-group hourly data. Run Sync for this operating day.",
                 cno_labor_group_hourly_export_csv: "Export group hourly CSV",
+                cno_labor_group_hourly_custom_export_title: "Custom export",
+                cno_labor_group_hourly_custom_export_range: "Time range (LA)",
+                cno_labor_group_hourly_custom_export_from: "From",
+                cno_labor_group_hourly_custom_export_to: "To",
+                cno_labor_group_hourly_custom_export_groups: "Groups",
+                cno_labor_group_hourly_custom_export_select_all: "Select all",
+                cno_labor_group_hourly_custom_export_clear_all: "Clear",
+                cno_labor_group_hourly_custom_export_btn: "Export custom CSV",
+                cno_labor_group_hourly_custom_export_hint: "Pick start/end date-time (Los Angeles). Cross-midnight spans operating days; max 62 days.",
+                cno_labor_group_hourly_custom_export_no_group: "Select at least one group, or use Select all.",
+                cno_labor_group_hourly_custom_export_bad_range: "End time must not be before start time.",
                 cno_labor_group_hourly_heatmap_export_png: "Export heatmap PNG",
                 cno_labor_group_hourly_heatmap_export_png_running: "Capturing…",
                 cno_labor_group_hourly_heatmap_export_empty: "No heatmap data. Load group hourly stats first.",
@@ -3098,6 +3159,22 @@
             if (cnoLaborGroupHourlyCsvExp) {
                 cnoLaborGroupHourlyCsvExp.addEventListener('click', exportCnoLaborGroupHourlyCsv);
             }
+            const cnoLaborGroupCustomExp = document.getElementById('cnoLaborGroupHourlyCustomExportBtn');
+            if (cnoLaborGroupCustomExp) {
+                cnoLaborGroupCustomExp.addEventListener('click', exportCnoLaborGroupHourlyCustomCsv);
+            }
+            const cnoLaborGroupSelAll = document.getElementById('cnoLaborGroupExportSelectAllBtn');
+            if (cnoLaborGroupSelAll) {
+                cnoLaborGroupSelAll.addEventListener('click', function () {
+                    setCnoLaborGroupExportGroupChecks(true);
+                });
+            }
+            const cnoLaborGroupClrAll = document.getElementById('cnoLaborGroupExportClearAllBtn');
+            if (cnoLaborGroupClrAll) {
+                cnoLaborGroupClrAll.addEventListener('click', function () {
+                    setCnoLaborGroupExportGroupChecks(false);
+                });
+            }
             const cnoLaborGroupHourlyHeatmapExp = document.getElementById('cnoLaborGroupHourlyHeatmapExportBtn');
             if (cnoLaborGroupHourlyHeatmapExp) {
                 cnoLaborGroupHourlyHeatmapExp.addEventListener('click', exportCnoLaborGroupHourlyHeatmapPng);
@@ -4087,6 +4164,124 @@
                 currentDate ? { date: currentDate } : {},
                 { count_mode: getCnoNarrowbeltCountMode() }
             );
+            const url = withLaborStatsWindowParams('/api/statistics/cno_labor_group_hourly/export', qp);
+            window.location.href = url;
+        }
+
+        function _cnoLaborGroupExportGroupKey(row) {
+            return String(row.company || '').trim() + '|' + String(row.group_no || '').trim();
+        }
+
+        function setCnoLaborGroupExportGroupChecks(checked) {
+            const panel = document.getElementById('cnoLaborGroupExportGroupsPanel');
+            if (!panel) return;
+            panel.querySelectorAll('input[type="checkbox"][data-group-key]').forEach(function (cb) {
+                cb.checked = !!checked;
+            });
+        }
+
+        function _laShiftToDatetimeLocalValue(laStr) {
+            if (!laStr) return '';
+            const m = String(laStr).trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})/);
+            if (!m) return '';
+            return m[1] + 'T' + m[2] + ':' + m[3];
+        }
+
+        function _displaySlotToDatetimeLocalValue(disp, anchorYmd) {
+            const m = String(disp || '').trim().match(/^(\d{1,2})\/(\d{1,2})\s+(\d{2}):(\d{2})$/);
+            if (!m) return '';
+            const y = String(anchorYmd || '').slice(0, 4);
+            if (!/^\d{4}$/.test(y)) return '';
+            const pad = function (n) { return String(n).padStart(2, '0'); };
+            return y + '-' + pad(parseInt(m[1], 10)) + '-' + pad(parseInt(m[2], 10))
+                + 'T' + m[3] + ':' + m[4];
+        }
+
+        function syncCnoLaborGroupExportFilters(payload) {
+            const bar = document.getElementById('cnoLaborGroupHourlyCustomExportBar');
+            const rangeFrom = document.getElementById('cnoLaborGroupExportRangeFrom');
+            const rangeTo = document.getElementById('cnoLaborGroupExportRangeTo');
+            const panel = document.getElementById('cnoLaborGroupExportGroupsPanel');
+            const t = translations[currentLang] || {};
+            const mx = (payload && payload.group_hourly_matrix) ? payload.group_hourly_matrix : {};
+            const rows = mx.rows || [];
+            const labels = mx.labels || [];
+
+            if (!bar || !rangeFrom || !rangeTo || !panel) return;
+            if (!rows.length || !labels.length) {
+                bar.style.display = 'none';
+                panel.innerHTML = '';
+                return;
+            }
+            bar.style.display = 'block';
+
+            const anchor = payload.date || payload.operating_day || mx.date || currentDate || '';
+            const displayLabels = mx.display_labels || mx.labels || [];
+            const defaultFrom = _displaySlotToDatetimeLocalValue(displayLabels[0], anchor)
+                || _laShiftToDatetimeLocalValue(payload.shift_start_la || mx.shift_start_la);
+            const defaultTo = _displaySlotToDatetimeLocalValue(
+                displayLabels[displayLabels.length - 1], anchor
+            ) || _laShiftToDatetimeLocalValue(payload.shift_end_la || mx.shift_end_la);
+            if (defaultFrom) rangeFrom.value = defaultFrom;
+            if (defaultTo) rangeTo.value = defaultTo;
+
+            const prevChecked = {};
+            panel.querySelectorAll('input[data-group-key]').forEach(function (cb) {
+                if (cb.checked) prevChecked[cb.getAttribute('data-group-key')] = true;
+            });
+            const hadPrev = Object.keys(prevChecked).length > 0;
+            const payPiece = t.cno_labor_sorter_pay_piece || '计件';
+            const payHourly = t.cno_labor_sorter_pay_hourly || '计时';
+            panel.innerHTML = '';
+            rows.forEach(function (r) {
+                const key = _cnoLaborGroupExportGroupKey(r);
+                if (!key || key === '|') return;
+                const payLab = r.pay_type === 'hourly' ? payHourly : payPiece;
+                const label = (r.company || '') + ' · ' + (r.group_no || '') + ' (' + payLab + ')';
+                const wrap = document.createElement('label');
+                wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;white-space:nowrap;';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.setAttribute('data-group-key', key);
+                cb.checked = hadPrev ? !!prevChecked[key] : true;
+                wrap.appendChild(cb);
+                wrap.appendChild(document.createTextNode(label));
+                panel.appendChild(wrap);
+            });
+        }
+
+        function exportCnoLaborGroupHourlyCustomCsv() {
+            const t = translations[currentLang] || {};
+            const rangeFrom = document.getElementById('cnoLaborGroupExportRangeFrom');
+            const rangeTo = document.getElementById('cnoLaborGroupExportRangeTo');
+            const panel = document.getElementById('cnoLaborGroupExportGroupsPanel');
+
+            const rf = rangeFrom ? rangeFrom.value : '';
+            const rt = rangeTo ? rangeTo.value : '';
+            if (rf && rt && rf > rt) {
+                alert(t.cno_labor_group_hourly_custom_export_bad_range || '结束时间不能早于开始时间。');
+                return;
+            }
+
+            const checked = [];
+            if (panel) {
+                panel.querySelectorAll('input[data-group-key]:checked').forEach(function (cb) {
+                    checked.push(cb.getAttribute('data-group-key'));
+                });
+            }
+            const totalBoxes = panel ? panel.querySelectorAll('input[data-group-key]').length : 0;
+            if (totalBoxes > 0 && checked.length === 0) {
+                alert(t.cno_labor_group_hourly_custom_export_no_group || '请至少选择一个小组。');
+                return;
+            }
+
+            const qp = { count_mode: getCnoNarrowbeltCountMode() };
+            if (rf) qp.range_from = rf;
+            if (rt) qp.range_to = rt;
+            if (checked.length > 0 && checked.length < totalBoxes) {
+                qp.groups = checked.join(',');
+            }
+
             const url = withLaborStatsWindowParams('/api/statistics/cno_labor_group_hourly/export', qp);
             window.location.href = url;
         }
@@ -5344,6 +5539,10 @@
             if (hmSec) hmSec.style.display = '';
             if (tbl) tbl.innerHTML = '';
             if (tblSec) tblSec.style.display = 'none';
+            const customBar = document.getElementById('cnoLaborGroupHourlyCustomExportBar');
+            if (customBar) customBar.style.display = 'none';
+            const grpPanel = document.getElementById('cnoLaborGroupExportGroupsPanel');
+            if (grpPanel) grpPanel.innerHTML = '';
             if (wrap) wrap.style.display = 'none';
             _syncCnoLaborGroupHourlyToggleTableBtn(false);
         }
@@ -5408,6 +5607,9 @@
                 const emptyTpl = t.cno_labor_group_hourly_empty || '暂无小组分时数据';
                 const emptyEl = grid.querySelector('div');
                 if (emptyEl) emptyEl.textContent = emptyTpl;
+            }
+            if (typeof syncCnoLaborGroupExportFilters === 'function') {
+                syncCnoLaborGroupExportFilters(payload);
             }
             section.style.display = 'block';
         }
