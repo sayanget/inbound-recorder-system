@@ -112,6 +112,16 @@ os.environ["PORT"] = str(APP_PORT)
 os.environ["MONITOR_PORT"] = str(MONITOR_PORT)
 
 LICENSE_PORT = _port_from_env("LICENSE_BIND_PORT", default=8088)
+try:
+    from license_client import resolve_license_bind_port, sync_license_server_url_env
+
+    LICENSE_PORT = resolve_license_bind_port(
+        LICENSE_PORT, avoid={APP_PORT, MONITOR_PORT}
+    )
+    os.environ["LICENSE_BIND_PORT"] = str(LICENSE_PORT)
+    sync_license_server_url_env(LICENSE_PORT)
+except Exception as _lic_port_err:
+    logger.warning("License port resolve skipped: %s", _lic_port_err)
 
 
 def _license_auto_start_enabled() -> bool:

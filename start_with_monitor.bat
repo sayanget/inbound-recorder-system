@@ -17,7 +17,15 @@ echo ========================================
 echo.
 echo Default ports: monitor 8081, app 8080, license 8088 ^(LICENSE_ENFORCE=1 时监控自动拉起许可服务^)
 echo Override: MONITOR_PORT / PORT / APP_PORT / LICENSE_BIND_PORT
-echo On Windows Hyper-V/WSL, 8057-8156 are often reserved — use e.g. MONITOR_PORT=18081 PORT=8780
+echo On Windows Hyper-V/WSL, 8066-8165 are often reserved — defaults below avoid that range.
+echo.
+
+REM 避开 Windows 保留端口段（8066-8165）；可按需覆盖
+if not defined PORT set "PORT=8780"
+if not defined MONITOR_PORT set "MONITOR_PORT=18081"
+if not defined LICENSE_BIND_PORT set "LICENSE_BIND_PORT=18088"
+echo Using PORT=%PORT% MONITOR_PORT=%MONITOR_PORT% LICENSE_BIND_PORT=%LICENSE_BIND_PORT%
+echo App URL example: http://127.0.0.1:%PORT%/
 echo.
 
 REM Neon sync watch: set NEON_SYNC_WITH_MONITOR=0 to skip

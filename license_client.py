@@ -413,6 +413,63 @@ def invalidate_verify_cache() -> None:
     _verify_cache["checked_at"] = 0.0
 
 
+def _tcp_can_bind(host: str, port: int) -> bool:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+            return True
+        finally:
+            s.close()
+    except OSError:
+        return False
+
+
+def resolve_license_bind_port(
+    preferred: Optional[int] = None,
+    avoid: Optional[set[int]] = None,
+) -> int:
+    """Windows Hyper-V 常保留 8066–8165，8088 无法绑定时自动换端口。"""
+    try:
+        port = int(preferred if preferred is not None else _license_bind_port())
+    except (TypeError, ValueError):
+        port = 8088
+    blocked = avoid or set()
+    if port not in blocked and _tcp_can_bind("0.0.0.0", port):
+        return port
+    fallbacks = (18088, 19088, 28188, 38888, 48888)
+    for p in (port,) + fallbacks:
+        if p in blocked:
+            continue
+        if _tcp_can_bind("0.0.0.0", p):
+            if p != port:
+                print(
+                    f"[LICENSE] Port {port} unavailable (reserved or in use); "
+                    f"using LICENSE_BIND_PORT={p}",
+                    flush=True,
+                )
+            return p
+    return port
+
+
+def sync_license_server_url_env(port: int) -> None:
+    """LICENSE_SERVER_URL 端口与 LICENSE_BIND_PORT 对齐（同机 loopback）。"""
+    url = (os.environ.get("LICENSE_SERVER_URL") or "").strip()
+    if not url:
+        os.environ["LICENSE_SERVER_URL"] = f"http://127.0.0.1:{port}"
+        return
+    try:
+        parsed = urlparse(url)
+        if parsed.hostname in ("127.0.0.1", "localhost", "::1"):
+            new_netloc = f"{parsed.hostname}:{port}"
+            os.environ["LICENSE_SERVER_URL"] = urlunparse(
+                (parsed.scheme, new_netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)
+            )
+    except Exception:
+        pass
+
+
 def _license_bind_port() -> int:
     try:
         return int(os.environ.get("LICENSE_BIND_PORT", "8088"))
@@ -444,8 +501,15 @@ def is_license_server_port_open(port: Optional[int] = None) -> bool:
 
 
 def ensure_license_server_running(wait_seconds: float = 15.0) -> bool:
-    """同机未监听 8088 时拉起 license_server.app（LICENSE_ENFORCE 或 LICENSE_AUTO_START_SERVER）。"""
-    port = _license_bind_port()
+    """同机未监听许可端口时拉起 license_server.app（LICENSE_ENFORCE / LICENSE_AUTO_START_SERVER）。"""
+    avoid = set()
+    for key in ("PORT", "APP_PORT", "MONITOR_PORT"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw.isdigit():
+            avoid.add(int(raw))
+    port = resolve_license_bind_port(_license_bind_port(), avoid)
+    os.environ["LICENSE_BIND_PORT"] = str(port)
+    sync_license_server_url_env(port)
     if not _license_auto_start_enabled():
         return is_license_server_port_open(port)
     if is_license_server_port_open(port):

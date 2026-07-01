@@ -436,7 +436,7 @@ def main():
     init_db()
     host = os.environ.get("LICENSE_BIND_HOST", "0.0.0.0")
     port = int(os.environ.get("LICENSE_BIND_PORT", "8088"))
-    app.run(host=host, port=port, threaded=True)
+    app.run(host=host, port=port, threaded=True, use_reloader=False)
 
 
 if __name__ == "__main__":
